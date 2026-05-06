@@ -1,0 +1,20 @@
+[project]
+name = "meeting-playbook-backend"
+version = "0.0.1"
+description = "Backend service for meeting-playbook — audio capture, ASR, LLM, persistence"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF", "SIM", "C4"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.uv]
+dev-dependencies = []

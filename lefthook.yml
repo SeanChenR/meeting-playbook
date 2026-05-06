@@ -1,0 +1,15 @@
+pre-commit:
+  parallel: true
+  commands:
+    ruff-check:
+      glob: "packages/backend/**/*.py"
+      run: cd packages/backend && uv run ruff check {staged_files}
+    ruff-format:
+      glob: "packages/backend/**/*.py"
+      run: cd packages/backend && uv run ruff format --check {staged_files}
+    oxlint:
+      glob: "packages/{web,auth}/**/*.{ts,tsx,js,jsx}"
+      run: bunx oxlint {staged_files}
+    oxfmt:
+      glob: "packages/{web,auth}/**/*.{ts,tsx,js,jsx}"
+      run: bunx oxfmt --check {staged_files}

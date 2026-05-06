@@ -1,0 +1,13 @@
+{
+  "name": "@meeting-playbook/web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'web: vite scaffold pending — see PRD'",
+    "build": "echo 'web: vite scaffold pending'",
+    "lint": "echo 'web: oxlint scaffold pending'",
+    "format": "echo 'web: oxfmt scaffold pending'",
+    "test": "echo 'web: bun test scaffold pending'"
+  }
+}

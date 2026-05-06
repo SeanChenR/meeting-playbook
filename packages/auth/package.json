@@ -1,0 +1,12 @@
+{
+  "name": "@meeting-playbook/auth",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'auth: bun.serve + better-auth scaffold pending — see PRD'",
+    "lint": "echo 'auth: oxlint scaffold pending'",
+    "format": "echo 'auth: oxfmt scaffold pending'",
+    "test": "echo 'auth: bun test scaffold pending'"
+  }
+}

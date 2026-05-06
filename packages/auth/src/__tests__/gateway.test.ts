@@ -245,14 +245,87 @@ describe("WebSocket upgrades carry X-User-Id", () => {
   });
 });
 
-// ─── Misc / 404 ───
+// ─── Public API paths (gateway forwards without auth) ───
+describe("PUBLIC_API_PATHS pass through without auth", () => {
+  test("/api/health forwards to backend without session validation", async () => {
+    const f = mockFetch();
+    const gateway = createGatewayHandler({
+      auth: mockAuth(null), // no session
+      backendUrl: "http://localhost:8000",
+      fetch: f.fn,
+    });
+
+    const res = await gateway(new Request("http://localhost:3001/api/health"));
+
+    expect(res.status).toBe(200);
+    expect(f.calls).toHaveLength(1);
+    expect(f.calls[0]?.url).toBe("http://localhost:8000/api/health");
+    // No X-User-Id should be set on a public path
+    expect(f.calls[0]?.headers.get("X-User-Id")).toBeNull();
+  });
+
+  test("a non-public /api/* path with no session still returns 401", async () => {
+    const { gateway, calls } = buildGateway(mockAuth(null));
+
+    const res = await gateway(new Request("http://localhost:3001/api/me"));
+
+    expect(res.status).toBe(401);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+// ─── Non-API paths ───
 describe("non-API paths", () => {
-  test("returns 404 for /unrelated", async () => {
+  test("returns 404 when no viteUrl configured (production behavior)", async () => {
     const { gateway } = buildGateway(mockAuth({ user: { id: "usr" } }));
     const req = new Request("http://localhost:3001/unrelated");
 
     const res = await gateway(req);
 
     expect(res.status).toBe(404);
+  });
+
+  test("proxies to viteUrl when configured (dev convenience)", async () => {
+    const f = mockFetch();
+    const gateway = createGatewayHandler({
+      auth: mockAuth({ user: { id: "usr" } }),
+      backendUrl: "http://localhost:8000",
+      viteUrl: "http://localhost:5173",
+      fetch: f.fn,
+    });
+
+    const res = await gateway(new Request("http://localhost:3001/home"));
+
+    expect(res.status).toBe(200);
+    expect(f.calls).toHaveLength(1);
+    expect(f.calls[0]?.url).toBe("http://localhost:5173/home");
+  });
+
+  test("proxies root / to Vite when configured", async () => {
+    const f = mockFetch();
+    const gateway = createGatewayHandler({
+      auth: mockAuth(null),
+      backendUrl: "http://localhost:8000",
+      viteUrl: "http://localhost:5173",
+      fetch: f.fn,
+    });
+
+    await gateway(new Request("http://localhost:3001/"));
+
+    expect(f.calls[0]?.url).toBe("http://localhost:5173/");
+  });
+
+  test("preserves query string when proxying to Vite", async () => {
+    const f = mockFetch();
+    const gateway = createGatewayHandler({
+      auth: mockAuth({ user: { id: "usr" } }),
+      backendUrl: "http://localhost:8000",
+      viteUrl: "http://localhost:5173",
+      fetch: f.fn,
+    });
+
+    await gateway(new Request("http://localhost:3001/login?next=/home"));
+
+    expect(f.calls[0]?.url).toBe("http://localhost:5173/login?next=/home");
   });
 });

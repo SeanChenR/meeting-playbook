@@ -8,6 +8,12 @@
  *   - Strips Better Auth session cookie from forwarded requests
  *   - Preserves method, body, query, other headers
  *   - Forwards WebSocket upgrades with X-User-Id (frame relay lands in Slice 6)
+ *
+ * Plus two dev-mode conveniences (not part of the spec):
+ *   - PUBLIC_API_PATHS pass through without auth (e.g. /api/health for probes)
+ *   - In dev, non-/api requests are reverse-proxied to the Vite dev server so
+ *     the browser sees a single origin (the gateway). This avoids the
+ *     cross-port cookie problem during OAuth callback redirects.
  */
 
 type SessionLike = { user: { id: string } } | null;
@@ -22,12 +28,17 @@ type AuthLike = {
 export type GatewayDeps = {
   auth: AuthLike;
   backendUrl: string;
+  /** When set, non-/api requests are proxied here (dev convenience). */
+  viteUrl?: string;
   /** Inject for tests; defaults to globalThis.fetch. */
   fetch?: typeof fetch;
 };
 
 const AUTH_PREFIX = "/api/auth/";
 const API_PREFIX = "/api/";
+
+/** Paths under /api/* that the gateway forwards without an auth check. */
+const PUBLIC_API_PATHS = new Set<string>(["/api/health"]);
 
 const BETTER_AUTH_COOKIE_PREFIXES = [
   "better-auth.",
@@ -80,31 +91,64 @@ export function createGatewayHandler(deps: GatewayDeps) {
       return deps.auth.handler(req);
     }
 
-    // /api/* (non-auth) — validate session, inject X-User-Id, proxy.
+    // /api/* (non-auth)
     if (url.pathname.startsWith(API_PREFIX)) {
-      const session = await deps.auth.api.getSession({ headers: req.headers });
-      if (!session) {
-        return unauthorized();
+      const isPublic = PUBLIC_API_PATHS.has(url.pathname);
+
+      if (!isPublic) {
+        const session = await deps.auth.api.getSession({ headers: req.headers });
+        if (!session) {
+          return unauthorized();
+        }
+
+        const wsUpgrade = isWebSocketUpgrade(req);
+
+        const headers = new Headers(req.headers);
+        stripBetterAuthCookies(headers);
+        headers.set("X-User-Id", session.user.id);
+
+        const upstream = `${deps.backendUrl}${url.pathname}${url.search}`;
+
+        const init: RequestInit = {
+          method: req.method,
+          headers,
+          body: wsUpgrade ? null : req.body,
+          // @ts-expect-error: Bun supports `duplex: "half"` for streaming bodies
+          duplex: wsUpgrade ? undefined : "half",
+        };
+
+        return fetchImpl(upstream, init);
       }
 
-      const wsUpgrade = isWebSocketUpgrade(req);
-
-      // Build forwarded headers
+      // Public API path — forward as-is (no auth check, no X-User-Id).
       const headers = new Headers(req.headers);
       stripBetterAuthCookies(headers);
-      headers.set("X-User-Id", session.user.id); // overwrite any client-supplied value
-
+      headers.delete("X-User-Id");
       const upstream = `${deps.backendUrl}${url.pathname}${url.search}`;
-
-      const init: RequestInit = {
+      return fetchImpl(upstream, {
         method: req.method,
         headers,
-        body: wsUpgrade ? null : req.body,
-        // @ts-expect-error: Bun supports `duplex: "half"` for streaming bodies
-        duplex: wsUpgrade ? undefined : "half",
-      };
+        body: req.body,
+        // @ts-expect-error
+        duplex: "half",
+      });
+    }
 
-      return fetchImpl(upstream, init);
+    // Non-/api — in dev, reverse-proxy to Vite so the browser sees a single
+    // origin. In prod, the built dist/ should be served here (TODO when prod
+    // build lands).
+    if (deps.viteUrl) {
+      const upstream = `${deps.viteUrl}${url.pathname}${url.search}`;
+      const headers = new Headers(req.headers);
+      // Vite expects the Host header to match its bind, but cross-fetch
+      // tends to manage this. Strip cookies that aren't relevant.
+      return fetchImpl(upstream, {
+        method: req.method,
+        headers,
+        body: req.body,
+        // @ts-expect-error
+        duplex: "half",
+      });
     }
 
     return new Response("Not Found", { status: 404 });
@@ -115,11 +159,12 @@ export function createGatewayHandler(deps: GatewayDeps) {
 // Bun.serve entry point — only runs when this file is the entrypoint.
 // ─────────────────────────────────────────────────────────────────────────────
 if (import.meta.main) {
-  // Reuse the singleton built for the Better Auth CLI (../auth.ts).
   const { auth } = await import("../auth");
+  const isDev = process.env.NODE_ENV !== "production";
   const gateway = createGatewayHandler({
     auth,
     backendUrl: process.env.BACKEND_URL ?? "http://localhost:8000",
+    viteUrl: isDev ? (process.env.VITE_URL ?? "http://localhost:5173") : undefined,
   });
 
   const port = Number(process.env.PORT ?? 3001);
@@ -129,5 +174,5 @@ if (import.meta.main) {
   });
 
   // eslint-disable-next-line no-console
-  console.log(`auth gateway listening on http://localhost:${port}`);
+  console.log(`auth gateway listening on http://localhost:${port} (dev=${isDev})`);
 }

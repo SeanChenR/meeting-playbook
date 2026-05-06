@@ -20,14 +20,27 @@ export function TotpVerify() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setSubmitting(true);
     try {
-      await authClient.twoFactor.verifyTotp({ code });
+      const result = await authClient.twoFactor.verifyTotp({ code });
+      const r = result as { data?: unknown; error?: { message?: string } | null };
+      if (r.error) {
+        setError(r.error.message ?? "驗證碼錯誤");
+        setSubmitting(false);
+        return;
+      }
+      // Force a session refresh so /home doesn't read a stale null cache and
+      // bounce back to /login.
+      await authClient.getSession();
       navigate("/home", { replace: true });
     } catch (e) {
       setError(`Code rejected: ${e}`);
+      setSubmitting(false);
     }
   };
 
@@ -63,8 +76,8 @@ export function TotpVerify() {
                 className="font-mono tracking-[0.4em] text-center text-base"
               />
             </div>
-            <Button type="submit" className="w-full">
-              Verify
+            <Button type="submit" disabled={submitting} className="w-full">
+              {submitting ? "驗證中" : "Verify"}
             </Button>
           </form>
           {error && (

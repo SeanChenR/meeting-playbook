@@ -50,11 +50,22 @@ export function TotpEnroll() {
   const handleVerifySubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setSubmitting(true);
     try {
-      await authClient.twoFactor.verifyTotp({ code });
+      const result = await authClient.twoFactor.verifyTotp({ code });
+      const r = result as { data?: unknown; error?: { message?: string } | null };
+      if (r.error) {
+        setError(r.error.message ?? "驗證碼錯誤");
+        setSubmitting(false);
+        return;
+      }
+      // After enrolment success: refresh the session cache so /home doesn't
+      // misread it as null and bounce to /login.
+      await authClient.getSession();
       navigate("/home", { replace: true });
     } catch (e) {
       setError(`Code rejected: ${e}`);
+      setSubmitting(false);
     }
   };
 
@@ -157,8 +168,8 @@ export function TotpEnroll() {
                 className="font-mono tracking-[0.4em] text-center text-base"
               />
             </div>
-            <Button type="submit" className="w-full">
-              Verify
+            <Button type="submit" disabled={submitting} className="w-full">
+              {submitting ? "驗證中" : "Verify"}
             </Button>
           </form>
           {error && (

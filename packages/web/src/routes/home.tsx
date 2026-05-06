@@ -1,4 +1,4 @@
-import { LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ExternalLink, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Badge } from "../components/ui/badge";
@@ -8,11 +8,14 @@ import { Separator } from "../components/ui/separator";
 import { authClient } from "../lib/auth-client";
 
 type ApiMeResponse = { user_id: string };
+type LinkedAccount = { providerId: string };
 
 export function Home() {
   const { data: session, isPending } = authClient.useSession();
   const [backendUserId, setBackendUserId] = useState<string | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
+  /** null = still loading; true = has email/password row; false = OAuth-only. */
+  const [hasCredential, setHasCredential] = useState<boolean | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,6 +26,8 @@ export function Home() {
     }
 
     let cancelled = false;
+
+    // Backend round-trip — proves the gateway → X-User-Id → FastAPI contract.
     (async () => {
       try {
         const r = await fetch("/api/me");
@@ -33,6 +38,21 @@ export function Home() {
         if (!cancelled) setBackendError(String(e));
       }
     })();
+
+    // Linked accounts — decides whether to show app-level 2FA or defer to the
+    // OAuth provider's own 2FA management.
+    (async () => {
+      try {
+        const result = await authClient.listAccounts();
+        const accounts = ((result as { data?: LinkedAccount[] }).data ?? []) as LinkedAccount[];
+        if (!cancelled) {
+          setHasCredential(accounts.some((a) => a.providerId === "credential"));
+        }
+      } catch {
+        if (!cancelled) setHasCredential(false);
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -57,7 +77,6 @@ export function Home() {
 
   return (
     <div className="min-h-dvh bg-(--color-background)">
-      {/* Top nav */}
       <header className="border-b border-(--color-border) bg-(--color-card)">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-5">
           <span className="text-sm font-semibold tracking-tight">Meeting Playbook</span>
@@ -97,45 +116,23 @@ export function Home() {
           </CardContent>
         </Card>
 
-        {/* Security card */}
+        {/* Security card — different content for credential vs OAuth-only */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">帳號安全</CardTitle>
-            <CardDescription>2FA 為 email/password 帳號的選用功能</CardDescription>
+            <CardDescription>
+              {hasCredential === false
+                ? "你用 Google 登入。2FA 由 Google 管理"
+                : "Two-factor authentication 為 email 帳號的選用功能"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {twoFactorEnabled ? (
-              <div className="flex items-start gap-3" data-testid="totp-status">
-                <ShieldCheck className="mt-0.5 size-5 text-(--color-accent)" />
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium text-(--color-foreground)">
-                    Two-factor authentication 已啟用
-                  </p>
-                  <p className="text-xs text-(--color-muted-foreground)">
-                    下次 email 登入會要求輸入 6 位數驗證碼
-                  </p>
-                </div>
-                <Badge variant="success" className="ml-auto">
-                  Enabled
-                </Badge>
-              </div>
+            {hasCredential === null ? (
+              <p className="text-sm text-(--color-muted-foreground)">Loading…</p>
+            ) : hasCredential ? (
+              <CredentialUserSecurity twoFactorEnabled={!!twoFactorEnabled} />
             ) : (
-              <div className="flex items-start gap-3">
-                <ShieldAlert className="mt-0.5 size-5 text-(--color-muted-foreground)" />
-                <div className="space-y-2">
-                  <p className="text-sm text-(--color-foreground)">
-                    尚未啟用 two-factor authentication
-                  </p>
-                  <p className="text-xs text-(--color-muted-foreground)">
-                    Google 登入帳號需先連結密碼才能啟用 TOTP
-                  </p>
-                  <Link to="/totp/enroll" data-testid="enable-totp-link">
-                    <Button type="button" variant="secondary" size="sm">
-                      Enable two-factor authentication
-                    </Button>
-                  </Link>
-                </div>
-              </div>
+              <OAuthUserSecurity />
             )}
           </CardContent>
         </Card>
@@ -145,6 +142,70 @@ export function Home() {
           這是 Slice 1 — 後續 slice 加入會議管理、playbook、即時轉錄等功能。
         </p>
       </main>
+    </div>
+  );
+}
+
+// ─── Sub-components: keeps the main render tidy ─────────────────────────────
+
+function CredentialUserSecurity({ twoFactorEnabled }: { twoFactorEnabled: boolean }) {
+  if (twoFactorEnabled) {
+    return (
+      <div className="flex items-start gap-3" data-testid="totp-status">
+        <ShieldCheck className="mt-0.5 size-5 text-(--color-accent)" />
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium text-(--color-foreground)">
+            Two-factor authentication 已啟用
+          </p>
+          <p className="text-xs text-(--color-muted-foreground)">
+            下次 email 登入會要求輸入 6 位數驗證碼
+          </p>
+        </div>
+        <Badge variant="success" className="ml-auto">
+          Enabled
+        </Badge>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-3">
+      <ShieldAlert className="mt-0.5 size-5 text-(--color-muted-foreground)" />
+      <div className="space-y-2">
+        <p className="text-sm text-(--color-foreground)">尚未啟用 two-factor authentication</p>
+        <p className="text-xs text-(--color-muted-foreground)">
+          建議搭配 Authenticator app（Authy / 1Password / Google Authenticator）
+        </p>
+        <Link to="/totp/enroll" data-testid="enable-totp-link">
+          <Button type="button" variant="secondary" size="sm">
+            Enable two-factor authentication
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function OAuthUserSecurity() {
+  return (
+    <div className="flex items-start gap-3" data-testid="oauth-2fa-notice">
+      <ShieldCheck className="mt-0.5 size-5 text-(--color-accent)" />
+      <div className="space-y-2">
+        <p className="text-sm text-(--color-foreground)">2FA 由 Google 管理</p>
+        <p className="text-xs text-(--color-muted-foreground)">
+          OAuth 帳號的兩階段驗證在身份提供者那邊設定，本應用不再額外加一層
+        </p>
+        <a
+          href="https://myaccount.google.com/security"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-(--color-foreground) underline-offset-4 hover:underline"
+          data-testid="google-security-link"
+        >
+          前往 Google 安全性設定
+          <ExternalLink className="size-3.5" />
+        </a>
+      </div>
     </div>
   );
 }

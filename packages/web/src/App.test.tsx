@@ -13,6 +13,8 @@ mock.module("./lib/auth-client", () => ({
     },
     signOut: async () => ({}),
     useSession: () => ({ data: null, isPending: true }),
+    listAccounts: async () => ({ data: [] }),
+    getSession: async () => ({ data: null }),
     twoFactor: {
       enable: async () => ({
         data: { totpURI: "otpauth://test", backupCodes: ["x", "y"] },

@@ -42,3 +42,5 @@ recordings/
 # Logs
 *.log
 logs/
+.spectra/
+openspec/.vector-search.db*

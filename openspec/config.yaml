@@ -1,0 +1,101 @@
+schema: spec-driven
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Project context
+# This is loaded into every Spectra artifact prompt. Keep it dense and durable.
+# ─────────────────────────────────────────────────────────────────────────────
+context: |
+  ## What this project is
+  meeting-playbook — a personal AI meeting assistant for B2B-style sales / consulting meetings.
+  Three lifecycle phases per meeting:
+    1. 會前 (pre-meeting)  — Google Calendar event → auto-generated playbook draft (Gemini 2.5 Pro)
+    2. 會中 (in-meeting)   — BlackHole + microphone dual capture → ASR every ~10s → live transcript + tactical advisor (Gemini Flash)
+    3. 會後 (post-meeting) — full transcript + playbook → markdown summary with decisions & action items
+
+  Single user (Sean), local-first, macOS-only (M3 Pro 18GB), future-deploy-friendly.
+
+  ## Authoritative sources (read these before drafting)
+  - `CONTEXT.md`        — domain language, project boundaries, non-goals
+  - `CLAUDE.md`         — assistant conventions for this repo
+  - `docs/adr/`         — 25 architectural decisions (ADR-0001 through ADR-0025)
+  - `docs/adr/0026-*`   — pending; output of GitHub Issue #3 (VibeVoice runtime spike)
+  - GitHub Issue #1     — PRD with 33 user stories (https://github.com/SeanChenR/meeting-playbook/issues/1)
+  - GitHub Issues #2..#14 — 13 vertical slices, each carries an "Agent Brief" comment that is the behavioral contract
+  - `README.md`         — first-time setup steps
+
+  ## Domain glossary — use these exact terms
+  - **Playbook**                — structured prep document for one meeting
+  - **Playbook field**          — one of: objective / counterparty profile / anticipated topics / anticipated objections / talking points / red lines
+  - **Counterparty (對方)**      — the other side; speaker tag for the BlackHole-sourced audio stream
+  - **Me (我方)**                — the user; speaker tag for the microphone-sourced audio stream
+  - **Pre/In/Post-meeting (會前/會中/會後)** — the three lifecycle phases
+  - **Tactical advisor**        — single-shot or chat LLM call grounded in last 60s transcript + full playbook
+  - **ASR Provider**            — pluggable transcription engine implementing the `ASRProvider` interface
+  - **Dual-channel capture**    — BlackHole + microphone; speaker identity is from source, no diarization
+  - **Recording window**        — 30-day retention for raw WAVs; transcripts kept indefinitely
+  - **Meeting**                 — single timeboxed event; one playbook, two recordings, one transcript, one summary
+
+  ## Tech stack (per ADRs)
+  - **Monorepo**: Bun workspaces + `concurrently`; root `bun run dev` starts all three processes
+  - **Frontend (`packages/web`)**: React + Vite + Bun + shadcn/ui + Tailwind + react-i18next (zh-TW default + en); tests via `bun test`; lint/format via oxlint + oxfmt
+  - **Auth & gateway (`packages/auth`)**: `Bun.serve` + Better Auth (Google OAuth + TOTP 2FA) on `pg.Pool` directly (NO TypeScript ORM — ADR-0025); also proxies all non-`/api/auth/*` requests to FastAPI with an injected `X-User-Id` header
+  - **Backend (`packages/backend`)**: Python 3.12 + FastAPI + SQLAlchemy 2.0 async + Alembic + uv + ruff; tests via pytest; logs via structlog
+  - **DB**: PostgreSQL — Better Auth manages user/session/account/verification tables via its own CLI; Alembic manages all application tables (FK to Better Auth's `user.id`)
+  - **LLM**: Vertex AI via official `google-genai` SDK — Gemini Flash for realtime advisor, Gemini 2.5 Pro for summary + playbook generation
+  - **ASR**: pluggable `ASRProvider` interface; faster-whisper (local) and VibeVoice-ASR (path TBD by ADR-0026)
+  - **Audio capture**: `sounddevice` (Python); BlackHole 2ch device + system microphone, two synchronized streams
+  - **Realtime**: WebSocket with JSON type-tagged messages (per Slice 6 onward)
+  - **Pre-commit**: lefthook (ruff + oxlint + oxfmt)
+
+  ## Architectural invariants (do not violate; flag if a change requires it)
+  - The Bun gateway is the **only** ingress in dev and prod. FastAPI never authenticates directly — it trusts the `X-User-Id` header injected by the gateway.
+  - Speaker identity is derived from **audio stream source**, never from a diarization model.
+  - The `ASRProvider` interface is the keystone of multi-engine ASR; new engines plug in as new implementations, not by special-casing call sites.
+  - All UI strings live in `zh-TW.json` AND `en.json` simultaneously; never hard-code visible strings.
+  - Better Auth owns its tables; Alembic owns the rest. App tables FK to `user.id` from the Better Auth side.
+  - Recording WAVs auto-clean after `RECORDING_RETENTION_DAYS` (default 30); transcripts/summaries/chat are kept forever.
+  - All env-driven config goes through `.env.example` first (no env var without a documented default).
+
+  ## How GitHub Issues map to Spectra changes
+  - Each GitHub Issue (Slice 1..13) becomes ONE Spectra change.
+  - The Issue body + Agent Brief comment ARE the discuss output — Spectra changes skip `discuss` and start at `propose`.
+  - Change name convention: `slice-NN-<short-name>` (e.g., `slice-01-auth-shell`, `slice-06-mic-transcript`).
+  - Spectra `proposal.md` MUST link back to the GitHub Issue and the agent brief comment URL — never restate them.
+
+  ## Workflow conventions (per Sean's global config)
+  - TDD discipline: every task is one red → green → refactor unit; failing test first, minimal code to pass, then refactor.
+  - Vertical slicing: each implementation step touches all relevant layers (schema → backend → API → frontend → tests) for the unit being built.
+  - 80%+ test coverage target.
+  - Pause for confirmation before destructive operations.
+  - Commit messages follow conventional commits (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`).
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-artifact rules
+# ─────────────────────────────────────────────────────────────────────────────
+rules:
+  proposal:
+    - Each proposal corresponds to exactly one GitHub Issue (Slice 1..13).
+    - MUST link to the GitHub Issue URL and the Agent Brief comment URL at the top.
+    - MUST NOT restate the agent brief — point to it. Only capture: the change name, the parent issue, the one-paragraph "why now", and the list of `Blocked by` issues with current status.
+    - Keep proposal under 200 words.
+    - Always include a "Non-goals" section that mirrors the agent brief's "Out of scope".
+
+  spec:
+    - DO NOT create one spec per slice. Specs are reserved for cross-slice system contracts (e.g., `asr-provider-interface`, `websocket-messages`, `auth-gateway-contract`, `meeting-lifecycle`).
+    - Create a spec only the FIRST time a system contract is touched by a slice. Subsequent slices reference and (if needed) extend the existing spec.
+    - Each spec captures behavioral contracts, not implementation details. No file paths.
+    - When a slice doesn't introduce or modify a system contract, omit `spec.md` for that change.
+
+  design:
+    - Per-slice implementation blueprint. Treat as a throwaway — it's the "how this time", not "the contract".
+    - File paths, type signatures, sequence diagrams, port numbers, env var names — all welcome here (unlike the agent brief).
+    - Must include: a module map (which packages/files this change touches), a sequence (data flow for the happy path), key type signatures or schemas, and a list of dependencies on existing code.
+    - Flag any deviation from an ADR with "Deviates from ADR-XXXX because…". If no good reason, fix the design instead.
+    - For small slices (i18n, retention, etc.), `design.md` may be a single page. For deep-module slices (advisor, dual-stream, calendar, vibevoice impl), be thorough.
+
+  tasks:
+    - Each task is one TDD red → green → refactor cycle (one failing test, minimal code to pass, refactor pass).
+    - Tasks are ordered by dependency: schema/migration first, backend module second, API endpoint third, frontend wiring fourth, e2e last.
+    - Each task title MUST reference the agent brief acceptance criterion it advances (e.g., "[AC-3] AudioCaptureService captures default microphone").
+    - Each task is sized for ≤2 hours of work. If larger, split it.
+    - The final task in every change is "Verify all acceptance criteria from the agent brief are checked off in the GitHub Issue".

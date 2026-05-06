@@ -1,6 +1,7 @@
 import { ExternalLink, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { Avatar } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -78,16 +79,24 @@ export function Home() {
   return (
     <div className="min-h-dvh bg-(--color-background)">
       <header className="border-b border-(--color-border) bg-(--color-card)">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-5">
+        <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-5">
           <span className="text-sm font-semibold tracking-tight">Meeting Playbook</span>
-          <Button type="button" variant="ghost" size="sm" onClick={handleLogout}>
-            <LogOut className="size-4" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-3">
+            <Avatar
+              src={(session.user as { image?: string | null }).image}
+              alt={displayName}
+              fallback={displayName?.[0] ?? "?"}
+              data-testid="user-avatar"
+            />
+            <Button type="button" variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="size-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl space-y-6 px-5 py-10">
+      <main className="mx-auto max-w-[1200px] space-y-6 px-5 py-10">
         {/* Greeting card */}
         <Card>
           <CardHeader>

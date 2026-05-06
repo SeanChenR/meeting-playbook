@@ -8,12 +8,20 @@ let mockSessionData: {
     user: {
       name: string | null;
       email: string;
+      image?: string | null;
       twoFactorEnabled?: boolean;
     };
   } | null;
   isPending: boolean;
 } = {
-  data: { user: { name: "Sean", email: "sean@example.com", twoFactorEnabled: false } },
+  data: {
+    user: {
+      name: "Sean",
+      email: "sean@example.com",
+      image: null,
+      twoFactorEnabled: false,
+    },
+  },
   isPending: false,
 };
 
@@ -40,7 +48,12 @@ describe("Home route", () => {
   beforeEach(() => {
     mockSessionData = {
       data: {
-        user: { name: "Sean", email: "sean@example.com", twoFactorEnabled: false },
+        user: {
+          name: "Sean",
+          email: "sean@example.com",
+          image: null,
+          twoFactorEnabled: false,
+        },
       },
       isPending: false,
     };
@@ -110,6 +123,75 @@ describe("Home route", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText(/loading/i)).toBeDefined();
+  });
+
+  describe("avatar in top nav", () => {
+    test("renders fallback initial when user.image is null", () => {
+      render(
+        <MemoryRouter>
+          <Home />
+        </MemoryRouter>,
+      );
+      const avatar = screen.getByTestId("user-avatar");
+      expect(avatar.textContent).toBe("S");
+      expect(avatar.querySelector("img")).toBeNull();
+    });
+
+    test("renders <img> when user.image is set", () => {
+      mockSessionData = {
+        data: {
+          user: {
+            name: "Sean",
+            email: "sean@example.com",
+            image: "https://example.com/avatar.png",
+            twoFactorEnabled: false,
+          },
+        },
+        isPending: false,
+      };
+
+      render(
+        <MemoryRouter>
+          <Home />
+        </MemoryRouter>,
+      );
+      const avatar = screen.getByTestId("user-avatar");
+      const img = avatar.querySelector("img");
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute("src")).toBe("https://example.com/avatar.png");
+    });
+
+    test("falls back to initial when image fails to load", async () => {
+      mockSessionData = {
+        data: {
+          user: {
+            name: "Sean",
+            email: "sean@example.com",
+            image: "https://broken.invalid/missing.png",
+            twoFactorEnabled: false,
+          },
+        },
+        isPending: false,
+      };
+
+      render(
+        <MemoryRouter>
+          <Home />
+        </MemoryRouter>,
+      );
+
+      const avatar = screen.getByTestId("user-avatar");
+      const img = avatar.querySelector("img");
+      expect(img).not.toBeNull();
+
+      // Simulate the browser firing an error event on the image
+      img?.dispatchEvent(new Event("error"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("user-avatar").querySelector("img")).toBeNull();
+      });
+      expect(screen.getByTestId("user-avatar").textContent).toBe("S");
+    });
   });
 
   test("renders Logout button and dispatches signOut on click", async () => {

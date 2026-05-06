@@ -3,7 +3,24 @@ name = "meeting-playbook-backend"
 version = "0.0.1"
 description = "Backend service for meeting-playbook — audio capture, ASR, LLM, persistence"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "structlog>=24.4",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic-settings>=2.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "ruff>=0.8",
+]
 
 [tool.ruff]
 line-length = 100
@@ -15,6 +32,3 @@ select = ["E", "F", "I", "B", "UP", "RUF", "SIM", "C4"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-
-[tool.uv]
-dev-dependencies = []

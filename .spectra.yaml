@@ -11,7 +11,7 @@ locale: tw
 # Workflow toggles
 tdd: true
 audit: true
-# parallel_tasks: true  # slice dep graph is strict; keep sequential for now
+parallel_tasks: true  # marks intra-slice tasks that touch different files as parallel-safe
 
 # Claude slash commands (set true to also generate /spectra:X commands)
 # claude_slash_commands: true

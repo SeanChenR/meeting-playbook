@@ -4,11 +4,20 @@ import { cleanup, render } from "@testing-library/react";
 // Mock route-level dependencies BEFORE importing App
 mock.module("./lib/auth-client", () => ({
   authClient: {
-    signIn: { social: async () => ({ data: {} }) },
+    signIn: {
+      social: async () => ({ data: {} }),
+      email: async () => ({ data: { twoFactorRedirect: false }, error: null }),
+    },
+    signUp: {
+      email: async () => ({ data: { user: { id: "usr_new" } }, error: null }),
+    },
     signOut: async () => ({}),
     useSession: () => ({ data: null, isPending: true }),
     twoFactor: {
-      enable: async () => ({ data: { totpURI: "otpauth://test" } }),
+      enable: async () => ({
+        data: { totpURI: "otpauth://test", backupCodes: ["x", "y"] },
+        error: null,
+      }),
       verifyTotp: async () => ({ data: {} }),
     },
   },

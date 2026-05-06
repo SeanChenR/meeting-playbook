@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { authClient } from "../lib/auth-client";
 
 type ApiMeResponse = { user_id: string };
@@ -46,6 +46,8 @@ export function Home() {
     );
   if (!session) return null;
 
+  const twoFactorEnabled = (session.user as { twoFactorEnabled?: boolean }).twoFactorEnabled;
+
   return (
     <main>
       <h1>Hello, {session.user.name ?? session.user.email}</h1>
@@ -59,6 +61,22 @@ export function Home() {
           Backend round-trip failed: {backendError}
         </p>
       )}
+
+      <section>
+        <h2>帳號安全</h2>
+        {twoFactorEnabled ? (
+          <p data-testid="totp-status">✓ Two-factor authentication 已啟用</p>
+        ) : (
+          <p>
+            <Link to="/totp/enroll" data-testid="enable-totp-link">
+              Enable two-factor authentication
+            </Link>
+            <br />
+            <small>需先設定 password（Google 登入帳號要先連結密碼）</small>
+          </p>
+        )}
+      </section>
+
       <button type="button" onClick={handleLogout}>
         Logout
       </button>

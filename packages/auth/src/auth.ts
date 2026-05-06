@@ -1,12 +1,16 @@
 /**
- * Better Auth instance — Google OAuth + TOTP 2FA on top of pg.Pool.
+ * Better Auth instance — Google OAuth + email/password + TOTP 2FA on top of pg.Pool.
+ *
+ * Dual login (per slice-01 design revision):
+ *   - Google OAuth: no app-level 2FA (Google's own 2FA covers it)
+ *   - Email + password: opt-in TOTP 2FA via the twoFactor plugin
  *
  * Per ADR-0021 (Better Auth on Bun.serve) and ADR-0025 (no TS ORM —
  * Better Auth talks to pg.Pool directly).
  */
 
 import { betterAuth } from "better-auth";
-import { twoFactor } from "better-auth/plugins";
+import { twoFactor } from "better-auth/plugins/two-factor";
 import { Pool } from "pg";
 
 type CreateAuthOptions = {
@@ -44,13 +48,24 @@ export function createAuth(opts: CreateAuthOptions = {}) {
   const baseURL = opts.baseURL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3001";
 
   return betterAuth({
+    appName: "Meeting Playbook",
     database,
     secret,
     baseURL,
     socialProviders: {
       google,
     },
-    plugins: [twoFactor()],
+    emailAndPassword: {
+      enabled: true,
+      autoSignIn: true,
+      requireEmailVerification: false, // single-user side project; no SMTP wired
+      minPasswordLength: 8,
+    },
+    plugins: [
+      twoFactor({
+        issuer: "Meeting Playbook",
+      }),
+    ],
     advanced: {
       cookies: {
         session_token: {

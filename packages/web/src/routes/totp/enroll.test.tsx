@@ -4,7 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 
 const enableMock = mock(async () => ({
-  data: { totpURI: "otpauth://totp/MeetingPlaybook:sean?secret=ABC&issuer=MeetingPlaybook" },
+  data: {
+    totpURI: "otpauth://totp/MeetingPlaybook:sean?secret=ABC&issuer=Meeting%20Playbook",
+    backupCodes: ["aaaa-aaaa", "bbbb-bbbb", "cccc-cccc"],
+  },
+  error: null,
 }));
 const verifyTotpMock = mock(async () => ({ data: { verified: true } }));
 
@@ -28,33 +32,19 @@ describe("TotpEnroll route", () => {
     cleanup();
   });
 
-  test("calls authClient.twoFactor.enable on mount", async () => {
+  test("step 1: renders password prompt before fetching QR", () => {
     render(
       <MemoryRouter>
         <TotpEnroll />
       </MemoryRouter>,
     );
-
-    await waitFor(() => {
-      expect(enableMock).toHaveBeenCalled();
-    });
+    expect(screen.getByLabelText(/^password$/i)).toBeDefined();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDefined();
+    expect(enableMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("backup-codes")).toBeNull();
   });
 
-  test("renders QR after enable resolves", async () => {
-    render(
-      <MemoryRouter>
-        <TotpEnroll />
-      </MemoryRouter>,
-    );
-
-    // happy-dom renders SVG as svg element; QRCodeSVG renders an <svg>.
-    await waitFor(() => {
-      const svg = document.querySelector("svg");
-      expect(svg).not.toBeNull();
-    });
-  });
-
-  test("submitting the form dispatches verifyTotp with the entered code", async () => {
+  test("submitting password dispatches twoFactor.enable with the entered value", async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter>
@@ -62,16 +52,82 @@ describe("TotpEnroll route", () => {
       </MemoryRouter>,
     );
 
-    const input = screen.getByLabelText(/輸入 6 位數驗證碼/);
-    await user.type(input, "123456");
+    await user.type(screen.getByLabelText(/^password$/i), "hunter22hunter");
+    await user.click(screen.getByRole("button", { name: /continue/i }));
 
-    const submit = screen.getByRole("button", { name: /verify/i });
-    await user.click(submit);
+    await waitFor(() => {
+      expect(enableMock).toHaveBeenCalledTimes(1);
+    });
+    const arg = enableMock.mock.calls[0]?.[0] as { password: string };
+    expect(arg.password).toBe("hunter22hunter");
+  });
+
+  test("step 2: renders QR + backup codes after enable resolves", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <TotpEnroll />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText(/^password$/i), "hunter22hunter");
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(document.querySelector("svg")).not.toBeNull();
+      expect(screen.getByTestId("backup-codes")).toBeDefined();
+    });
+
+    const codes = screen.getByTestId("backup-codes").textContent ?? "";
+    expect(codes).toContain("aaaa-aaaa");
+    expect(codes).toContain("bbbb-bbbb");
+    expect(codes).toContain("cccc-cccc");
+  });
+
+  test("step 3: submitting the 6-digit code dispatches verifyTotp", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <TotpEnroll />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText(/^password$/i), "hunter22hunter");
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/輸入 6 位數驗證碼/)).toBeDefined();
+    });
+
+    await user.type(screen.getByLabelText(/輸入 6 位數驗證碼/), "123456");
+    await user.click(screen.getByRole("button", { name: /^verify$/i }));
 
     await waitFor(() => {
       expect(verifyTotpMock).toHaveBeenCalledTimes(1);
     });
     const arg = verifyTotpMock.mock.calls[0]?.[0] as { code: string };
     expect(arg.code).toBe("123456");
+  });
+
+  test("error from twoFactor.enable surfaces a localized error message", async () => {
+    enableMock.mockImplementationOnce(async () => ({
+      data: undefined as unknown as { totpURI: string; backupCodes: string[] },
+      error: { message: "Invalid password" },
+    }));
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <TotpEnroll />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText(/^password$/i), "wrong-password");
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("totp-error").textContent).toContain("Invalid password");
+    });
+    expect(screen.queryByTestId("backup-codes")).toBeNull();
   });
 });

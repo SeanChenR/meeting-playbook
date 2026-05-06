@@ -4,10 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 
 let mockSessionData: {
-  data: { user: { name: string | null; email: string } } | null;
+  data: {
+    user: {
+      name: string | null;
+      email: string;
+      twoFactorEnabled?: boolean;
+    };
+  } | null;
   isPending: boolean;
 } = {
-  data: { user: { name: "Sean", email: "sean@example.com" } },
+  data: { user: { name: "Sean", email: "sean@example.com", twoFactorEnabled: false } },
   isPending: false,
 };
 
@@ -28,7 +34,9 @@ import { Home } from "./home";
 describe("Home route", () => {
   beforeEach(() => {
     mockSessionData = {
-      data: { user: { name: "Sean", email: "sean@example.com" } },
+      data: {
+        user: { name: "Sean", email: "sean@example.com", twoFactorEnabled: false },
+      },
       isPending: false,
     };
     fetchCalls = [];
@@ -51,13 +59,12 @@ describe("Home route", () => {
     cleanup();
   });
 
-  test("renders Hello, <name> when session is present", async () => {
+  test("renders Hello, <name> when session is present", () => {
     render(
       <MemoryRouter>
         <Home />
       </MemoryRouter>,
     );
-
     expect(screen.getByText(/Hello, Sean/)).toBeDefined();
   });
 
@@ -67,7 +74,6 @@ describe("Home route", () => {
         <Home />
       </MemoryRouter>,
     );
-
     await waitFor(() => {
       expect(screen.getByTestId("backend-confirmation")).toBeDefined();
     });
@@ -77,7 +83,7 @@ describe("Home route", () => {
 
   test("falls back to email when name is null", () => {
     mockSessionData = {
-      data: { user: { name: null, email: "fallback@example.com" } },
+      data: { user: { name: null, email: "fallback@example.com", twoFactorEnabled: false } },
       isPending: false,
     };
 
@@ -86,7 +92,6 @@ describe("Home route", () => {
         <Home />
       </MemoryRouter>,
     );
-
     expect(screen.getByText(/Hello, fallback@example.com/)).toBeDefined();
   });
 
@@ -98,7 +103,6 @@ describe("Home route", () => {
         <Home />
       </MemoryRouter>,
     );
-
     expect(screen.getByText(/loading/i)).toBeDefined();
   });
 
@@ -111,10 +115,32 @@ describe("Home route", () => {
     );
 
     const button = screen.getByRole("button", { name: /logout/i });
-    expect(button).toBeDefined();
-
     await user.click(button);
-
     expect(signOutMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("renders Enable two-factor link when twoFactorEnabled is false", () => {
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>,
+    );
+    const link = screen.getByTestId("enable-totp-link");
+    expect(link.getAttribute("href")).toBe("/totp/enroll");
+  });
+
+  test("hides Enable link and shows status when twoFactorEnabled is true", () => {
+    mockSessionData = {
+      data: { user: { name: "Sean", email: "sean@example.com", twoFactorEnabled: true } },
+      isPending: false,
+    };
+
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("enable-totp-link")).toBeNull();
+    expect(screen.getByTestId("totp-status").textContent).toContain("已啟用");
   });
 });

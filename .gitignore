@@ -44,3 +44,6 @@ recordings/
 logs/
 .spectra/
 openspec/.vector-search.db*
+
+# sa
+GCP/*

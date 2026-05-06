@@ -8,7 +8,7 @@
     "packages/auth"
   ],
   "scripts": {
-    "dev": "concurrently -n web,auth,backend -c blue,green,yellow \"bun --filter @meeting-playbook/web dev\" \"bun --filter @meeting-playbook/auth dev\" \"cd packages/backend && uv run fastapi dev meeting_playbook/server.py --port 8000\"",
+    "dev": "concurrently -n web,auth,backend -c blue,green,yellow \"bun --filter @meeting-playbook/web dev\" \"bun --filter @meeting-playbook/auth dev\" \"cd packages/backend && uv run uvicorn meeting_playbook.server:app --reload --host 127.0.0.1 --port 8000\"",
     "lint": "concurrently \"bun --filter '*' lint\" \"cd packages/backend && uv run ruff check\"",
     "format": "concurrently \"bun --filter '*' format\" \"cd packages/backend && uv run ruff format\"",
     "test": "concurrently \"bun --filter '*' test\" \"cd packages/backend && uv run pytest\""

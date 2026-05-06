@@ -115,8 +115,8 @@ export function createGatewayHandler(deps: GatewayDeps) {
 // Bun.serve entry point — only runs when this file is the entrypoint.
 // ─────────────────────────────────────────────────────────────────────────────
 if (import.meta.main) {
-  const { createAuth } = await import("./auth");
-  const auth = createAuth();
+  // Reuse the singleton built for the Better Auth CLI (../auth.ts).
+  const { auth } = await import("../auth");
   const gateway = createGatewayHandler({
     auth,
     backendUrl: process.env.BACKEND_URL ?? "http://localhost:8000",

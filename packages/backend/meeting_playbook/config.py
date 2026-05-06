@@ -6,8 +6,13 @@ Uses pydantic-settings; see ADR-0007 (Python backend) and ADR-0012 (PostgreSQL).
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Repo root is 4 directories up from this file:
+#   packages/backend/meeting_playbook/config.py → repo/
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
@@ -19,10 +24,14 @@ class Settings(BaseSettings):
 
     Optional env vars (filled in by Slice 5+ when Vertex AI is wired):
         GOOGLE_APPLICATION_CREDENTIALS, VERTEX_AI_PROJECT, VERTEX_AI_LOCATION
+
+    `.env` is searched at the repo root first, then the cwd. This lets the
+    backend run from anywhere (root via `bun run dev`, or `packages/backend/`
+    directly) without copying `.env` around.
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(str(_REPO_ROOT / ".env"), ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

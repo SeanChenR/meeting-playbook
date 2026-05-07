@@ -1,0 +1,113 @@
+{
+  "common": {
+    "loading": "Loading…"
+  },
+  "auth": {
+    "shell": {
+      "headline": "Meeting Playbook",
+      "subhead": "Personal AI meeting assistant",
+      "footer": "v0.0.1 · personal preview"
+    },
+    "login": {
+      "eyebrow": "Sign in",
+      "title": "Welcome back",
+      "subtitle": "Choose a sign-in method to continue",
+      "googleSection": "Google",
+      "googleButton": "Sign in with Google",
+      "separator": "or",
+      "emailSection": "Email + Password",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "Password",
+      "submitting": "Signing in",
+      "submit": "Sign in",
+      "noAccount": "No account?",
+      "signupLink": "Create account",
+      "errorFallback": "Sign in failed"
+    },
+    "signup": {
+      "eyebrow": "Sign up",
+      "title": "Create email account",
+      "subtitle": "Sign up with email + password; you can enable 2FA after signing in",
+      "nameLabel": "Name",
+      "namePlaceholder": "Sean Chen",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "At least 8 characters",
+      "confirmLabel": "Confirm password",
+      "confirmPlaceholder": "Type it again",
+      "submit": "Sign up",
+      "submitting": "Signing up",
+      "alreadyHaveAccount": "Already have an account?",
+      "loginLink": "Back to login",
+      "mismatchError": "Passwords do not match",
+      "tooShortError": "Password must be at least 8 characters",
+      "errorFallback": "Signup failed"
+    },
+    "totp": {
+      "enroll": {
+        "eyebrowStep1": "Enable 2FA",
+        "eyebrowStep2": "Enable 2FA · Step 2/2",
+        "step1Title": "Set up two-factor",
+        "step1Description": "Confirm your password to begin TOTP enrollment. Google-only accounts must link a password first.",
+        "step2Title": "Scan QR and verify",
+        "step2Description": "Scan the QR with your authenticator app, then enter the 6-digit code to finish setup",
+        "passwordLabel": "Password",
+        "continueButton": "Continue",
+        "continueSubmitting": "Verifying",
+        "qrLeading": "Scan the QR with your authenticator app:",
+        "backupCodesTitle": "Backup codes",
+        "backupCodesHelp": "Save these in a secure place; each code is single-use",
+        "codeLabel": "Enter the 6-digit code",
+        "codePlaceholder": "000000",
+        "verifyButton": "Verify",
+        "verifySubmitting": "Verifying",
+        "enableErrorFallback": "Enable failed",
+        "codeRejectedFallback": "Code rejected"
+      },
+      "verify": {
+        "eyebrow": "Two-factor verification",
+        "title": "Enter verification code",
+        "description": "Enter the 6-digit code from your authenticator app",
+        "codeLabel": "Code",
+        "codePlaceholder": "000000",
+        "submit": "Verify",
+        "submitting": "Verifying",
+        "errorFallback": "Code rejected"
+      }
+    },
+    "home": {
+      "topNavTitle": "Meeting Playbook",
+      "logout": "Logout",
+      "greetingEyebrow": "Signed in",
+      "greetingTitle": "Hello, {{name}}",
+      "backendLabel": "Backend confirmed",
+      "backendErrorPrefix": "Backend round-trip failed",
+      "securityTitle": "Account security",
+      "securityDescriptionCredential": "Two-factor authentication is optional for email accounts",
+      "securityDescriptionOAuth": "You signed in with Google. 2FA is managed there",
+      "loadingAccount": "Loading…",
+      "enabledTitle": "Two-factor authentication enabled",
+      "enabledHelp": "Next email login will require a 6-digit code",
+      "enabledBadge": "Enabled",
+      "disabledTitle": "Two-factor authentication not enabled",
+      "disabledHelp": "Pair with an authenticator app (Authy / 1Password / Google Authenticator)",
+      "enableButton": "Enable two-factor authentication",
+      "oauthNoticeTitle": "2FA is managed by Google",
+      "oauthNoticeBody": "Two-factor for OAuth accounts lives at the identity provider; this app does not add another layer",
+      "oauthSecurityLink": "Open Google security settings",
+      "sliceFooter": "This is Slice 1 — meeting management, playbook, and live transcription land in later slices."
+    }
+  },
+  "errors": {
+    "common": {
+      "unknown": "An unknown error occurred"
+    },
+    "auth": {
+      "gateway_bypass": "Please sign in through the gateway",
+      "unauthenticated": "Please sign in first",
+      "invalid_credentials": "Email or password is incorrect"
+    }
+  }
+}

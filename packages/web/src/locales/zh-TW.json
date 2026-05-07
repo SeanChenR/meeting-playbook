@@ -1,0 +1,113 @@
+{
+  "common": {
+    "loading": "Loading…"
+  },
+  "auth": {
+    "shell": {
+      "headline": "Meeting Playbook",
+      "subhead": "個人 AI 會議助理",
+      "footer": "v0.0.1 · personal preview"
+    },
+    "login": {
+      "eyebrow": "登入",
+      "title": "歡迎回來",
+      "subtitle": "選擇登入方式以繼續",
+      "googleSection": "Google",
+      "googleButton": "Sign in with Google",
+      "separator": "或",
+      "emailSection": "Email + Password",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "Password",
+      "submitting": "登入中",
+      "submit": "Sign in",
+      "noAccount": "沒帳號？",
+      "signupLink": "建立帳號",
+      "errorFallback": "登入失敗"
+    },
+    "signup": {
+      "eyebrow": "註冊",
+      "title": "建立 Email 帳號",
+      "subtitle": "使用 email 和密碼註冊，登入後可選擇啟用 2FA",
+      "nameLabel": "姓名",
+      "namePlaceholder": "Sean Chen",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "至少 8 個字元",
+      "confirmLabel": "Confirm password",
+      "confirmPlaceholder": "再輸入一次",
+      "submit": "Sign up",
+      "submitting": "註冊中",
+      "alreadyHaveAccount": "已經有帳號？",
+      "loginLink": "回到登入",
+      "mismatchError": "密碼不一致",
+      "tooShortError": "密碼至少 8 個字元",
+      "errorFallback": "註冊失敗"
+    },
+    "totp": {
+      "enroll": {
+        "eyebrowStep1": "啟用 2FA",
+        "eyebrowStep2": "啟用 2FA · 步驟 2/2",
+        "step1Title": "Set up two-factor",
+        "step1Description": "請先確認密碼以開始 TOTP 註冊。Google-only 帳號需先連結密碼。",
+        "step2Title": "掃描 QR 並驗證",
+        "step2Description": "用 Authenticator app 掃描，輸入 6 位數驗證碼完成設定",
+        "passwordLabel": "Password",
+        "continueButton": "Continue",
+        "continueSubmitting": "驗證中",
+        "qrLeading": "用 Authenticator app 掃描 QR：",
+        "backupCodesTitle": "備援碼",
+        "backupCodesHelp": "請保存於安全的地方，每組僅可使用一次",
+        "codeLabel": "輸入 6 位數驗證碼",
+        "codePlaceholder": "000000",
+        "verifyButton": "Verify",
+        "verifySubmitting": "驗證中",
+        "enableErrorFallback": "啟用失敗",
+        "codeRejectedFallback": "驗證碼錯誤"
+      },
+      "verify": {
+        "eyebrow": "兩階段驗證",
+        "title": "輸入驗證碼",
+        "description": "輸入 Authenticator 顯示的 6 位數驗證碼",
+        "codeLabel": "驗證碼",
+        "codePlaceholder": "000000",
+        "submit": "Verify",
+        "submitting": "驗證中",
+        "errorFallback": "驗證碼錯誤"
+      }
+    },
+    "home": {
+      "topNavTitle": "Meeting Playbook",
+      "logout": "Logout",
+      "greetingEyebrow": "已登入",
+      "greetingTitle": "Hello, {{name}}",
+      "backendLabel": "Backend confirmed",
+      "backendErrorPrefix": "Backend round-trip failed",
+      "securityTitle": "帳號安全",
+      "securityDescriptionCredential": "Two-factor authentication 為 email 帳號的選用功能",
+      "securityDescriptionOAuth": "你用 Google 登入。2FA 由 Google 管理",
+      "loadingAccount": "Loading…",
+      "enabledTitle": "Two-factor authentication 已啟用",
+      "enabledHelp": "下次 email 登入會要求輸入 6 位數驗證碼",
+      "enabledBadge": "Enabled",
+      "disabledTitle": "尚未啟用 two-factor authentication",
+      "disabledHelp": "建議搭配 Authenticator app（Authy / 1Password / Google Authenticator）",
+      "enableButton": "Enable two-factor authentication",
+      "oauthNoticeTitle": "2FA 由 Google 管理",
+      "oauthNoticeBody": "OAuth 帳號的兩階段驗證在身份提供者那邊設定，本應用不再額外加一層",
+      "oauthSecurityLink": "前往 Google 安全性設定",
+      "sliceFooter": "這是 Slice 1 — 後續 slice 加入會議管理、playbook、即時轉錄等功能。"
+    }
+  },
+  "errors": {
+    "common": {
+      "unknown": "發生未知錯誤"
+    },
+    "auth": {
+      "gateway_bypass": "請從正確的入口登入",
+      "unauthenticated": "請先登入",
+      "invalid_credentials": "帳號或密碼錯誤"
+    }
+  }
+}

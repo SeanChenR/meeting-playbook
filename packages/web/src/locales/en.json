@@ -140,6 +140,34 @@
       "completed": "Completed"
     }
   },
+  "playbook": {
+    "heading": "Playbook",
+    "loading": "Loading…",
+    "toggle": {
+      "freeform": "Free form",
+      "structured": "Structured"
+    },
+    "freeform": {
+      "label": "Free-form markdown",
+      "placeholder": "Anything that helps you prepare (Markdown supported)"
+    },
+    "fields": {
+      "objective": "Objective",
+      "counterpartyProfile": "Counterparty profile",
+      "anticipatedTopics": "Anticipated topics",
+      "anticipatedObjections": "Anticipated objections",
+      "talkingPoints": "Talking points",
+      "redLines": "Red lines"
+    },
+    "save": {
+      "idle": "Save",
+      "saving": "Saving…",
+      "saved": "Saved ✓"
+    },
+    "errors": {
+      "fallback": "Save failed, please try again"
+    }
+  },
   "errors": {
     "common": {
       "unknown": "An unknown error occurred"

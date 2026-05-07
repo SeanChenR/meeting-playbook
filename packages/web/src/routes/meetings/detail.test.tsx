@@ -78,12 +78,31 @@ describe("MeetingDetail route", () => {
     cleanup();
   });
 
-  test("renders title, display names, and status", async () => {
-    fetchHandler = async () =>
-      new Response(JSON.stringify(SAMPLE_MEETING), {
+  test("renders title, display names, status, and the embedded PlaybookPane", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/playbook")) {
+        return new Response(
+          JSON.stringify({
+            id: "pb_abc",
+            meeting_id: "m_abc",
+            free_form_markdown: "",
+            objective: "",
+            counterparty_profile: "",
+            anticipated_topics: "",
+            anticipated_objections: "",
+            talking_points: "",
+            red_lines: "",
+            created_at: "2026-05-07T10:00:00Z",
+            updated_at: "2026-05-07T10:00:00Z",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
+    };
 
     await renderInRouter();
 
@@ -94,6 +113,12 @@ describe("MeetingDetail route", () => {
     expect(screen.getByText(/Sean/)).toBeDefined();
     // zh-TW: meetings.status.scheduled → "已排程"
     expect(screen.getByText(/已排程/)).toBeDefined();
+
+    // PlaybookPane is mounted: heading + free-form textarea visible.
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /^Playbook$/ })).toBeDefined();
+    });
+    expect(screen.getByLabelText(/自由格式 Markdown/)).toBeDefined();
   });
 
   test("delete confirmation flow: open dialog → confirm → DELETE → redirect to list", async () => {

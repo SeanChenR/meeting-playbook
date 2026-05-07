@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PlaybookPane } from "../../components/playbook-pane";
 import { ProtectedShell } from "../../components/protected-shell";
 import { AlertDialog } from "../../components/ui/alert-dialog";
 import { Alert } from "../../components/ui/alert";
@@ -93,6 +94,8 @@ export function MeetingDetail() {
           </CardContent>
         </Card>
       )}
+
+      {meeting && <PlaybookPane meetingId={meetingId} />}
 
       <AlertDialog
         open={confirmOpen}

@@ -35,6 +35,31 @@ describe("locale files mirror each other", () => {
     expect(zhPaths).toEqual(enPaths);
   });
 
+  test("playbook.* namespace covers toggle / fields / save / errors in both files", () => {
+    const zhPaths = new Set(collectPaths(zhTW));
+    const enPaths = new Set(collectPaths(en));
+    const requiredKeys = [
+      "playbook.heading",
+      "playbook.toggle.freeform",
+      "playbook.toggle.structured",
+      "playbook.freeform.label",
+      "playbook.fields.objective",
+      "playbook.fields.counterpartyProfile",
+      "playbook.fields.anticipatedTopics",
+      "playbook.fields.anticipatedObjections",
+      "playbook.fields.talkingPoints",
+      "playbook.fields.redLines",
+      "playbook.save.idle",
+      "playbook.save.saving",
+      "playbook.save.saved",
+      "playbook.errors.fallback",
+    ];
+    for (const k of requiredKeys) {
+      expect(zhPaths.has(k)).toBe(true);
+      expect(enPaths.has(k)).toBe(true);
+    }
+  });
+
   test("meetings.* namespace covers list / new / detail / status in both files", () => {
     const zhPaths = new Set(collectPaths(zhTW));
     const enPaths = new Set(collectPaths(en));

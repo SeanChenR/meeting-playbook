@@ -140,6 +140,34 @@
       "completed": "已結束"
     }
   },
+  "playbook": {
+    "heading": "Playbook",
+    "loading": "載入中…",
+    "toggle": {
+      "freeform": "自由格式",
+      "structured": "結構化"
+    },
+    "freeform": {
+      "label": "自由格式 Markdown",
+      "placeholder": "在這裡寫下會議準備的任何內容（支援 Markdown）"
+    },
+    "fields": {
+      "objective": "目標",
+      "counterpartyProfile": "對方輪廓",
+      "anticipatedTopics": "預期主題",
+      "anticipatedObjections": "預期反對",
+      "talkingPoints": "談話要點",
+      "redLines": "紅線"
+    },
+    "save": {
+      "idle": "儲存",
+      "saving": "儲存中…",
+      "saved": "已儲存 ✓"
+    },
+    "errors": {
+      "fallback": "儲存失敗，請稍後再試"
+    }
+  },
   "errors": {
     "common": {
       "unknown": "發生未知錯誤"

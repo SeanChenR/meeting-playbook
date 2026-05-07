@@ -67,16 +67,23 @@ function isWebSocketUpgrade(req: Request): boolean {
   return req.headers.get("upgrade")?.toLowerCase() === "websocket";
 }
 
+/**
+ * Build the standard error envelope JSON response used everywhere a non-2xx
+ * leaves the gateway. Frontend reads `error_code` to choose a localized
+ * message; `message` is a developer-facing English fallback.
+ */
+function errorEnvelope(status: number, errorCode: string, message: string): Response {
+  return new Response(JSON.stringify({ error_code: errorCode, message }), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 function unauthorized(): Response {
-  return new Response(
-    JSON.stringify({
-      error_code: "auth.unauthenticated",
-      message: "A valid Better Auth session is required for this endpoint.",
-    }),
-    {
-      status: 401,
-      headers: { "content-type": "application/json" },
-    },
+  return errorEnvelope(
+    401,
+    "auth.unauthenticated",
+    "A valid Better Auth session is required for this endpoint.",
   );
 }
 
@@ -84,6 +91,19 @@ export function createGatewayHandler(deps: GatewayDeps) {
   const fetchImpl = deps.fetch ?? globalThis.fetch;
 
   return async function gateway(req: Request): Promise<Response> {
+    try {
+      return await routeRequest(req);
+    } catch {
+      // Hide internal details — clients see a stable error_code only.
+      return errorEnvelope(
+        500,
+        "common.internal_error",
+        "An unexpected error occurred while processing the request.",
+      );
+    }
+  };
+
+  async function routeRequest(req: Request): Promise<Response> {
     const url = new URL(req.url);
 
     // /api/auth/* — Better Auth owns this namespace.
@@ -151,8 +171,8 @@ export function createGatewayHandler(deps: GatewayDeps) {
       });
     }
 
-    return new Response("Not Found", { status: 404 });
-  };
+    return errorEnvelope(404, "http.404", `No route for ${url.pathname}`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

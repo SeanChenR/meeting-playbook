@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from meeting_playbook.meetings.router import router as meetings_router
+from meeting_playbook.playbooks.router import router as playbooks_router
 
 
 def _envelope(status_code: int, error_code: str, message: str) -> JSONResponse:
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
         return {"user_id": x_user_id}
 
     app.include_router(meetings_router)
+    app.include_router(playbooks_router)
     return app
 
 

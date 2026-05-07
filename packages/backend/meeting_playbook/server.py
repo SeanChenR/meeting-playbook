@@ -21,6 +21,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from meeting_playbook.meetings.router import router as meetings_router
+
 
 def _envelope(status_code: int, error_code: str, message: str) -> JSONResponse:
     """Build a JSONResponse carrying the standard error envelope."""
@@ -37,6 +39,14 @@ def create_app() -> FastAPI:
     # ─── Error envelope handlers ────────────────────────────────────────
     @app.exception_handler(StarletteHTTPException)
     async def _http_exception_handler(_req: Request, exc: StarletteHTTPException) -> JSONResponse:
+        # Endpoints can opt into a custom error_code by raising
+        # HTTPException(detail={"error_code": "...", "message": "..."}).
+        if isinstance(exc.detail, dict) and "error_code" in exc.detail:
+            return _envelope(
+                exc.status_code,
+                str(exc.detail["error_code"]),
+                str(exc.detail.get("message", "")),
+            )
         if exc.status_code == status.HTTP_401_UNAUTHORIZED:
             error_code = "auth.unauthenticated"
         elif exc.status_code == status.HTTP_403_FORBIDDEN:
@@ -47,13 +57,29 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_exception_handler(
-        _req: Request, exc: RequestValidationError
+        req: Request, exc: RequestValidationError
     ) -> JSONResponse:
         first = exc.errors()[0] if exc.errors() else {"msg": "Request validation failed"}
+        msg = str(first.get("msg") or "Request validation failed")
+        loc = first.get("loc") or ()
+
+        # Domain-aware mapping: meeting POST body field errors get a
+        # structured `meeting.<field>.required` so the frontend can resolve
+        # to a localized message (slice-03 spec — required-field matrix).
+        if (
+            req.url.path.startswith("/api/meetings")
+            and len(loc) >= 2
+            and loc[0] == "body"
+            and loc[1] in {"title", "counterparty_display_name", "me_display_name"}
+        ):
+            error_code = f"meeting.{loc[1]}.required"
+        else:
+            error_code = "common.validation_error"
+
         return _envelope(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "common.validation_error",
-            str(first.get("msg") or "Request validation failed"),
+            error_code,
+            msg,
         )
 
     @app.exception_handler(Exception)
@@ -83,6 +109,7 @@ def create_app() -> FastAPI:
             )
         return {"user_id": x_user_id}
 
+    app.include_router(meetings_router)
     return app
 
 

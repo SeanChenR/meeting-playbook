@@ -1,3 +1,5 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
 /**
  * Meeting REST client.
  *
@@ -79,4 +81,52 @@ export async function deleteMeeting(id: string): Promise<void> {
     method: "DELETE",
   });
   if (!resp.ok) throw await _envelopeError(resp);
+}
+
+/**
+ * Query keys form the cache invalidation contract.
+ *
+ * - `["meetings"]` — list
+ * - `["meetings", id]` — single row
+ *
+ * Mutations invalidate by these keys; pages just feed the query options into
+ * `useQuery` and never compute keys themselves.
+ */
+export function meetingsListQueryOptions() {
+  return {
+    queryKey: ["meetings"] as const,
+    queryFn: listMeetings,
+  };
+}
+
+export function meetingQueryOptions(id: string) {
+  return {
+    queryKey: ["meetings", id] as const,
+    queryFn: () => getMeeting(id),
+  };
+}
+
+/**
+ * Mutation hooks. Each one invalidates the relevant cache slice on success
+ * so any mounted list / detail view refetches without manual refetch wiring.
+ */
+export function useCreateMeetingMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createMeeting,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+    },
+  });
+}
+
+export function useDeleteMeetingMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteMeeting,
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["meetings", id] });
+    },
+  });
 }

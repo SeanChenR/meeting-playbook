@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { AuthShell } from "../components/auth-shell";
 import { Alert } from "../components/ui/alert";
@@ -10,6 +11,7 @@ import { Label } from "../components/ui/label";
 import { authClient } from "../lib/auth-client";
 
 export function Signup() {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,11 +25,11 @@ export function Signup() {
     setError(null);
 
     if (password !== confirmPassword) {
-      setError("密碼不一致");
+      setError(t("auth.signup.mismatchError"));
       return;
     }
     if (password.length < 8) {
-      setError("密碼至少 8 個字元");
+      setError(t("auth.signup.tooShortError"));
       return;
     }
 
@@ -36,57 +38,57 @@ export function Signup() {
       const result = await authClient.signUp.email({ email, password, name });
       const r = result as { error?: { message?: string } };
       if (r.error) {
-        setError(r.error.message ?? "Signup failed");
+        setError(r.error.message ?? t("auth.signup.errorFallback"));
         setSubmitting(false);
         return;
       }
       navigate("/home", { replace: true });
     } catch (e) {
-      setError(`Signup failed: ${e}`);
+      setError(`${t("auth.signup.errorFallback")}: ${e}`);
       setSubmitting(false);
     }
   };
 
   return (
-    <AuthShell eyebrow="註冊">
+    <AuthShell eyebrow={t("auth.signup.eyebrow")}>
       <Card>
         <CardHeader>
-          <CardTitle>建立 Email 帳號</CardTitle>
-          <CardDescription>使用 email 和密碼註冊，登入後可選擇啟用 2FA</CardDescription>
+          <CardTitle>{t("auth.signup.title")}</CardTitle>
+          <CardDescription>{t("auth.signup.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="signup-name">姓名</Label>
+              <Label htmlFor="signup-name">{t("auth.signup.nameLabel")}</Label>
               <Input
                 id="signup-name"
                 type="text"
                 autoComplete="name"
-                placeholder="Sean Chen"
+                placeholder={t("auth.signup.namePlaceholder")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="signup-email">Email</Label>
+              <Label htmlFor="signup-email">{t("auth.signup.emailLabel")}</Label>
               <Input
                 id="signup-email"
                 type="email"
                 autoComplete="email"
-                placeholder="you@example.com"
+                placeholder={t("auth.signup.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="signup-password">Password</Label>
+              <Label htmlFor="signup-password">{t("auth.signup.passwordLabel")}</Label>
               <Input
                 id="signup-password"
                 type="password"
                 autoComplete="new-password"
-                placeholder="至少 8 個字元"
+                placeholder={t("auth.signup.passwordPlaceholder")}
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -94,12 +96,12 @@ export function Signup() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="signup-confirm">Confirm password</Label>
+              <Label htmlFor="signup-confirm">{t("auth.signup.confirmLabel")}</Label>
               <Input
                 id="signup-confirm"
                 type="password"
                 autoComplete="new-password"
-                placeholder="再輸入一次"
+                placeholder={t("auth.signup.confirmPlaceholder")}
                 minLength={8}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -108,7 +110,7 @@ export function Signup() {
             </div>
             <Button type="submit" disabled={submitting} className="w-full">
               {submitting && <Loader2 className="size-4 animate-spin" />}
-              {submitting ? "註冊中" : "Sign up"}
+              {submitting ? t("auth.signup.submitting") : t("auth.signup.submit")}
             </Button>
           </form>
 
@@ -119,12 +121,12 @@ export function Signup() {
           )}
 
           <p className="mt-5 text-center text-sm text-(--color-muted-foreground)">
-            已經有帳號？{" "}
+            {t("auth.signup.alreadyHaveAccount")}{" "}
             <Link
               to="/login"
               className="font-medium text-(--color-foreground) underline-offset-4 hover:underline"
             >
-              回到登入
+              {t("auth.signup.loginLink")}
             </Link>
           </p>
         </CardContent>

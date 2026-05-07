@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
+import { i18n } from "../lib/i18n";
 
 const signInSocial = mock(async () => ({ data: {} }));
 const signInEmail = mock(async () => ({ data: { twoFactorRedirect: false }, error: null }));
@@ -85,5 +86,55 @@ describe("Login route", () => {
     );
     const signupLink = screen.getByRole("link", { name: /建立帳號/ });
     expect(signupLink.getAttribute("href")).toBe("/signup");
+  });
+
+  test("backend error_code maps to localized message (zh-TW)", async () => {
+    signInEmail.mockImplementationOnce(async () => ({
+      data: undefined as unknown as { twoFactorRedirect?: boolean },
+      error: { error_code: "auth.invalid_credentials", message: "..." },
+    }));
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText(/^email$/i), "sean@example.com");
+    await user.type(screen.getByLabelText(/^password$/i), "wrong-password");
+    await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("login-error").textContent).toContain("帳號或密碼錯誤");
+    });
+  });
+
+  test("backend error_code maps to localized message (en)", async () => {
+    await i18n.changeLanguage("en");
+
+    signInEmail.mockImplementationOnce(async () => ({
+      data: undefined as unknown as { twoFactorRedirect?: boolean },
+      error: { error_code: "auth.invalid_credentials", message: "..." },
+    }));
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText(/^email$/i), "sean@example.com");
+    await user.type(screen.getByLabelText(/^password$/i), "wrong-password");
+    await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("login-error").textContent).toContain(
+        "Email or password is incorrect",
+      );
+    });
+
+    await i18n.changeLanguage("zh-TW");
   });
 });

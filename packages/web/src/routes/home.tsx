@@ -1,6 +1,8 @@
 import { ExternalLink, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
+import { LocaleToggle } from "../components/locale-toggle";
 import { Avatar } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -12,10 +14,10 @@ type ApiMeResponse = { user_id: string };
 type LinkedAccount = { providerId: string };
 
 export function Home() {
+  const { t } = useTranslation();
   const { data: session, isPending } = authClient.useSession();
   const [backendUserId, setBackendUserId] = useState<string | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
-  /** null = still loading; true = has email/password row; false = OAuth-only. */
   const [hasCredential, setHasCredential] = useState<boolean | null>(null);
   const navigate = useNavigate();
 
@@ -28,7 +30,6 @@ export function Home() {
 
     let cancelled = false;
 
-    // Backend round-trip — proves the gateway → X-User-Id → FastAPI contract.
     (async () => {
       try {
         const r = await fetch("/api/me");
@@ -40,8 +41,6 @@ export function Home() {
       }
     })();
 
-    // Linked accounts — decides whether to show app-level 2FA or defer to the
-    // OAuth provider's own 2FA management.
     (async () => {
       try {
         const result = await authClient.listAccounts();
@@ -67,7 +66,7 @@ export function Home() {
   if (isPending) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-(--color-background) text-sm text-(--color-muted-foreground)">
-        Loading…
+        {t("common.loading")}
       </div>
     );
   }
@@ -80,8 +79,9 @@ export function Home() {
     <div className="min-h-dvh bg-(--color-background)">
       <header className="border-b border-(--color-border) bg-(--color-card)">
         <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-5">
-          <span className="text-sm font-semibold tracking-tight">Meeting Playbook</span>
+          <span className="text-sm font-semibold tracking-tight">{t("auth.home.topNavTitle")}</span>
           <div className="flex items-center gap-3">
+            <LocaleToggle />
             <Avatar
               src={(session.user as { image?: string | null }).image}
               alt={displayName}
@@ -90,18 +90,19 @@ export function Home() {
             />
             <Button type="button" variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="size-4" />
-              Logout
+              {t("auth.home.logout")}
             </Button>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-[1200px] space-y-6 px-5 py-10">
-        {/* Greeting card */}
         <Card>
           <CardHeader>
-            <CardDescription>已登入</CardDescription>
-            <CardTitle className="text-3xl">Hello, {displayName}</CardTitle>
+            <CardDescription>{t("auth.home.greetingEyebrow")}</CardDescription>
+            <CardTitle className="text-3xl">
+              {t("auth.home.greetingTitle", { name: displayName })}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {backendUserId && (
@@ -109,7 +110,9 @@ export function Home() {
                 data-testid="backend-confirmation"
                 className="flex items-center justify-between rounded-md border border-(--color-border) bg-(--color-muted)/40 px-3 py-2"
               >
-                <span className="text-xs text-(--color-muted-foreground)">Backend confirmed</span>
+                <span className="text-xs text-(--color-muted-foreground)">
+                  {t("auth.home.backendLabel")}
+                </span>
                 <code className="font-mono text-xs text-(--color-foreground)">{backendUserId}</code>
               </div>
             )}
@@ -119,25 +122,26 @@ export function Home() {
                 role="alert"
                 className="rounded-md border border-(--color-destructive)/30 bg-(--color-destructive)/10 px-3 py-2 text-xs text-(--color-destructive)"
               >
-                Backend round-trip failed: {backendError}
+                {t("auth.home.backendErrorPrefix")}: {backendError}
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Security card — different content for credential vs OAuth-only */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">帳號安全</CardTitle>
+            <CardTitle className="text-base">{t("auth.home.securityTitle")}</CardTitle>
             <CardDescription>
               {hasCredential === false
-                ? "你用 Google 登入。2FA 由 Google 管理"
-                : "Two-factor authentication 為 email 帳號的選用功能"}
+                ? t("auth.home.securityDescriptionOAuth")
+                : t("auth.home.securityDescriptionCredential")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {hasCredential === null ? (
-              <p className="text-sm text-(--color-muted-foreground)">Loading…</p>
+              <p className="text-sm text-(--color-muted-foreground)">
+                {t("auth.home.loadingAccount")}
+              </p>
             ) : hasCredential ? (
               <CredentialUserSecurity twoFactorEnabled={!!twoFactorEnabled} />
             ) : (
@@ -147,31 +151,26 @@ export function Home() {
         </Card>
 
         <Separator />
-        <p className="text-xs text-(--color-muted-foreground)">
-          這是 Slice 1 — 後續 slice 加入會議管理、playbook、即時轉錄等功能。
-        </p>
+        <p className="text-xs text-(--color-muted-foreground)">{t("auth.home.sliceFooter")}</p>
       </main>
     </div>
   );
 }
 
-// ─── Sub-components: keeps the main render tidy ─────────────────────────────
-
 function CredentialUserSecurity({ twoFactorEnabled }: { twoFactorEnabled: boolean }) {
+  const { t } = useTranslation();
   if (twoFactorEnabled) {
     return (
       <div className="flex items-start gap-3" data-testid="totp-status">
         <ShieldCheck className="mt-0.5 size-5 text-(--color-accent)" />
         <div className="space-y-0.5">
           <p className="text-sm font-medium text-(--color-foreground)">
-            Two-factor authentication 已啟用
+            {t("auth.home.enabledTitle")}
           </p>
-          <p className="text-xs text-(--color-muted-foreground)">
-            下次 email 登入會要求輸入 6 位數驗證碼
-          </p>
+          <p className="text-xs text-(--color-muted-foreground)">{t("auth.home.enabledHelp")}</p>
         </div>
         <Badge variant="success" className="ml-auto">
-          Enabled
+          {t("auth.home.enabledBadge")}
         </Badge>
       </div>
     );
@@ -181,13 +180,11 @@ function CredentialUserSecurity({ twoFactorEnabled }: { twoFactorEnabled: boolea
     <div className="flex items-start gap-3">
       <ShieldAlert className="mt-0.5 size-5 text-(--color-muted-foreground)" />
       <div className="space-y-2">
-        <p className="text-sm text-(--color-foreground)">尚未啟用 two-factor authentication</p>
-        <p className="text-xs text-(--color-muted-foreground)">
-          建議搭配 Authenticator app（Authy / 1Password / Google Authenticator）
-        </p>
+        <p className="text-sm text-(--color-foreground)">{t("auth.home.disabledTitle")}</p>
+        <p className="text-xs text-(--color-muted-foreground)">{t("auth.home.disabledHelp")}</p>
         <Link to="/totp/enroll" data-testid="enable-totp-link">
           <Button type="button" variant="secondary" size="sm">
-            Enable two-factor authentication
+            {t("auth.home.enableButton")}
           </Button>
         </Link>
       </div>
@@ -196,14 +193,13 @@ function CredentialUserSecurity({ twoFactorEnabled }: { twoFactorEnabled: boolea
 }
 
 function OAuthUserSecurity() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-3" data-testid="oauth-2fa-notice">
       <ShieldCheck className="mt-0.5 size-5 text-(--color-accent)" />
       <div className="space-y-2">
-        <p className="text-sm text-(--color-foreground)">2FA 由 Google 管理</p>
-        <p className="text-xs text-(--color-muted-foreground)">
-          OAuth 帳號的兩階段驗證在身份提供者那邊設定，本應用不再額外加一層
-        </p>
+        <p className="text-sm text-(--color-foreground)">{t("auth.home.oauthNoticeTitle")}</p>
+        <p className="text-xs text-(--color-muted-foreground)">{t("auth.home.oauthNoticeBody")}</p>
         <a
           href="https://myaccount.google.com/security"
           target="_blank"
@@ -211,7 +207,7 @@ function OAuthUserSecurity() {
           className="inline-flex items-center gap-1.5 text-sm font-medium text-(--color-foreground) underline-offset-4 hover:underline"
           data-testid="google-security-link"
         >
-          前往 Google 安全性設定
+          {t("auth.home.oauthSecurityLink")}
           <ExternalLink className="size-3.5" />
         </a>
       </div>

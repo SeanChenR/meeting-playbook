@@ -1,5 +1,6 @@
 import { KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthShell } from "../../components/auth-shell";
@@ -20,6 +21,7 @@ import { authClient } from "../../lib/auth-client";
 type EnrollData = { totpURI: string; backupCodes: string[] };
 
 export function TotpEnroll() {
+  const { t } = useTranslation();
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [enrollData, setEnrollData] = useState<EnrollData | null>(null);
@@ -35,14 +37,14 @@ export function TotpEnroll() {
       const result = await authClient.twoFactor.enable({ password });
       const r = result as { data?: EnrollData; error?: { message?: string } };
       if (r.error) {
-        setError(r.error.message ?? "Enable failed");
+        setError(r.error.message ?? t("auth.totp.enroll.enableErrorFallback"));
         setSubmitting(false);
         return;
       }
       if (r.data) setEnrollData(r.data);
       setSubmitting(false);
     } catch (e) {
-      setError(`Failed to start enrollment: ${e}`);
+      setError(`${t("auth.totp.enroll.enableErrorFallback")}: ${e}`);
       setSubmitting(false);
     }
   };
@@ -55,39 +57,35 @@ export function TotpEnroll() {
       const result = await authClient.twoFactor.verifyTotp({ code });
       const r = result as { data?: unknown; error?: { message?: string } | null };
       if (r.error) {
-        setError(r.error.message ?? "驗證碼錯誤");
+        setError(r.error.message ?? t("auth.totp.enroll.codeRejectedFallback"));
         setSubmitting(false);
         return;
       }
-      // After enrolment success: refresh the session cache so /home doesn't
-      // misread it as null and bounce to /login.
       await authClient.getSession();
       navigate("/home", { replace: true });
     } catch (e) {
-      setError(`Code rejected: ${e}`);
+      setError(`${t("auth.totp.enroll.codeRejectedFallback")}: ${e}`);
       setSubmitting(false);
     }
   };
 
   if (!enrollData) {
     return (
-      <AuthShell eyebrow="啟用 2FA">
+      <AuthShell eyebrow={t("auth.totp.enroll.eyebrowStep1")}>
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2.5">
               <span className="rounded-md bg-(--color-muted) p-2">
                 <KeyRound className="size-4" />
               </span>
-              <CardTitle className="text-lg">Set up two-factor</CardTitle>
+              <CardTitle className="text-lg">{t("auth.totp.enroll.step1Title")}</CardTitle>
             </div>
-            <CardDescription>
-              請先確認密碼以開始 TOTP 註冊。Google-only 帳號需先連結密碼。
-            </CardDescription>
+            <CardDescription>{t("auth.totp.enroll.step1Description")}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleEnableSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="enroll-password">Password</Label>
+                <Label htmlFor="enroll-password">{t("auth.totp.enroll.passwordLabel")}</Label>
                 <Input
                   id="enroll-password"
                   type="password"
@@ -100,7 +98,9 @@ export function TotpEnroll() {
               </div>
               <Button type="submit" disabled={submitting} className="w-full">
                 {submitting && <Loader2 className="size-4 animate-spin" />}
-                {submitting ? "驗證中" : "Continue"}
+                {submitting
+                  ? t("auth.totp.enroll.continueSubmitting")
+                  : t("auth.totp.enroll.continueButton")}
               </Button>
             </form>
             {error && (
@@ -115,16 +115,16 @@ export function TotpEnroll() {
   }
 
   return (
-    <AuthShell eyebrow="啟用 2FA · 步驟 2/2">
+    <AuthShell eyebrow={t("auth.totp.enroll.eyebrowStep2")}>
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2.5">
             <span className="rounded-md bg-(--color-accent)/12 p-2 text-(--color-accent)">
               <ShieldCheck className="size-4" />
             </span>
-            <CardTitle className="text-lg">掃描 QR 並驗證</CardTitle>
+            <CardTitle className="text-lg">{t("auth.totp.enroll.step2Title")}</CardTitle>
           </div>
-          <CardDescription>用 Authenticator app 掃描，輸入 6 位數驗證碼完成設定</CardDescription>
+          <CardDescription>{t("auth.totp.enroll.step2Description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="flex justify-center rounded-md border border-(--color-border) bg-(--color-card) p-4">
@@ -132,9 +132,9 @@ export function TotpEnroll() {
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium">備援碼</p>
+            <p className="text-sm font-medium">{t("auth.totp.enroll.backupCodesTitle")}</p>
             <p className="text-xs text-(--color-muted-foreground)">
-              請保存於安全的地方，每組僅可使用一次
+              {t("auth.totp.enroll.backupCodesHelp")}
             </p>
             <ul
               data-testid="backup-codes"
@@ -152,7 +152,7 @@ export function TotpEnroll() {
 
           <form onSubmit={handleVerifySubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="totp-code">輸入 6 位數驗證碼</Label>
+              <Label htmlFor="totp-code">{t("auth.totp.enroll.codeLabel")}</Label>
               <Input
                 id="totp-code"
                 name="code"
@@ -161,7 +161,7 @@ export function TotpEnroll() {
                 pattern="[0-9]{6}"
                 maxLength={6}
                 autoComplete="one-time-code"
-                placeholder="000000"
+                placeholder={t("auth.totp.enroll.codePlaceholder")}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 required
@@ -169,7 +169,9 @@ export function TotpEnroll() {
               />
             </div>
             <Button type="submit" disabled={submitting} className="w-full">
-              {submitting ? "驗證中" : "Verify"}
+              {submitting
+                ? t("auth.totp.enroll.verifySubmitting")
+                : t("auth.totp.enroll.verifyButton")}
             </Button>
           </form>
           {error && (

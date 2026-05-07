@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { AuthShell } from "../components/auth-shell";
 import { Alert } from "../components/ui/alert";
@@ -9,8 +10,10 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Separator } from "../components/ui/separator";
 import { authClient } from "../lib/auth-client";
+import { localizedErrorMessage } from "../lib/i18n-errors";
 
 export function Login() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +34,14 @@ export function Login() {
     try {
       const result = await authClient.signIn.email({ email, password });
       const r = result as {
-        error?: { message?: string };
+        error?: { error_code?: string; message?: string };
         data?: { twoFactorRedirect?: boolean };
       };
       if (r.error) {
-        setError(r.error.message ?? "Sign in failed");
+        const localized = r.error.error_code
+          ? localizedErrorMessage(r.error.error_code, t)
+          : (r.error.message ?? t("auth.login.errorFallback"));
+        setError(localized);
         setSubmitting(false);
         return;
       }
@@ -45,17 +51,17 @@ export function Login() {
       }
       navigate("/home", { replace: true });
     } catch (e) {
-      setError(`Sign in failed: ${e}`);
+      setError(`${t("auth.login.errorFallback")}: ${e}`);
       setSubmitting(false);
     }
   };
 
   return (
-    <AuthShell eyebrow="登入">
+    <AuthShell eyebrow={t("auth.login.eyebrow")}>
       <Card>
         <CardHeader>
-          <CardTitle>歡迎回來</CardTitle>
-          <CardDescription>選擇登入方式以繼續</CardDescription>
+          <CardTitle>{t("auth.login.title")}</CardTitle>
+          <CardDescription>{t("auth.login.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <Button
@@ -66,32 +72,32 @@ export function Login() {
             className="w-full"
           >
             <GoogleIcon />
-            Sign in with Google
+            {t("auth.login.googleButton")}
           </Button>
 
           <div className="relative flex items-center gap-3">
             <Separator className="flex-1" />
             <span className="text-xs uppercase tracking-wider text-(--color-muted-foreground)">
-              或
+              {t("auth.login.separator")}
             </span>
             <Separator className="flex-1" />
           </div>
 
           <form onSubmit={handleEmailSignIn} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="login-email">Email</Label>
+              <Label htmlFor="login-email">{t("auth.login.emailLabel")}</Label>
               <Input
                 id="login-email"
                 type="email"
                 autoComplete="email"
-                placeholder="you@example.com"
+                placeholder={t("auth.login.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="login-password">Password</Label>
+              <Label htmlFor="login-password">{t("auth.login.passwordLabel")}</Label>
               <Input
                 id="login-password"
                 type="password"
@@ -104,7 +110,7 @@ export function Login() {
             </div>
             <Button type="submit" disabled={submitting} className="w-full">
               {submitting && <Loader2 className="size-4 animate-spin" />}
-              {submitting ? "登入中" : "Sign in"}
+              {submitting ? t("auth.login.submitting") : t("auth.login.submit")}
             </Button>
           </form>
 
@@ -115,12 +121,12 @@ export function Login() {
           )}
 
           <p className="text-center text-sm text-(--color-muted-foreground)">
-            沒帳號？{" "}
+            {t("auth.login.noAccount")}{" "}
             <Link
               to="/signup"
               className="font-medium text-(--color-foreground) underline-offset-4 hover:underline"
             >
-              建立帳號
+              {t("auth.login.signupLink")}
             </Link>
           </p>
         </CardContent>

@@ -42,6 +42,28 @@ Changes can be parked（暫存）— temporarily moved out of `openspec/changes/
 - **Dual-channel capture** (not "stereo recording")
 - **Recording window** (the 30-day retention; not "TTL", "expiry")
 
+## i18n convention (per Slice 2)
+
+Every user-visible string in `packages/web` MUST live in BOTH locale files at
+the same time:
+- `packages/web/src/locales/zh-TW.json` (default, 繁中)
+- `packages/web/src/locales/en.json` (English)
+
+Reading: components import `useTranslation()` from `react-i18next` and call
+`t("group.key")`. Backend errors arrive as `{error_code, message}`; the
+frontend looks them up via `localizedErrorMessage(errorCode, t)` from
+`packages/web/src/lib/i18n-errors.ts` (falls back to `errors.common.unknown`
+when the code is not in the locale).
+
+PR contract: a UI string added to one locale file but NOT the other is a
+review block. The deep-equal test in `packages/web/src/locales/locales.test.ts`
+catches drift in CI.
+
+Minimum example — adding a new "save" button to the auth flow:
+- `zh-TW.json`: `"auth": { "common": { "save": "儲存" } }`
+- `en.json`:    `"auth": { "common": { "save": "Save"  } }`
+- Component: `<Button>{t("auth.common.save")}</Button>`
+
 ## Workflow conventions (per user's global config)
 1. New feature → invoke `grill-with-docs` first (CONTEXT.md + ADRs exist)
 2. PRD → invoke `to-prd`

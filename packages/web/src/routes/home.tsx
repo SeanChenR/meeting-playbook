@@ -1,7 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ExternalLink, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
 import { LocaleToggle } from "../components/locale-toggle";
 import { Avatar } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
@@ -13,54 +14,51 @@ import { authClient } from "../lib/auth-client";
 type ApiMeResponse = { user_id: string };
 type LinkedAccount = { providerId: string };
 
+async function fetchMe(): Promise<ApiMeResponse> {
+  const r = await fetch("/api/me");
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return (await r.json()) as ApiMeResponse;
+}
+
+async function fetchHasCredential(): Promise<boolean> {
+  const result = await authClient.listAccounts();
+  const accounts = ((result as { data?: LinkedAccount[] }).data ?? []) as LinkedAccount[];
+  return accounts.some((a) => a.providerId === "credential");
+}
+
 export function Home() {
   const { t } = useTranslation();
   const { data: session, isPending } = authClient.useSession();
-  const [backendUserId, setBackendUserId] = useState<string | null>(null);
-  const [backendError, setBackendError] = useState<string | null>(null);
-  const [hasCredential, setHasCredential] = useState<boolean | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isPending) return;
-    if (!session) {
-      navigate("/login", { replace: true });
-      return;
+    if (!isPending && !session) {
+      navigate({ to: "/login", replace: true });
     }
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const r = await fetch("/api/me");
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data = (await r.json()) as ApiMeResponse;
-        if (!cancelled) setBackendUserId(data.user_id);
-      } catch (e) {
-        if (!cancelled) setBackendError(String(e));
-      }
-    })();
-
-    (async () => {
-      try {
-        const result = await authClient.listAccounts();
-        const accounts = ((result as { data?: LinkedAccount[] }).data ?? []) as LinkedAccount[];
-        if (!cancelled) {
-          setHasCredential(accounts.some((a) => a.providerId === "credential"));
-        }
-      } catch {
-        if (!cancelled) setHasCredential(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [session, isPending, navigate]);
+
+  const meQuery = useQuery({
+    queryKey: ["me"],
+    queryFn: fetchMe,
+    enabled: !!session,
+  });
+  const accountsQuery = useQuery({
+    queryKey: ["accounts"],
+    queryFn: fetchHasCredential,
+    enabled: !!session,
+  });
+
+  const backendUserId = meQuery.data?.user_id ?? null;
+  const backendError = meQuery.error ? String(meQuery.error) : null;
+  const hasCredential = accountsQuery.isSuccess
+    ? accountsQuery.data
+    : accountsQuery.isError
+      ? false
+      : null;
 
   const handleLogout = async () => {
     await authClient.signOut();
-    navigate("/login", { replace: true });
+    navigate({ to: "/login", replace: true });
   };
 
   if (isPending) {

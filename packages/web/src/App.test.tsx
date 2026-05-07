@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, render } from "@testing-library/react";
 
@@ -31,7 +32,15 @@ describe("App", () => {
   afterEach(() => cleanup());
 
   test("renders without crashing", () => {
-    const { container } = render(<App />);
+    // Production wires this provider in main.tsx; the test mirrors that.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <App />
+      </QueryClientProvider>,
+    );
     expect(container).toBeDefined();
   });
 });

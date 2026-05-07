@@ -1,7 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { AuthShell } from "../components/auth-shell";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -42,7 +42,7 @@ export function Signup() {
         setSubmitting(false);
         return;
       }
-      navigate("/meetings", { replace: true });
+      navigate({ to: "/meetings", replace: true });
     } catch (e) {
       setError(`${t("auth.signup.errorFallback")}: ${e}`);
       setSubmitting(false);

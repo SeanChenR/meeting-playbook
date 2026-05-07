@@ -9,9 +9,9 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
 import { AuthShell } from "../components/auth-shell";
 import { i18n } from "../lib/i18n";
+import { renderWithRouter } from "../test/fixtures/router";
 
 mock.module("../lib/auth-client", () => ({
   authClient: {
@@ -51,7 +51,14 @@ import { Signup } from "./signup";
 import { TotpEnroll } from "./totp/enroll";
 import { TotpVerify } from "./totp/verify";
 
-const wrap = (node: JSX.Element) => <MemoryRouter>{node}</MemoryRouter>;
+async function wrap(node: JSX.Element, path = "/") {
+  // AuthShell does not depend on router context, but Signup / Home / Totp do.
+  // Use a single helper so each test stays terse.
+  if ((node.type as { name?: string }).name === "AuthShell") {
+    return render(node);
+  }
+  return renderWithRouter(node, { initialEntries: [path], path });
+}
 
 beforeEach(async () => {
   await i18n.changeLanguage("zh-TW");
@@ -63,25 +70,21 @@ afterEach(async () => {
 
 // ─── Task 3.6: shared shell ─────────────────────────────────────────────
 describe("AuthShell — i18n", () => {
-  test("renders zh-TW subhead by default", () => {
-    render(
-      wrap(
-        <AuthShell>
-          <div />
-        </AuthShell>,
-      ),
+  test("renders zh-TW subhead by default", async () => {
+    await wrap(
+      <AuthShell>
+        <div />
+      </AuthShell>,
     );
     expect(screen.getByText("個人 AI 會議助理")).toBeDefined();
   });
 
   test("renders en subhead after changeLanguage('en')", async () => {
     await i18n.changeLanguage("en");
-    render(
-      wrap(
-        <AuthShell>
-          <div />
-        </AuthShell>,
-      ),
+    await wrap(
+      <AuthShell>
+        <div />
+      </AuthShell>,
     );
     expect(screen.getByText("Personal AI meeting assistant")).toBeDefined();
   });
@@ -89,15 +92,15 @@ describe("AuthShell — i18n", () => {
 
 // ─── Task 3.2: signup ────────────────────────────────────────────────────
 describe("Signup — i18n", () => {
-  test("renders zh-TW title by default", () => {
-    render(wrap(<Signup />));
+  test("renders zh-TW title by default", async () => {
+    await wrap(<Signup />);
     expect(screen.getByText("建立 Email 帳號")).toBeDefined();
     expect(screen.getByText("已經有帳號？")).toBeDefined();
   });
 
   test("renders en title after changeLanguage('en')", async () => {
     await i18n.changeLanguage("en");
-    render(wrap(<Signup />));
+    await wrap(<Signup />);
     expect(screen.getByText("Create email account")).toBeDefined();
     expect(screen.getByText("Already have an account?")).toBeDefined();
   });
@@ -105,8 +108,8 @@ describe("Signup — i18n", () => {
 
 // ─── Task 3.3: totp/enroll (step 1) ──────────────────────────────────────
 describe("TotpEnroll — i18n", () => {
-  test("renders zh-TW step-1 description by default", () => {
-    render(wrap(<TotpEnroll />));
+  test("renders zh-TW step-1 description by default", async () => {
+    await wrap(<TotpEnroll />);
     expect(
       screen.getByText("請先確認密碼以開始 TOTP 註冊。Google-only 帳號需先連結密碼。"),
     ).toBeDefined();
@@ -114,22 +117,22 @@ describe("TotpEnroll — i18n", () => {
 
   test("renders en step-1 description after changeLanguage('en')", async () => {
     await i18n.changeLanguage("en");
-    render(wrap(<TotpEnroll />));
+    await wrap(<TotpEnroll />);
     expect(screen.getByText(/Confirm your password to begin TOTP enrollment/i)).toBeDefined();
   });
 });
 
 // ─── Task 3.4: totp/verify ───────────────────────────────────────────────
 describe("TotpVerify — i18n", () => {
-  test("renders zh-TW title and description by default", () => {
-    render(wrap(<TotpVerify />));
+  test("renders zh-TW title and description by default", async () => {
+    await wrap(<TotpVerify />);
     expect(screen.getByText("輸入驗證碼")).toBeDefined();
     expect(screen.getByText("輸入 Authenticator 顯示的 6 位數驗證碼")).toBeDefined();
   });
 
   test("renders en title and description after changeLanguage('en')", async () => {
     await i18n.changeLanguage("en");
-    render(wrap(<TotpVerify />));
+    await wrap(<TotpVerify />);
     expect(screen.getByText("Enter verification code")).toBeDefined();
     expect(screen.getByText("Enter the 6-digit code from your authenticator app")).toBeDefined();
   });
@@ -138,14 +141,14 @@ describe("TotpVerify — i18n", () => {
 // ─── Task 3.5: home greeting + interpolation ─────────────────────────────
 describe("Home — i18n", () => {
   test("renders zh-TW greeting eyebrow + interpolated name", async () => {
-    render(wrap(<Home />));
+    await wrap(<Home />);
     await waitFor(() => expect(screen.getByText("已登入")).toBeDefined());
     expect(screen.getByText(/Hello, Sean/)).toBeDefined();
   });
 
   test("renders en greeting eyebrow after changeLanguage('en')", async () => {
     await i18n.changeLanguage("en");
-    render(wrap(<Home />));
+    await wrap(<Home />);
     await waitFor(() => expect(screen.getByText("Signed in")).toBeDefined());
     expect(screen.getByText(/Hello, Sean/)).toBeDefined();
   });

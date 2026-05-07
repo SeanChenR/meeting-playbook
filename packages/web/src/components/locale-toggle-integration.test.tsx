@@ -12,7 +12,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
 import { AuthShell } from "./auth-shell";
 import { i18n } from "../lib/i18n";
 
@@ -31,11 +30,9 @@ describe("LocaleToggle wired into AuthShell", () => {
 
   test("LocaleToggle is reachable from AuthShell", () => {
     render(
-      <MemoryRouter>
-        <AuthShell>
-          <div data-testid="card-slot" />
-        </AuthShell>
-      </MemoryRouter>,
+      <AuthShell>
+        <div data-testid="card-slot" />
+      </AuthShell>,
     );
     expect(screen.getByRole("group", { name: /language/i })).toBeDefined();
   });
@@ -43,11 +40,9 @@ describe("LocaleToggle wired into AuthShell", () => {
   test("clicking EN updates the visible subhead AND localStorage", async () => {
     const user = userEvent.setup();
     render(
-      <MemoryRouter>
-        <AuthShell>
-          <div />
-        </AuthShell>
-      </MemoryRouter>,
+      <AuthShell>
+        <div />
+      </AuthShell>,
     );
 
     expect(screen.getByText("個人 AI 會議助理")).toBeDefined();
@@ -63,11 +58,9 @@ describe("LocaleToggle wired into AuthShell", () => {
   test("after switch + cleanup + remount, the persisted locale is honored on first render", async () => {
     const user = userEvent.setup();
     const { unmount } = render(
-      <MemoryRouter>
-        <AuthShell>
-          <div />
-        </AuthShell>
-      </MemoryRouter>,
+      <AuthShell>
+        <div />
+      </AuthShell>,
     );
 
     await user.click(screen.getByRole("button", { name: /^EN$/ }));
@@ -79,11 +72,9 @@ describe("LocaleToggle wired into AuthShell", () => {
     // i18n is a singleton so it remembers the user's choice; on a real
     // reload the detector would re-read localStorage and reach the same state.
     render(
-      <MemoryRouter>
-        <AuthShell>
-          <div />
-        </AuthShell>
-      </MemoryRouter>,
+      <AuthShell>
+        <div />
+      </AuthShell>,
     );
     expect(screen.getByText("Personal AI meeting assistant")).toBeDefined();
   });

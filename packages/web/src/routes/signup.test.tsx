@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { renderWithRouter } from "../test/fixtures/router";
 
 const signUpEmail = mock(async () => ({ data: { user: { id: "usr_new" } }, error: null }));
 
@@ -21,12 +21,8 @@ describe("Signup route", () => {
     cleanup();
   });
 
-  test("renders all required fields and submit button", () => {
-    render(
-      <MemoryRouter>
-        <Signup />
-      </MemoryRouter>,
-    );
+  test("renders all required fields and submit button", async () => {
+    await renderWithRouter(<Signup />, { initialEntries: ["/signup"], path: "/signup" });
     expect(screen.getByLabelText(/姓名/)).toBeDefined();
     expect(screen.getByLabelText(/^email$/i)).toBeDefined();
     expect(screen.getByLabelText(/^password$/i)).toBeDefined();
@@ -34,23 +30,15 @@ describe("Signup route", () => {
     expect(screen.getByRole("button", { name: /^sign up$/i })).toBeDefined();
   });
 
-  test("renders link back to login", () => {
-    render(
-      <MemoryRouter>
-        <Signup />
-      </MemoryRouter>,
-    );
+  test("renders link back to login", async () => {
+    await renderWithRouter(<Signup />, { initialEntries: ["/signup"], path: "/signup" });
     const loginLink = screen.getByRole("link", { name: /回到登入/ });
     expect(loginLink.getAttribute("href")).toBe("/login");
   });
 
   test("submitting valid input dispatches signUp.email with name + email + password", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <Signup />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Signup />, { initialEntries: ["/signup"], path: "/signup" });
 
     await user.type(screen.getByLabelText(/姓名/), "Sean Chen");
     await user.type(screen.getByLabelText(/^email$/i), "sean@example.com");
@@ -73,11 +61,7 @@ describe("Signup route", () => {
 
   test("password mismatch shows error and does not dispatch signUp", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <Signup />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Signup />, { initialEntries: ["/signup"], path: "/signup" });
 
     await user.type(screen.getByLabelText(/姓名/), "Sean");
     await user.type(screen.getByLabelText(/^email$/i), "sean@example.com");
@@ -91,11 +75,7 @@ describe("Signup route", () => {
 
   test("password shorter than 8 chars shows error and does not dispatch signUp", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <Signup />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Signup />, { initialEntries: ["/signup"], path: "/signup" });
 
     await user.type(screen.getByLabelText(/姓名/), "Sean");
     await user.type(screen.getByLabelText(/^email$/i), "sean@example.com");

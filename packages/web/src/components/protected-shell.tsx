@@ -2,7 +2,7 @@ import { LogOut } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { authClient } from "../lib/auth-client";
 import { Avatar } from "./ui/avatar";
 import { Button } from "./ui/button";
@@ -15,13 +15,13 @@ export function ProtectedShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isPending && !session) {
-      navigate("/login", { replace: true });
+      navigate({ to: "/login", replace: true });
     }
   }, [session, isPending, navigate]);
 
   const handleLogout = async () => {
     await authClient.signOut();
-    navigate("/login", { replace: true });
+    navigate({ to: "/login", replace: true });
   };
 
   if (isPending) {

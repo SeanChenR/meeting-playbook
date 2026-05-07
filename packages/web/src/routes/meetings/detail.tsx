@@ -1,54 +1,50 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate, useParams } from "react-router";
 import { ProtectedShell } from "../../components/protected-shell";
 import { AlertDialog } from "../../components/ui/alert-dialog";
 import { Alert } from "../../components/ui/alert";
 import { Button, buttonVariants } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
-import { deleteMeeting, getMeeting, type Meeting, MeetingApiError } from "../../lib/meetings-api";
+import {
+  meetingQueryOptions,
+  MeetingApiError,
+  useDeleteMeetingMutation,
+} from "../../lib/meetings-api";
 
 export function MeetingDetail() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { id = "" } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false }) as { id?: string };
+  const meetingId = id ?? "";
 
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({ ...meetingQueryOptions(meetingId), enabled: !!meetingId });
+  const deleteMutation = useDeleteMeetingMutation();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!id) return;
-    (async () => {
-      try {
-        const m = await getMeeting(id);
-        if (!cancelled) setMeeting(m);
-      } catch (e) {
-        if (cancelled) return;
-        if (e instanceof MeetingApiError && e.errorCode) {
-          setError(localizedErrorMessage(e.errorCode, t));
-        } else {
-          setError(t("meetings.detail.errorFallback"));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, t]);
+  const meeting = query.data ?? null;
+  const fetchError =
+    query.isError && query.error instanceof MeetingApiError && query.error.errorCode
+      ? localizedErrorMessage(query.error.errorCode, t)
+      : query.isError
+        ? t("meetings.detail.errorFallback")
+        : null;
+  const error = deleteError ?? fetchError;
 
   async function handleConfirmDelete() {
-    if (!id) return;
+    if (!meetingId) return;
+    setDeleteError(null);
     try {
-      await deleteMeeting(id);
-      navigate("/meetings", { replace: true });
+      await deleteMutation.mutateAsync(meetingId);
+      navigate({ to: "/meetings", replace: true });
     } catch (e) {
       if (e instanceof MeetingApiError && e.errorCode) {
-        setError(localizedErrorMessage(e.errorCode, t));
+        setDeleteError(localizedErrorMessage(e.errorCode, t));
       } else {
-        setError(t("meetings.detail.errorFallback"));
+        setDeleteError(t("meetings.detail.errorFallback"));
       }
     }
   }

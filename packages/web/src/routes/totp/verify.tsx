@@ -1,7 +1,7 @@
 import { ShieldCheck } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { AuthShell } from "../../components/auth-shell";
 import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
@@ -36,7 +36,7 @@ export function TotpVerify() {
         return;
       }
       await authClient.getSession();
-      navigate("/meetings", { replace: true });
+      navigate({ to: "/meetings", replace: true });
     } catch (e) {
       setError(`${t("auth.totp.verify.errorFallback")}: ${e}`);
       setSubmitting(false);

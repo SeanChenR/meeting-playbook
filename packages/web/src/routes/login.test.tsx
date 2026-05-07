@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
 import { i18n } from "../lib/i18n";
+import { renderWithRouter } from "../test/fixtures/router";
 
 const signInSocial = mock(async () => ({ data: {} }));
 const signInEmail = mock(async () => ({ data: { twoFactorRedirect: false }, error: null }));
@@ -24,22 +24,14 @@ describe("Login route", () => {
     cleanup();
   });
 
-  test("renders Sign in with Google button", () => {
-    render(
-      <MemoryRouter>
-        <Login />
-      </MemoryRouter>,
-    );
+  test("renders Sign in with Google button", async () => {
+    await renderWithRouter(<Login />, { initialEntries: ["/login"], path: "/login" });
     expect(screen.getByRole("button", { name: /sign in with google/i })).toBeDefined();
   });
 
   test("clicking the Google button dispatches signIn.social with google provider", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <Login />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Login />, { initialEntries: ["/login"], path: "/login" });
 
     await user.click(screen.getByRole("button", { name: /sign in with google/i }));
 
@@ -49,12 +41,8 @@ describe("Login route", () => {
     expect(arg.callbackURL).toBe("/meetings");
   });
 
-  test("renders email + password form fields", () => {
-    render(
-      <MemoryRouter>
-        <Login />
-      </MemoryRouter>,
-    );
+  test("renders email + password form fields", async () => {
+    await renderWithRouter(<Login />, { initialEntries: ["/login"], path: "/login" });
     expect(screen.getByLabelText(/^email$/i)).toBeDefined();
     expect(screen.getByLabelText(/^password$/i)).toBeDefined();
     expect(screen.getByRole("button", { name: /^sign in$/i })).toBeDefined();
@@ -62,11 +50,7 @@ describe("Login route", () => {
 
   test("submitting the email form dispatches signIn.email with credentials", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <Login />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Login />, { initialEntries: ["/login"], path: "/login" });
 
     await user.type(screen.getByLabelText(/^email$/i), "sean@example.com");
     await user.type(screen.getByLabelText(/^password$/i), "hunter22hunter");
@@ -78,12 +62,8 @@ describe("Login route", () => {
     expect(arg.password).toBe("hunter22hunter");
   });
 
-  test("renders link to signup page", () => {
-    render(
-      <MemoryRouter>
-        <Login />
-      </MemoryRouter>,
-    );
+  test("renders link to signup page", async () => {
+    await renderWithRouter(<Login />, { initialEntries: ["/login"], path: "/login" });
     const signupLink = screen.getByRole("link", { name: /建立帳號/ });
     expect(signupLink.getAttribute("href")).toBe("/signup");
   });
@@ -95,11 +75,7 @@ describe("Login route", () => {
     }));
 
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <Login />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Login />, { initialEntries: ["/login"], path: "/login" });
 
     await user.type(screen.getByLabelText(/^email$/i), "sean@example.com");
     await user.type(screen.getByLabelText(/^password$/i), "wrong-password");
@@ -119,11 +95,7 @@ describe("Login route", () => {
     }));
 
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <Login />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Login />, { initialEntries: ["/login"], path: "/login" });
 
     await user.type(screen.getByLabelText(/^email$/i), "sean@example.com");
     await user.type(screen.getByLabelText(/^password$/i), "wrong-password");

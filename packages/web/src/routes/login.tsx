@@ -1,7 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { AuthShell } from "../components/auth-shell";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -33,7 +33,7 @@ export function Login() {
     setSubmitting(true);
     try {
       const result = await authClient.signIn.email({ email, password });
-      const r = result as {
+      const r = result as unknown as {
         error?: { error_code?: string; message?: string };
         data?: { twoFactorRedirect?: boolean };
       };
@@ -46,10 +46,10 @@ export function Login() {
         return;
       }
       if (r.data?.twoFactorRedirect) {
-        navigate("/totp/verify", { replace: true });
+        navigate({ to: "/totp/verify", replace: true });
         return;
       }
-      navigate("/meetings", { replace: true });
+      navigate({ to: "/meetings", replace: true });
     } catch (e) {
       setError(`${t("auth.login.errorFallback")}: ${e}`);
       setSubmitting(false);

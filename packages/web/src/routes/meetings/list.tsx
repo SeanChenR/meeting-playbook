@@ -1,36 +1,21 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router";
 import { ProtectedShell } from "../../components/protected-shell";
 import { buttonVariants } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
-import { listMeetings, type Meeting, MeetingApiError } from "../../lib/meetings-api";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
+import { meetingsListQueryOptions, MeetingApiError } from "../../lib/meetings-api";
 
 export function MeetingsList() {
   const { t } = useTranslation();
-  const [meetings, setMeetings] = useState<Meeting[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await listMeetings();
-        if (!cancelled) setMeetings(rows);
-      } catch (e) {
-        if (cancelled) return;
-        if (e instanceof MeetingApiError && e.errorCode) {
-          setError(localizedErrorMessage(e.errorCode, t));
-        } else {
-          setError(t("errors.common.unknown"));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [t]);
+  const query = useQuery(meetingsListQueryOptions());
+  const meetings = query.data ?? null;
+  const error = query.isError
+    ? query.error instanceof MeetingApiError && query.error.errorCode
+      ? localizedErrorMessage(query.error.errorCode, t)
+      : t("errors.common.unknown")
+    : null;
 
   return (
     <ProtectedShell>

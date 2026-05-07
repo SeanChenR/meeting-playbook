@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { renderWithRouter } from "../test/fixtures/router";
 
 let mockSessionData: {
   data: {
@@ -78,21 +78,13 @@ describe("Home route", () => {
     cleanup();
   });
 
-  test("renders Hello, <name> when session is present", () => {
-    render(
-      <MemoryRouter>
-        <Home />
-      </MemoryRouter>,
-    );
+  test("renders Hello, <name> when session is present", async () => {
+    await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
     expect(screen.getByText(/Hello, Sean/)).toBeDefined();
   });
 
   test("renders backend confirmation after /api/me round-trip", async () => {
-    render(
-      <MemoryRouter>
-        <Home />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
     await waitFor(() => {
       expect(screen.getByTestId("backend-confirmation")).toBeDefined();
     });
@@ -100,44 +92,32 @@ describe("Home route", () => {
     expect(fetchCalls).toContain("/api/me");
   });
 
-  test("falls back to email when name is null", () => {
+  test("falls back to email when name is null", async () => {
     mockSessionData = {
       data: { user: { name: null, email: "fallback@example.com", twoFactorEnabled: false } },
       isPending: false,
     };
 
-    render(
-      <MemoryRouter>
-        <Home />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
     expect(screen.getByText(/Hello, fallback@example.com/)).toBeDefined();
   });
 
-  test("shows loading state while session is pending", () => {
+  test("shows loading state while session is pending", async () => {
     mockSessionData = { data: null, isPending: true };
 
-    render(
-      <MemoryRouter>
-        <Home />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
     expect(screen.getByText(/loading/i)).toBeDefined();
   });
 
   describe("avatar in top nav", () => {
-    test("renders fallback initial when user.image is null", () => {
-      render(
-        <MemoryRouter>
-          <Home />
-        </MemoryRouter>,
-      );
+    test("renders fallback initial when user.image is null", async () => {
+      await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
       const avatar = screen.getByTestId("user-avatar");
       expect(avatar.textContent).toBe("S");
       expect(avatar.querySelector("img")).toBeNull();
     });
 
-    test("renders <img> when user.image is set", () => {
+    test("renders <img> when user.image is set", async () => {
       mockSessionData = {
         data: {
           user: {
@@ -150,11 +130,7 @@ describe("Home route", () => {
         isPending: false,
       };
 
-      render(
-        <MemoryRouter>
-          <Home />
-        </MemoryRouter>,
-      );
+      await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
       const avatar = screen.getByTestId("user-avatar");
       const img = avatar.querySelector("img");
       expect(img).not.toBeNull();
@@ -174,11 +150,7 @@ describe("Home route", () => {
         isPending: false,
       };
 
-      render(
-        <MemoryRouter>
-          <Home />
-        </MemoryRouter>,
-      );
+      await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
 
       const avatar = screen.getByTestId("user-avatar");
       const img = avatar.querySelector("img");
@@ -196,11 +168,7 @@ describe("Home route", () => {
 
   test("renders Logout button and dispatches signOut on click", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <Home />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
 
     const button = screen.getByRole("button", { name: /logout/i });
     await user.click(button);
@@ -215,11 +183,7 @@ describe("Home route", () => {
     });
 
     test("renders Enable two-factor link when twoFactorEnabled is false", async () => {
-      render(
-        <MemoryRouter>
-          <Home />
-        </MemoryRouter>,
-      );
+      await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
       await waitFor(() => {
         expect(screen.getByTestId("enable-totp-link")).toBeDefined();
       });
@@ -233,11 +197,7 @@ describe("Home route", () => {
         isPending: false,
       };
 
-      render(
-        <MemoryRouter>
-          <Home />
-        </MemoryRouter>,
-      );
+      await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
       await waitFor(() => {
         expect(screen.getByTestId("totp-status")).toBeDefined();
       });
@@ -252,11 +212,7 @@ describe("Home route", () => {
     });
 
     test("does NOT render Enable two-factor link", async () => {
-      render(
-        <MemoryRouter>
-          <Home />
-        </MemoryRouter>,
-      );
+      await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
       await waitFor(() => {
         expect(screen.getByTestId("oauth-2fa-notice")).toBeDefined();
       });
@@ -264,11 +220,7 @@ describe("Home route", () => {
     });
 
     test("renders Google security link to myaccount.google.com", async () => {
-      render(
-        <MemoryRouter>
-          <Home />
-        </MemoryRouter>,
-      );
+      await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
       await waitFor(() => {
         expect(screen.getByTestId("google-security-link")).toBeDefined();
       });
@@ -279,11 +231,7 @@ describe("Home route", () => {
     });
 
     test("notice mentions 2FA is managed by Google", async () => {
-      render(
-        <MemoryRouter>
-          <Home />
-        </MemoryRouter>,
-      );
+      await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
       await waitFor(() => {
         expect(screen.getByTestId("oauth-2fa-notice")).toBeDefined();
       });
@@ -294,11 +242,7 @@ describe("Home route", () => {
   test("falls back to OAuth-only treatment when listAccounts returns empty", async () => {
     mockAccountsData = { data: [] };
 
-    render(
-      <MemoryRouter>
-        <Home />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<Home />, { initialEntries: ["/home"], path: "/home" });
 
     await waitFor(() => {
       expect(screen.getByTestId("oauth-2fa-notice")).toBeDefined();

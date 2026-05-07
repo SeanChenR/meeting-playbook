@@ -1,7 +1,7 @@
 import { KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { AuthShell } from "../../components/auth-shell";
 import { Alert } from "../../components/ui/alert";
@@ -62,7 +62,7 @@ export function TotpEnroll() {
         return;
       }
       await authClient.getSession();
-      navigate("/meetings", { replace: true });
+      navigate({ to: "/meetings", replace: true });
     } catch (e) {
       setError(`${t("auth.totp.enroll.codeRejectedFallback")}: ${e}`);
       setSubmitting(false);

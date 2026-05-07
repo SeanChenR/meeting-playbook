@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Routes, Route } from "react-router";
 
 mock.module("../../lib/auth-client", () => ({
   authClient: {
@@ -18,18 +26,31 @@ const originalFetch = globalThis.fetch;
 
 import { NewMeeting } from "./new";
 
-function renderInRouter(initialEntries: string[] = ["/meetings/new"]) {
-  return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route path="/meetings/new" element={<NewMeeting />} />
-        <Route
-          path="/meetings/:id"
-          element={<div data-testid="redirected-detail">on detail</div>}
-        />
-      </Routes>
-    </MemoryRouter>,
+async function renderInRouter() {
+  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  const newRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/meetings/new",
+    component: () => <NewMeeting />,
+  });
+  const detailRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/meetings/$id",
+    component: () => <div data-testid="redirected-detail">on detail</div>,
+  });
+  const routeTree = rootRoute.addChildren([newRoute, detailRoute]);
+  const history = createMemoryHistory({ initialEntries: ["/meetings/new"] });
+  const router = createRouter({ routeTree, history });
+  await router.load();
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
   );
+  return { router };
 }
 
 describe("NewMeeting form", () => {
@@ -51,16 +72,13 @@ describe("NewMeeting form", () => {
       return new Response("[]", { status: 201 });
     };
 
-    renderInRouter();
-
-    // Submit immediately without filling anything.
+    await renderInRouter();
     await user.click(screen.getByRole("button", { name: /建立$/ }));
 
-    // The browser's required attribute should prevent the POST.
     expect(postCalled).toBe(false);
   });
 
-  test("submitting valid fields posts and redirects to /meetings/:id", async () => {
+  test("submitting valid fields posts and navigates to /meetings/:id", async () => {
     const user = userEvent.setup();
     let posted: { url: string; body: unknown } | null = null;
 
@@ -87,7 +105,7 @@ describe("NewMeeting form", () => {
       return new Response("[]", { status: 200 });
     };
 
-    renderInRouter();
+    const { router } = await renderInRouter();
 
     await user.type(screen.getByLabelText(/標題/), "Q3");
     await user.type(screen.getByLabelText(/對方顯示名稱/), "林經理");
@@ -95,7 +113,7 @@ describe("NewMeeting form", () => {
     await user.click(screen.getByRole("button", { name: /建立$/ }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("redirected-detail")).toBeDefined();
+      expect(router.state.location.pathname).toBe("/meetings/m_abc");
     });
     expect(posted).not.toBeNull();
     expect(posted!.url).toContain("/api/meetings");
@@ -121,7 +139,7 @@ describe("NewMeeting form", () => {
       return new Response("[]", { status: 200 });
     };
 
-    renderInRouter();
+    await renderInRouter();
 
     await user.type(screen.getByLabelText(/標題/), "x");
     await user.type(screen.getByLabelText(/對方顯示名稱/), "C");
@@ -129,7 +147,6 @@ describe("NewMeeting form", () => {
     await user.click(screen.getByRole("button", { name: /建立$/ }));
 
     await waitFor(() => {
-      // zh-TW: errors.meeting.title.required → "請輸入會議標題"
       expect(screen.getByText("請輸入會議標題")).toBeDefined();
     });
   });

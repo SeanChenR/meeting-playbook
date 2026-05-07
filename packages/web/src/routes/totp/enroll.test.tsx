@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { renderWithRouter } from "../../test/fixtures/router";
 
 const enableMock = mock(async () => ({
   data: {
@@ -32,12 +32,11 @@ describe("TotpEnroll route", () => {
     cleanup();
   });
 
-  test("step 1: renders password prompt before fetching QR", () => {
-    render(
-      <MemoryRouter>
-        <TotpEnroll />
-      </MemoryRouter>,
-    );
+  test("step 1: renders password prompt before fetching QR", async () => {
+    await renderWithRouter(<TotpEnroll />, {
+      initialEntries: ["/totp/enroll"],
+      path: "/totp/enroll",
+    });
     expect(screen.getByLabelText(/^password$/i)).toBeDefined();
     expect(screen.getByRole("button", { name: /continue/i })).toBeDefined();
     expect(enableMock).not.toHaveBeenCalled();
@@ -46,11 +45,10 @@ describe("TotpEnroll route", () => {
 
   test("submitting password dispatches twoFactor.enable with the entered value", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <TotpEnroll />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<TotpEnroll />, {
+      initialEntries: ["/totp/enroll"],
+      path: "/totp/enroll",
+    });
 
     await user.type(screen.getByLabelText(/^password$/i), "hunter22hunter");
     await user.click(screen.getByRole("button", { name: /continue/i }));
@@ -64,11 +62,10 @@ describe("TotpEnroll route", () => {
 
   test("step 2: renders QR + backup codes after enable resolves", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <TotpEnroll />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<TotpEnroll />, {
+      initialEntries: ["/totp/enroll"],
+      path: "/totp/enroll",
+    });
 
     await user.type(screen.getByLabelText(/^password$/i), "hunter22hunter");
     await user.click(screen.getByRole("button", { name: /continue/i }));
@@ -86,11 +83,10 @@ describe("TotpEnroll route", () => {
 
   test("step 3: submitting the 6-digit code dispatches verifyTotp", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <TotpEnroll />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<TotpEnroll />, {
+      initialEntries: ["/totp/enroll"],
+      path: "/totp/enroll",
+    });
 
     await user.type(screen.getByLabelText(/^password$/i), "hunter22hunter");
     await user.click(screen.getByRole("button", { name: /continue/i }));
@@ -116,11 +112,10 @@ describe("TotpEnroll route", () => {
     }));
 
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <TotpEnroll />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<TotpEnroll />, {
+      initialEntries: ["/totp/enroll"],
+      path: "/totp/enroll",
+    });
 
     await user.type(screen.getByLabelText(/^password$/i), "wrong-password");
     await user.click(screen.getByRole("button", { name: /continue/i }));

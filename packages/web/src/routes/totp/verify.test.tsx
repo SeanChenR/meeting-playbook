@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { renderWithRouter } from "../../test/fixtures/router";
 
 const verifyTotpMock = mock(async () => ({ data: { verified: true } }));
 
@@ -23,12 +23,11 @@ describe("TotpVerify route", () => {
     cleanup();
   });
 
-  test("renders the 6-digit input and verify button", () => {
-    render(
-      <MemoryRouter>
-        <TotpVerify />
-      </MemoryRouter>,
-    );
+  test("renders the 6-digit input and verify button", async () => {
+    await renderWithRouter(<TotpVerify />, {
+      initialEntries: ["/totp/verify"],
+      path: "/totp/verify",
+    });
 
     expect(screen.getByLabelText(/驗證碼/)).toBeDefined();
     expect(screen.getByRole("button", { name: /verify/i })).toBeDefined();
@@ -36,11 +35,10 @@ describe("TotpVerify route", () => {
 
   test("submitting the form dispatches verifyTotp with the entered code", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <TotpVerify />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<TotpVerify />, {
+      initialEntries: ["/totp/verify"],
+      path: "/totp/verify",
+    });
 
     await user.type(screen.getByLabelText(/驗證碼/), "654321");
     await user.click(screen.getByRole("button", { name: /verify/i }));

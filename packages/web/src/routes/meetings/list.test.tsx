@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { cleanup, screen, waitFor } from "@testing-library/react";
+import { renderWithRouter } from "../../test/fixtures/router";
 
 mock.module("../../lib/auth-client", () => ({
   authClient: {
@@ -35,11 +35,7 @@ describe("MeetingsList route", () => {
         headers: { "content-type": "application/json" },
       });
 
-    render(
-      <MemoryRouter>
-        <MeetingsList />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<MeetingsList />, { initialEntries: ["/meetings"], path: "/meetings" });
 
     // i18n key meetings.list.empty (zh-TW)
     await waitFor(() => {
@@ -81,11 +77,7 @@ describe("MeetingsList route", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       );
 
-    render(
-      <MemoryRouter>
-        <MeetingsList />
-      </MemoryRouter>,
-    );
+    await renderWithRouter(<MeetingsList />, { initialEntries: ["/meetings"], path: "/meetings" });
 
     // Wait for both titles to appear, then check DOM ordering matches list order.
     await waitFor(() => {

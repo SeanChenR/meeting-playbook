@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
 
 mock.module("../../lib/auth-client", () => ({
   authClient: {
@@ -32,15 +40,31 @@ const SAMPLE_MEETING = {
   ended_at: null,
 };
 
-function renderInRouter(initialEntry = "/meetings/m_abc") {
-  return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <Routes>
-        <Route path="/meetings/:id" element={<MeetingDetail />} />
-        <Route path="/meetings" element={<div data-testid="redirected-list">on list</div>} />
-      </Routes>
-    </MemoryRouter>,
+async function renderInRouter(initialEntry = "/meetings/m_abc") {
+  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  const detailRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/meetings/$id",
+    component: () => <MeetingDetail />,
+  });
+  const listRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/meetings",
+    component: () => <div data-testid="redirected-list">on list</div>,
+  });
+  const routeTree = rootRoute.addChildren([detailRoute, listRoute]);
+  const history = createMemoryHistory({ initialEntries: [initialEntry] });
+  const router = createRouter({ routeTree, history });
+  await router.load();
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
   );
+  return { router };
 }
 
 describe("MeetingDetail route", () => {
@@ -61,7 +85,7 @@ describe("MeetingDetail route", () => {
         headers: { "content-type": "application/json" },
       });
 
-    renderInRouter();
+    await renderInRouter();
 
     await waitFor(() => {
       expect(screen.getByText("Q3 review")).toBeDefined();
@@ -86,7 +110,7 @@ describe("MeetingDetail route", () => {
       });
     };
 
-    renderInRouter();
+    await renderInRouter();
 
     await waitFor(() => {
       expect(screen.getByText("Q3 review")).toBeDefined();
@@ -118,7 +142,7 @@ describe("MeetingDetail route", () => {
       });
     };
 
-    renderInRouter();
+    await renderInRouter();
 
     await waitFor(() => {
       expect(screen.getByText("Q3 review")).toBeDefined();

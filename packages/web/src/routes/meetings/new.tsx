@@ -1,6 +1,6 @@
+import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
 import { ProtectedShell } from "../../components/protected-shell";
 import { Alert } from "../../components/ui/alert";
 import { Button, buttonVariants } from "../../components/ui/button";
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
-import { createMeeting, MeetingApiError } from "../../lib/meetings-api";
+import { MeetingApiError, useCreateMeetingMutation } from "../../lib/meetings-api";
 
 export function NewMeeting() {
   const { t } = useTranslation();
@@ -16,27 +16,30 @@ export function NewMeeting() {
   const [title, setTitle] = useState("");
   const [counterparty, setCounterparty] = useState("");
   const [me, setMe] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mutation = useCreateMeetingMutation();
+  const submitting = mutation.isPending;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    setSubmitting(true);
     try {
-      const meeting = await createMeeting({
+      const meeting = await mutation.mutateAsync({
         title,
         counterparty_display_name: counterparty,
         me_display_name: me,
       });
-      navigate(`/meetings/${meeting.id}`, { replace: true });
+      navigate({
+        to: "/meetings/$id",
+        params: { id: meeting.id },
+        replace: true,
+      });
     } catch (err) {
       if (err instanceof MeetingApiError && err.errorCode) {
         setError(localizedErrorMessage(err.errorCode, t));
       } else {
         setError(t("meetings.new.errorFallback"));
       }
-      setSubmitting(false);
     }
   }
 

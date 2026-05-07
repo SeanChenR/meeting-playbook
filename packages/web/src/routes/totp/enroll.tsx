@@ -62,7 +62,7 @@ export function TotpEnroll() {
         return;
       }
       await authClient.getSession();
-      navigate("/home", { replace: true });
+      navigate("/meetings", { replace: true });
     } catch (e) {
       setError(`${t("auth.totp.enroll.codeRejectedFallback")}: ${e}`);
       setSubmitting(false);

@@ -36,7 +36,7 @@ export function TotpVerify() {
         return;
       }
       await authClient.getSession();
-      navigate("/home", { replace: true });
+      navigate("/meetings", { replace: true });
     } catch (e) {
       setError(`${t("auth.totp.verify.errorFallback")}: ${e}`);
       setSubmitting(false);

@@ -42,7 +42,7 @@ export function Signup() {
         setSubmitting(false);
         return;
       }
-      navigate("/home", { replace: true });
+      navigate("/meetings", { replace: true });
     } catch (e) {
       setError(`${t("auth.signup.errorFallback")}: ${e}`);
       setSubmitting(false);

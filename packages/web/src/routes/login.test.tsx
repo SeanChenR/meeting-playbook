@@ -46,7 +46,7 @@ describe("Login route", () => {
     expect(signInSocial).toHaveBeenCalledTimes(1);
     const arg = signInSocial.mock.calls[0]?.[0] as { provider: string; callbackURL: string };
     expect(arg.provider).toBe("google");
-    expect(arg.callbackURL).toBe("/home");
+    expect(arg.callbackURL).toBe("/meetings");
   });
 
   test("renders email + password form fields", () => {

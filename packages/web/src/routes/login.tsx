@@ -23,7 +23,7 @@ export function Login() {
   const handleGoogleSignIn = async () => {
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/home",
+      callbackURL: "/meetings",
     });
   };
 
@@ -49,7 +49,7 @@ export function Login() {
         navigate("/totp/verify", { replace: true });
         return;
       }
-      navigate("/home", { replace: true });
+      navigate("/meetings", { replace: true });
     } catch (e) {
       setError(`${t("auth.login.errorFallback")}: ${e}`);
       setSubmitting(false);

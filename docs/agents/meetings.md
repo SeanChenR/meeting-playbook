@@ -76,4 +76,34 @@ Out of scope (deferred to later slices):
 - Status transitions (Slice 6)
 - Calendar event linking (Slice 5)
 - Pagination / search / batch ops
-- Any child entities (playbook, transcript, audio, advisor)
+- Any child entities other than the playbook (transcript, audio, advisor)
+
+## Playbook (Slice 4)
+
+`playbook` is a child entity FK'd to `meeting.id` ON DELETE CASCADE with a
+`UNIQUE(meeting_id)` constraint — exactly one playbook per meeting.
+
+Two endpoints, both gated by meeting ownership through
+`MeetingRepository.get_for_user`:
+
+- `GET /api/meetings/{id}/playbook` — auto-creates an empty row on first
+  read so the editor always has an editable surface; subsequent reads
+  return the same `id`. Cross-user reads return 404 + `meeting.not_found`
+  (no existence leak).
+- `PUT /api/meetings/{id}/playbook` — full upsert of the seven content
+  fields (`free_form_markdown`, `objective`, `counterparty_profile`,
+  `anticipated_topics`, `anticipated_objections`, `talking_points`,
+  `red_lines`). Missing fields default to the empty string. `updated_at`
+  advances on every write.
+
+`PlaybookRepository` is the **single access path** for the table; future
+slices (LLM generation in Slice 5, advisor in Slice 6, in-meeting display
+in Slice 8) MUST go through this repo and MUST NOT issue raw SQL against
+the `playbook` table.
+
+The frontend `PlaybookPane` component is mounted on the meeting detail
+page. It renders a view-mode toggle (free-form ↔ structured), preserves
+unsaved edits in both views during a toggle, and dispatches one PUT
+covering all seven fields when the save button is clicked. The
+`useUpsertPlaybookMutation(meetingId)` hook invalidates the
+`["playbook", meetingId]` cache on success.

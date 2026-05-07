@@ -35,8 +35,50 @@ describe("locale files mirror each other", () => {
     expect(zhPaths).toEqual(enPaths);
   });
 
-  test("both files declare exactly the three required top-level groups", () => {
-    expect(Object.keys(zhTW as AnyJson).sort()).toEqual(["auth", "common", "errors"]);
-    expect(Object.keys(en as AnyJson).sort()).toEqual(["auth", "common", "errors"]);
+  test("meetings.* namespace covers list / new / detail / status in both files", () => {
+    const zhPaths = new Set(collectPaths(zhTW));
+    const enPaths = new Set(collectPaths(en));
+    const requiredKeys = [
+      "meetings.list.heading",
+      "meetings.list.newButton",
+      "meetings.list.empty",
+      "meetings.new.heading",
+      "meetings.new.titleLabel",
+      "meetings.new.counterpartyLabel",
+      "meetings.new.meLabel",
+      "meetings.new.submit",
+      "meetings.new.cancel",
+      "meetings.new.errorFallback",
+      "meetings.detail.heading",
+      "meetings.detail.back",
+      "meetings.detail.deleteButton",
+      "meetings.detail.deleteDialogTitle",
+      "meetings.detail.deleteConfirm",
+      "meetings.detail.deleteCancel",
+      "meetings.status.scheduled",
+      "meetings.status.in_progress",
+      "meetings.status.completed",
+      "errors.meeting.not_found",
+      "errors.meeting.title.required",
+      "errors.meeting.counterparty_display_name.required",
+      "errors.meeting.me_display_name.required",
+    ];
+    for (const k of requiredKeys) {
+      expect(zhPaths.has(k)).toBe(true);
+      expect(enPaths.has(k)).toBe(true);
+    }
+  });
+
+  test("both files declare the required top-level groups (common/auth/errors plus domain groups)", () => {
+    const required = new Set(["auth", "common", "errors"]);
+    const zhKeys = new Set(Object.keys(zhTW as AnyJson));
+    const enKeys = new Set(Object.keys(en as AnyJson));
+    for (const k of required) {
+      expect(zhKeys.has(k)).toBe(true);
+      expect(enKeys.has(k)).toBe(true);
+    }
+    // Top-level groups must mirror — domain groups (e.g. "meetings") added to
+    // one file MUST be added to the other; mirroring is enforced for safety.
+    expect(Object.keys(zhTW as AnyJson).sort()).toEqual(Object.keys(en as AnyJson).sort());
   });
 });

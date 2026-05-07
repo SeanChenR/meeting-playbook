@@ -100,6 +100,46 @@
       "sliceFooter": "This is Slice 1 — meeting management, playbook, and live transcription land in later slices."
     }
   },
+  "meetings": {
+    "list": {
+      "heading": "My Meetings",
+      "newButton": "+ New meeting",
+      "empty": "No meetings yet — tap “+ New meeting” to create the first one"
+    },
+    "new": {
+      "heading": "New meeting",
+      "titleLabel": "Title",
+      "titlePlaceholder": "e.g., Q3 Performance Review",
+      "counterpartyLabel": "Counterparty display name",
+      "counterpartyPlaceholder": "e.g., Manager Lin",
+      "meLabel": "Me display name",
+      "mePlaceholder": "e.g., Sean",
+      "submit": "Create",
+      "submitting": "Creating…",
+      "cancel": "Cancel",
+      "errorFallback": "Create failed"
+    },
+    "detail": {
+      "heading": "Meeting detail",
+      "back": "← Back to list",
+      "counterpartyLabel": "Counterparty",
+      "meLabel": "Me",
+      "statusLabel": "Status",
+      "asrProviderLabel": "ASR provider",
+      "createdAtLabel": "Created at",
+      "deleteButton": "Delete meeting",
+      "deleteDialogTitle": "Delete this meeting?",
+      "deleteDialogDescription": "This cannot be undone. The associated transcripts, playbook, and recordings will also be removed.",
+      "deleteConfirm": "Delete",
+      "deleteCancel": "Cancel",
+      "errorFallback": "Action failed"
+    },
+    "status": {
+      "scheduled": "Scheduled",
+      "in_progress": "In progress",
+      "completed": "Completed"
+    }
+  },
   "errors": {
     "common": {
       "unknown": "An unknown error occurred"
@@ -108,6 +148,18 @@
       "gateway_bypass": "Please sign in through the gateway",
       "unauthenticated": "Please sign in first",
       "invalid_credentials": "Email or password is incorrect"
+    },
+    "meeting": {
+      "not_found": "Meeting not found",
+      "title": {
+        "required": "Title is required"
+      },
+      "counterparty_display_name": {
+        "required": "Counterparty display name is required"
+      },
+      "me_display_name": {
+        "required": "Me display name is required"
+      }
     }
   }
 }

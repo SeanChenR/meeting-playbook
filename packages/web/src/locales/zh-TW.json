@@ -100,6 +100,46 @@
       "sliceFooter": "這是 Slice 1 — 後續 slice 加入會議管理、playbook、即時轉錄等功能。"
     }
   },
+  "meetings": {
+    "list": {
+      "heading": "我的 Meeting",
+      "newButton": "+ 新會議",
+      "empty": "尚無 meeting，按下「+ 新會議」建立第一筆"
+    },
+    "new": {
+      "heading": "新增 Meeting",
+      "titleLabel": "標題",
+      "titlePlaceholder": "例：Q3 績效檢討",
+      "counterpartyLabel": "對方顯示名稱",
+      "counterpartyPlaceholder": "例：林經理",
+      "meLabel": "我方顯示名稱",
+      "mePlaceholder": "例：Sean",
+      "submit": "建立",
+      "submitting": "建立中…",
+      "cancel": "取消",
+      "errorFallback": "建立失敗"
+    },
+    "detail": {
+      "heading": "Meeting 詳細",
+      "back": "← 返回列表",
+      "counterpartyLabel": "對方",
+      "meLabel": "我方",
+      "statusLabel": "狀態",
+      "asrProviderLabel": "ASR 引擎",
+      "createdAtLabel": "建立時間",
+      "deleteButton": "刪除 Meeting",
+      "deleteDialogTitle": "確定要刪除這個 Meeting？",
+      "deleteDialogDescription": "刪除後無法復原。所屬的逐字稿、playbook 與錄音也會一併移除。",
+      "deleteConfirm": "確定刪除",
+      "deleteCancel": "取消",
+      "errorFallback": "操作失敗"
+    },
+    "status": {
+      "scheduled": "已排程",
+      "in_progress": "進行中",
+      "completed": "已結束"
+    }
+  },
   "errors": {
     "common": {
       "unknown": "發生未知錯誤"
@@ -108,6 +148,18 @@
       "gateway_bypass": "請從正確的入口登入",
       "unauthenticated": "請先登入",
       "invalid_credentials": "帳號或密碼錯誤"
+    },
+    "meeting": {
+      "not_found": "找不到此 Meeting",
+      "title": {
+        "required": "請輸入會議標題"
+      },
+      "counterparty_display_name": {
+        "required": "請輸入對方顯示名稱"
+      },
+      "me_display_name": {
+        "required": "請輸入我方顯示名稱"
+      }
     }
   }
 }

@@ -1,0 +1,9 @@
+{
+  "id": "evt_rich_q3_review",
+  "title": "Q3 績效檢討 — Acme Corp",
+  "start": "2026-05-09T14:00:00+08:00",
+  "end": "2026-05-09T15:00:00+08:00",
+  "attendees": ["林經理 <lin@acme.com>", "Sean <sean@example.com>"],
+  "description": "本季度檢討重點：\n- 合約進度（預計 $250k ARR）\n- 對方 budget freeze 風險\n- 競爭對手 X 的報價壓力\n- 整合期程",
+  "organizer": "Sean"
+}

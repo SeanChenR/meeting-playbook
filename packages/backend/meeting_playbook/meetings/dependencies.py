@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from functools import lru_cache
 from typing import Annotated
+from urllib.parse import unquote
 
 from fastapi import Header, HTTPException, status
 from sqlalchemy.ext.asyncio import (
@@ -59,3 +60,26 @@ def get_user_id_dependency(
             },
         )
     return x_user_id
+
+
+def get_user_name_dependency(
+    x_user_name: Annotated[str | None, Header(alias="X-User-Name")] = None,
+) -> str:
+    """Return the gateway-injected user name (empty string when absent / blank).
+
+    Slice 5 ingest: the gateway URL-encodes this header because HTTP headers
+    reject non-ISO-8859-1 (user.name is often Chinese / Japanese / emoji).
+    Decode here so endpoints see the original string.
+    """
+    return unquote(x_user_name) if x_user_name else ""
+
+
+def get_user_email_dependency(
+    x_user_email: Annotated[str | None, Header(alias="X-User-Email")] = None,
+) -> str:
+    """Return the gateway-injected user email (empty string when absent / blank).
+
+    Decoded for symmetry with X-User-Name; emails are normally ASCII so the
+    decode is a no-op, but staying consistent prevents subtle drift bugs.
+    """
+    return unquote(x_user_email) if x_user_email else ""

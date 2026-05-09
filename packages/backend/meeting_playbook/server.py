@@ -21,6 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from meeting_playbook.calendar.router import router as calendar_router
 from meeting_playbook.meetings.router import router as meetings_router
 from meeting_playbook.playbooks.router import router as playbooks_router
 
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
 
     app.include_router(meetings_router)
     app.include_router(playbooks_router)
+    app.include_router(calendar_router)
     return app
 
 

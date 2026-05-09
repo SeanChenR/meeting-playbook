@@ -1,0 +1,15 @@
+{
+  "id": "evt_long_strategy",
+  "title": "策略方向 — 全公司 OKR review + Q4 規劃 + 對手競品 deep dive",
+  "start": "2026-05-09T09:00:00+08:00",
+  "end": "2026-05-09T12:00:00+08:00",
+  "attendees": [
+    "林經理 <lin@acme.com>",
+    "王董 <wang@acme.com>",
+    "Joyce <joyce@acme.com>",
+    "Mike <mike@acme.com>",
+    "Sean <sean@example.com>"
+  ],
+  "description": "## Agenda\n\n1. Q3 OKR retrospective — 哪些 KR 達成、哪些 missed，原因\n2. Q4 規劃方向 — 三個策略選項（Plan A: 北美擴張、Plan B: 既有客戶深耕、Plan C: 新產品線）\n3. 競品 deep dive — Competitor X 最近發表的 feature 分析、價格調整影響、客戶可能的 churn 風險\n4. 整合期程討論 — 與既有客戶 Acme Corp 的 SLA 交付\n5. 紅線討論 — pricing 不得低於 30%、SLA 不得低於 99.5% uptime\n6. AOB\n\n## 預讀資料\n- Q3 OKR scorecard（共享雲端硬碟連結）\n- Competitor X 比較矩陣\n- Acme Corp 整合進度週報\n\n## 預期決策\n- Q4 策略二選一（A vs B；C 視情況保留）\n- Competitor X 對應策略（pricing / feature / sales motion）\n- 是否要動現有 SLA",
+  "organizer": "Sean"
+}

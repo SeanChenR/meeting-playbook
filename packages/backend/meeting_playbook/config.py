@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     vertex_ai_project: str = ""
     vertex_ai_location: str = "us-central1"
 
+    # Slice 5 — Python ↔ Bun gateway internal endpoint
+    backend_internal_auth_secret: str = ""
+    backend_internal_auth_url: str = "http://localhost:3001"
+
     # Backend service URL (gateway forwards /api/* here)
     backend_url: str = "http://localhost:8000"
 

@@ -1,0 +1,9 @@
+{
+  "id": "evt_zh_only",
+  "title": "與林經理的續約討論",
+  "start": "2026-05-09T11:00:00+08:00",
+  "end": "2026-05-09T11:45:00+08:00",
+  "attendees": ["林經理 <lin@acme.com>"],
+  "description": "續約金額談判，可能會碰到合約期程與付款條件議題。",
+  "organizer": "Sean"
+}

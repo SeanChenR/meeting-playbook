@@ -181,3 +181,131 @@ describe("MeetingDetail route", () => {
     expect(screen.getByText("Q3 review")).toBeDefined();
   });
 });
+
+// ─── Slice-06: Start/End Meeting buttons + capture indicator + transcript ─
+
+class _MockSessionWS {
+  static instances: _MockSessionWS[] = [];
+  url: string;
+  readyState = 0;
+  sent: string[] = [];
+  onopen: ((ev: Event) => void) | null = null;
+  onmessage: ((ev: MessageEvent) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
+  onclose: ((ev: CloseEvent) => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+    _MockSessionWS.instances.push(this);
+  }
+  send(data: string): void {
+    this.sent.push(data);
+  }
+  close(): void {
+    this.readyState = 3;
+    this.onclose?.(new CloseEvent("close"));
+  }
+  simulateMessage(payload: object): void {
+    this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(payload) }));
+  }
+}
+
+describe("MeetingDetail slice-06 session UI", () => {
+  beforeEach(() => {
+    fetchHandler = async (url) => {
+      if (url.includes("/playbook")) {
+        return new Response(
+          JSON.stringify({
+            id: "pb_abc",
+            meeting_id: "m_abc",
+            free_form_markdown: "",
+            objective: "",
+            counterparty_profile: "",
+            anticipated_topics: "",
+            anticipated_objections: "",
+            talking_points: "",
+            red_lines: "",
+            created_at: "2026-05-09T10:00:00Z",
+            updated_at: "2026-05-09T10:00:00Z",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+      fetchHandler(typeof input === "string" ? input : input.toString(), init)) as typeof fetch;
+    // @ts-expect-error: substitute WebSocket
+    globalThis.WebSocket = _MockSessionWS;
+    _MockSessionWS.instances = [];
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    cleanup();
+  });
+
+  test("clicking Start Meeting opens WS, capture indicator becomes active, transcript renders", async () => {
+    const user = userEvent.setup();
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^開始會議$/ }));
+    expect(_MockSessionWS.instances).toHaveLength(1);
+
+    // Server says meeting started.
+    const ws = _MockSessionWS.instances[0]!;
+    await waitFor(() => {
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_abc" });
+      expect(screen.getByTestId("capture-indicator").dataset.state).toBe("active");
+    });
+
+    // Transcript chunk arrives → renders in TranscriptPane.
+    ws.simulateMessage({
+      type: "transcript_chunk",
+      meeting_id: "m_abc",
+      speaker: "me",
+      text: "what a fine morning",
+      started_at: "2026-05-09T10:00:00Z",
+      ended_at: "2026-05-09T10:00:10Z",
+      asr_provider_used: "whisper",
+      confidence: 0.9,
+    });
+    await waitFor(() => {
+      expect(screen.getByText("what a fine morning")).toBeDefined();
+    });
+  });
+
+  test("clicking End Meeting sends end_meeting frame", async () => {
+    const user = userEvent.setup();
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^開始會議$/ }));
+    const ws = _MockSessionWS.instances[0]!;
+    await waitFor(() => {
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_abc" });
+      expect(screen.getByTestId("capture-indicator").dataset.state).toBe("active");
+    });
+
+    await user.click(screen.getByRole("button", { name: /^結束會議$/ }));
+    const lastSent = ws.sent[ws.sent.length - 1] ?? "";
+    expect(JSON.parse(lastSent)).toEqual({ type: "end_meeting", meeting_id: "m_abc" });
+  });
+
+  test("End button is disabled until session is in_progress", async () => {
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    const endBtn = screen.getByRole("button", { name: /^結束會議$/ }) as HTMLButtonElement;
+    expect(endBtn.disabled).toBe(true);
+  });
+});

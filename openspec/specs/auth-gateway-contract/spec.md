@@ -524,3 +524,89 @@ tests:
   - packages/backend/tests/test_logging.py
   - packages/backend/tests/test_api_me.py
 -->
+
+---
+### Requirement: Gateway authenticates and proxies WebSocket upgrades with identity headers preserved
+
+The gateway SHALL handle HTTP requests carrying `Upgrade: websocket` against `/api/*` paths by performing the same authentication check used for non-WebSocket requests BEFORE allowing the upgrade to complete. Upon successful auth, the gateway SHALL forward the upgraded request to the FastAPI backend WITH the `X-User-Id`, `X-User-Name`, and `X-User-Email` headers set from the active session — overwriting any client-supplied values for those headers. Public API paths (`/api/health`) MUST NOT be upgradeable; the gateway SHALL reject WebSocket upgrades on public paths.
+
+The upstream connection's lifecycle SHALL mirror the downstream: when the browser closes the WebSocket, the gateway SHALL close its upstream connection to FastAPI; when FastAPI closes upstream, the gateway SHALL close downstream. Half-open connections SHALL NOT linger.
+
+#### Scenario: Authenticated WebSocket upgrade carries X-User-Id and friends
+
+- **GIVEN** an authenticated user with session `usr_abc`, name `Sean`, email `sean@example.com`
+- **WHEN** the user opens a WebSocket to `/api/meetings/m_abc/session` through the gateway
+- **THEN** the upgrade request reaching the FastAPI backend SHALL carry `X-User-Id: usr_abc`, `X-User-Name: Sean` (URL-encoded), and `X-User-Email: sean@example.com` (URL-encoded), and any client-supplied values for those headers MUST have been overwritten
+
+#### Scenario: Unauthenticated WebSocket upgrade is rejected
+
+- **WHEN** an unauthenticated client (no Better Auth session cookie) attempts to upgrade a WebSocket to `/api/meetings/m_abc/session`
+- **THEN** the gateway SHALL reject the upgrade with HTTP 401 and the standard error envelope; the upstream FastAPI backend MUST NOT receive the upgrade attempt
+
+#### Scenario: Downstream close propagates to upstream
+
+- **GIVEN** an active proxied WebSocket connection
+- **WHEN** the browser-side WebSocket closes
+- **THEN** the gateway SHALL close the upstream connection to FastAPI within a bounded delay; the upstream connection MUST NOT remain open longer than 5 seconds after the downstream close
+
+<!-- @trace
+source: slice-06-mic-transcript-session
+updated: 2026-05-10
+code:
+  - packages/backend/meeting_playbook/sessions/service.py
+  - packages/backend/meeting_playbook/sessions/repository.py
+  - docs/agents/audio.md
+  - packages/web/src/hooks/use-meeting-session.ts
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/backend/uv.lock
+  - packages/backend/meeting_playbook/asr/base.py
+  - packages/web/src/components/transcript-pane.tsx
+  - docs/agents/sessions.md
+  - packages/backend/meeting_playbook/sessions/messages.py
+  - packages/web/src/lib/session-ws.ts
+  - packages/backend/meeting_playbook/asr/whisper_provider.py
+  - packages/backend/meeting_playbook/audio/__init__.py
+  - docs/agents/asr.md
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/backend/alembic/versions/0003_create_session_tables.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/locales/zh-TW.json
+  - .env.example
+  - packages/backend/pyproject.toml
+  - packages/backend/meeting_playbook/asr/__init__.py
+  - packages/auth/src/server.ts
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/sessions/dependencies.py
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/backend/meeting_playbook/sessions/__init__.py
+  - packages/backend/meeting_playbook/config.py
+  - packages/web/src/components/capture-indicator.tsx
+  - packages/web/src/lib/transcripts-api.ts
+tests:
+  - packages/backend/tests/asr/test_whisper_provider.py
+  - packages/web/src/locales/locales.test.ts
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/components/transcript-pane.test.tsx
+  - packages/auth/src/__tests__/gateway-websocket.test.ts
+  - packages/backend/tests/audio/__init__.py
+  - packages/backend/tests/asr/__init__.py
+  - packages/web/src/hooks/use-meeting-session.test.tsx
+  - packages/web/src/components/capture-indicator.test.tsx
+  - packages/backend/tests/audio/test_capture_protocol.py
+  - packages/backend/tests/sessions/test_service.py
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/backend/tests/sessions/test_messages.py
+  - packages/backend/tests/sessions/__init__.py
+  - packages/web/src/lib/session-ws.test.ts
+  - packages/backend/tests/meetings/test_transition_status.py
+  - packages/backend/tests/asr/fixtures/short_speech_zh.wav
+  - packages/backend/tests/test_alembic_session_tables.py
+  - packages/backend/tests/asr/test_base.py
+  - packages/backend/tests/conftest.py
+  - packages/backend/tests/sessions/test_router.py
+  - packages/backend/tests/audio/test_capture_integration.py
+  - packages/backend/tests/asr/fixtures/short_speech_en.wav
+  - packages/backend/tests/sessions/test_repository.py
+-->

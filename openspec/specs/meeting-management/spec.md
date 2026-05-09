@@ -503,3 +503,98 @@ tests:
   - packages/auth/src/__tests__/error-envelope.test.ts
   - packages/backend/tests/meetings/__init__.py
 -->
+
+---
+### Requirement: Meeting status transitions are atomic and only allowed in the forward direction
+
+The repository SHALL provide `MeetingRepository.transition_status(meeting_id, expected_from, target)` as the SINGLE write path for the meeting `status` column. The transition SHALL succeed atomically (single SQL `UPDATE ... WHERE status = :expected_from RETURNING id`) so two concurrent attempts cannot both transition the same row. The only allowed transitions are:
+
+- `scheduled → in_progress` (when a session starts)
+- `in_progress → completed` (when a session ends)
+
+Any other combination (backwards, skipping a state, repeating the current state) MUST raise `MeetingStatusConflict` carrying the requested transition and the actual current status. Direct `UPDATE meeting SET status = ...` SQL outside `transition_status` is forbidden in all production code paths.
+
+#### Scenario: Allowed transition succeeds atomically
+
+- **GIVEN** meeting `m_abc` has `status = "scheduled"`
+- **WHEN** `MeetingRepository.transition_status("m_abc", expected_from="scheduled", target="in_progress")` is invoked
+- **THEN** the row's status SHALL become `"in_progress"`, `updated_at` SHALL advance, and the call SHALL return successfully
+
+#### Scenario: Backwards transition raises MeetingStatusConflict
+
+- **GIVEN** meeting `m_abc` has `status = "completed"`
+- **WHEN** `MeetingRepository.transition_status("m_abc", expected_from="in_progress", target="completed")` is invoked
+- **THEN** the call SHALL raise `MeetingStatusConflict`, the row's status SHALL remain `"completed"`, and `updated_at` MUST NOT change
+
+#### Scenario: Concurrent transition attempts are mutually exclusive
+
+- **GIVEN** meeting `m_abc` has `status = "scheduled"` and two requests both attempt `scheduled → in_progress`
+- **WHEN** both requests execute concurrently
+- **THEN** exactly one SHALL succeed and exactly one SHALL raise `MeetingStatusConflict` (the second request observes status as already `in_progress`)
+
+#### Scenario: Direct UPDATE bypassing transition_status is treated as a contract violation
+
+- **WHEN** the meeting-domain source code is reviewed
+- **THEN** there MUST be no `UPDATE meeting SET status` SQL anywhere outside `MeetingRepository.transition_status`; greppable enforcement is acceptable
+
+<!-- @trace
+source: slice-06-mic-transcript-session
+updated: 2026-05-10
+code:
+  - packages/backend/meeting_playbook/sessions/service.py
+  - packages/backend/meeting_playbook/sessions/repository.py
+  - docs/agents/audio.md
+  - packages/web/src/hooks/use-meeting-session.ts
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/backend/uv.lock
+  - packages/backend/meeting_playbook/asr/base.py
+  - packages/web/src/components/transcript-pane.tsx
+  - docs/agents/sessions.md
+  - packages/backend/meeting_playbook/sessions/messages.py
+  - packages/web/src/lib/session-ws.ts
+  - packages/backend/meeting_playbook/asr/whisper_provider.py
+  - packages/backend/meeting_playbook/audio/__init__.py
+  - docs/agents/asr.md
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/backend/alembic/versions/0003_create_session_tables.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/locales/zh-TW.json
+  - .env.example
+  - packages/backend/pyproject.toml
+  - packages/backend/meeting_playbook/asr/__init__.py
+  - packages/auth/src/server.ts
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/sessions/dependencies.py
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/backend/meeting_playbook/sessions/__init__.py
+  - packages/backend/meeting_playbook/config.py
+  - packages/web/src/components/capture-indicator.tsx
+  - packages/web/src/lib/transcripts-api.ts
+tests:
+  - packages/backend/tests/asr/test_whisper_provider.py
+  - packages/web/src/locales/locales.test.ts
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/components/transcript-pane.test.tsx
+  - packages/auth/src/__tests__/gateway-websocket.test.ts
+  - packages/backend/tests/audio/__init__.py
+  - packages/backend/tests/asr/__init__.py
+  - packages/web/src/hooks/use-meeting-session.test.tsx
+  - packages/web/src/components/capture-indicator.test.tsx
+  - packages/backend/tests/audio/test_capture_protocol.py
+  - packages/backend/tests/sessions/test_service.py
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/backend/tests/sessions/test_messages.py
+  - packages/backend/tests/sessions/__init__.py
+  - packages/web/src/lib/session-ws.test.ts
+  - packages/backend/tests/meetings/test_transition_status.py
+  - packages/backend/tests/asr/fixtures/short_speech_zh.wav
+  - packages/backend/tests/test_alembic_session_tables.py
+  - packages/backend/tests/asr/test_base.py
+  - packages/backend/tests/conftest.py
+  - packages/backend/tests/sessions/test_router.py
+  - packages/backend/tests/audio/test_capture_integration.py
+  - packages/backend/tests/asr/fixtures/short_speech_en.wav
+  - packages/backend/tests/sessions/test_repository.py
+-->

@@ -16,12 +16,22 @@
  *     cross-port cookie problem during OAuth callback redirects.
  */
 
-type SessionLike = { user: { id: string } } | null;
+type SessionLike = { user: { id: string; name?: string; email?: string } } | null;
+
+type AccountListItem = {
+  providerId: string;
+  scopes?: string[];
+};
 
 type AuthLike = {
   handler: (req: Request) => Promise<Response> | Response;
   api: {
     getSession: (opts: { headers: Headers }) => Promise<SessionLike> | SessionLike;
+    linkSocialAccount?: (opts: {
+      body: { provider: string; scopes: string[]; callbackURL?: string };
+      headers: Headers;
+    }) => Promise<{ url?: string; redirect?: boolean } | Response>;
+    listUserAccounts?: (opts: { headers: Headers }) => Promise<AccountListItem[]>;
   };
 };
 
@@ -32,10 +42,17 @@ export type GatewayDeps = {
   viteUrl?: string;
   /** Inject for tests; defaults to globalThis.fetch. */
   fetch?: typeof fetch;
+  /** Optional internal handler for /__internal__/* paths (Python ↔ gateway). */
+  internalHandler?: (req: Request) => Promise<Response>;
 };
 
 const AUTH_PREFIX = "/api/auth/";
 const API_PREFIX = "/api/";
+const INTERNAL_PREFIX = "/__internal__/";
+
+const CALENDAR_LINK_PATH = "/api/auth/calendar/link";
+const CALENDAR_STATUS_PATH = "/api/auth/calendar/status";
+const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly";
 
 /** Paths under /api/* that the gateway forwards without an auth check. */
 const PUBLIC_API_PATHS = new Set<string>(["/api/health"]);
@@ -103,10 +120,91 @@ export function createGatewayHandler(deps: GatewayDeps) {
     }
   };
 
+  async function calendarLink(req: Request): Promise<Response> {
+    const session = await deps.auth.api.getSession({ headers: req.headers });
+    if (!session) return unauthorized();
+
+    const linkSocialAccount = deps.auth.api.linkSocialAccount;
+    if (!linkSocialAccount) {
+      return errorEnvelope(
+        500,
+        "common.internal_error",
+        "linkSocialAccount API is not available on this Better Auth build.",
+      );
+    }
+
+    let callbackURL: string | undefined;
+    try {
+      const body = (await req.json()) as { callbackURL?: string };
+      callbackURL = body.callbackURL;
+    } catch {
+      // Empty body is fine; callbackURL stays undefined.
+    }
+
+    const result = await linkSocialAccount({
+      body: {
+        provider: "google",
+        scopes: [CALENDAR_SCOPE],
+        ...(callbackURL ? { callbackURL } : {}),
+      },
+      headers: req.headers,
+    });
+
+    if (result instanceof Response) return result;
+
+    return new Response(
+      JSON.stringify({
+        url: result.url ?? null,
+        redirect: result.redirect ?? false,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }
+
+  async function calendarStatus(req: Request): Promise<Response> {
+    const session = await deps.auth.api.getSession({ headers: req.headers });
+    if (!session) return unauthorized();
+
+    const listUserAccounts = deps.auth.api.listUserAccounts;
+    if (!listUserAccounts) {
+      return errorEnvelope(
+        500,
+        "common.internal_error",
+        "listUserAccounts API is not available on this Better Auth build.",
+      );
+    }
+
+    const accounts = await listUserAccounts({ headers: req.headers });
+    const google = accounts.find((a) => a.providerId === "google");
+    const connected = google?.scopes?.includes(CALENDAR_SCOPE) === true;
+
+    return new Response(JSON.stringify({ connected }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
   async function routeRequest(req: Request): Promise<Response> {
     const url = new URL(req.url);
 
-    // /api/auth/* — Better Auth owns this namespace.
+    // /__internal__/* — Python backend ↔ gateway only (X-Internal-Auth required).
+    if (url.pathname.startsWith(INTERNAL_PREFIX)) {
+      if (!deps.internalHandler) {
+        return errorEnvelope(404, "http.404", `No internal handler configured`);
+      }
+      return deps.internalHandler(req);
+    }
+
+    // /api/auth/calendar/* — Calendar scope grant + status (custom routes
+    // wrapping Better Auth's linkSocialAccount + listUserAccounts).
+    if (url.pathname === CALENDAR_LINK_PATH && req.method === "POST") {
+      return calendarLink(req);
+    }
+    if (url.pathname === CALENDAR_STATUS_PATH && req.method === "GET") {
+      return calendarStatus(req);
+    }
+
+    // /api/auth/* — Better Auth owns the rest of this namespace.
     if (url.pathname.startsWith(AUTH_PREFIX)) {
       return deps.auth.handler(req);
     }
@@ -126,6 +224,13 @@ export function createGatewayHandler(deps: GatewayDeps) {
         const headers = new Headers(req.headers);
         stripBetterAuthCookies(headers);
         headers.set("X-User-Id", session.user.id);
+        // Slice 5 ingest: backend uses these to populate me_display_name and
+        // pick the counterparty when importing a Calendar event. Always set
+        // (never trust client-supplied), even when the field is empty.
+        // URL-encode because HTTP headers reject non-ISO-8859-1 (user.name
+        // is often Chinese / Japanese / emoji); backend dependency decodes.
+        headers.set("X-User-Name", encodeURIComponent(session.user.name ?? ""));
+        headers.set("X-User-Email", encodeURIComponent(session.user.email ?? ""));
 
         const upstream = `${deps.backendUrl}${url.pathname}${url.search}`;
 
@@ -140,10 +245,12 @@ export function createGatewayHandler(deps: GatewayDeps) {
         return fetchImpl(upstream, init);
       }
 
-      // Public API path — forward as-is (no auth check, no X-User-Id).
+      // Public API path — forward as-is (no auth check, no identity headers).
       const headers = new Headers(req.headers);
       stripBetterAuthCookies(headers);
       headers.delete("X-User-Id");
+      headers.delete("X-User-Name");
+      headers.delete("X-User-Email");
       const upstream = `${deps.backendUrl}${url.pathname}${url.search}`;
       return fetchImpl(upstream, {
         method: req.method,
@@ -180,11 +287,25 @@ export function createGatewayHandler(deps: GatewayDeps) {
 // ─────────────────────────────────────────────────────────────────────────────
 if (import.meta.main) {
   const { auth } = await import("../auth");
+  const { Pool } = await import("pg");
+  const { createInternalHandler } = await import("./internal");
   const isDev = process.env.NODE_ENV !== "production";
+
+  const internalSecret = process.env.BACKEND_INTERNAL_AUTH_SECRET;
+  const dbUrl = process.env.DATABASE_URL;
+  const internalHandler =
+    internalSecret && dbUrl
+      ? createInternalHandler({
+          dbPool: new Pool({ connectionString: dbUrl }),
+          internalAuthSecret: internalSecret,
+        })
+      : undefined;
+
   const gateway = createGatewayHandler({
     auth,
     backendUrl: process.env.BACKEND_URL ?? "http://localhost:8000",
     viteUrl: isDev ? (process.env.VITE_URL ?? "http://localhost:5173") : undefined,
+    internalHandler,
   });
 
   const port = Number(process.env.PORT ?? 3001);

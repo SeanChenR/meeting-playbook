@@ -140,6 +140,16 @@
       "scheduled": "Scheduled",
       "in_progress": "In progress",
       "completed": "Completed"
+    },
+    "session": {
+      "start": "Start Meeting",
+      "end": "End Meeting",
+      "ending": "Ending…",
+      "endingHint": "Processing final audio…",
+      "capturing": "Capturing",
+      "silenceWarning": "No audio detected",
+      "transcriptHeading": "Live transcript",
+      "transcriptEmpty": "Waiting for the first transcript chunk… (the first run needs 10–25s to load the model)"
     }
   },
   "calendar": {
@@ -203,6 +213,14 @@
     "playbook": {
       "generation_timeout": "Playbook generation timed out (>60s) — please try again",
       "generation_failed": "Playbook generation failed — the LLM response could not be parsed"
+    },
+    "session": {
+      "no_audio_device": "No microphone found — check system permissions",
+      "bad_start": "Invalid session start message",
+      "bad_status": "Meeting status does not allow restarting a session",
+      "persist_failed": "Failed to persist transcript — session aborted",
+      "unknown_message": "Unrecognized message",
+      "connection_lost": "WebSocket connection lost"
     },
     "meeting": {
       "not_found": "Meeting not found",

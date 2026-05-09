@@ -140,6 +140,16 @@
       "scheduled": "已排程",
       "in_progress": "進行中",
       "completed": "已結束"
+    },
+    "session": {
+      "start": "開始會議",
+      "end": "結束會議",
+      "ending": "結束中…",
+      "endingHint": "處理最後音訊中…",
+      "capturing": "擷取中",
+      "silenceWarning": "未偵測到聲音",
+      "transcriptHeading": "即時逐字稿",
+      "transcriptEmpty": "等待第一段逐字稿…（首次啟動約需 10–25 秒載入模型）"
     }
   },
   "calendar": {
@@ -203,6 +213,14 @@
     "playbook": {
       "generation_timeout": "Playbook 生成逾時（>60 秒）— 請稍後再試",
       "generation_failed": "Playbook 生成失敗 — LLM 回傳內容無法解析"
+    },
+    "session": {
+      "no_audio_device": "找不到麥克風 — 請確認系統權限",
+      "bad_start": "啟動會議訊息錯誤",
+      "bad_status": "會議狀態不允許重新啟動 session",
+      "persist_failed": "逐字稿寫入失敗 — 已中止 session",
+      "unknown_message": "收到無法辨識的訊息",
+      "connection_lost": "WebSocket 連線中斷"
     },
     "meeting": {
       "not_found": "找不到此 Meeting",

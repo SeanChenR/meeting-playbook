@@ -35,6 +35,29 @@ describe("locale files mirror each other", () => {
     expect(zhPaths).toEqual(enPaths);
   });
 
+  test("meeting.session.* + errors.session.* namespaces present in both files", () => {
+    const zhPaths = new Set(collectPaths(zhTW));
+    const enPaths = new Set(collectPaths(en));
+    const requiredKeys = [
+      "meetings.session.start",
+      "meetings.session.end",
+      "meetings.session.capturing",
+      "meetings.session.silenceWarning",
+      "meetings.session.transcriptHeading",
+      "meetings.session.transcriptEmpty",
+      "errors.session.no_audio_device",
+      "errors.session.bad_start",
+      "errors.session.bad_status",
+      "errors.session.persist_failed",
+      "errors.session.unknown_message",
+      "errors.session.connection_lost",
+    ];
+    for (const k of requiredKeys) {
+      expect(zhPaths.has(k)).toBe(true);
+      expect(enPaths.has(k)).toBe(true);
+    }
+  });
+
   test("calendar.* namespace covers heading / connect / row / errors in both files", () => {
     const zhPaths = new Set(collectPaths(zhTW));
     const enPaths = new Set(collectPaths(en));

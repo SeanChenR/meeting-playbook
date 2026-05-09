@@ -47,3 +47,7 @@ openspec/.vector-search.db*
 
 # sa
 GCP/*
+
+# slice-06: defensive — keep audio out of git, except test fixtures
+*.wav
+!packages/backend/tests/**/*.wav

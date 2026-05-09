@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     backend_internal_auth_secret: str = ""
     backend_internal_auth_url: str = "http://localhost:3001"
 
+    # Slice 6 — audio capture + ASR
+    recordings_dir: str = "~/MeetingPlaybook/recordings"
+    whisper_model_size: str = "large-v3-turbo"
+    whisper_device: str = "auto"
+    whisper_compute_type: str = "auto"
+
     # Backend service URL (gateway forwards /api/* here)
     backend_url: str = "http://localhost:8000"
 

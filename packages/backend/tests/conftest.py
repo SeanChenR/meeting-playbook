@@ -131,9 +131,11 @@ async def migrated_engine(_migrated_db_url: str) -> AsyncIterator[AsyncEngine]:
     engine = create_async_engine(_async_url(_migrated_db_url), future=True)
     yield engine
     async with engine.begin() as conn:
-        # CASCADE from "user" / "meeting" already wipes "playbook", but we
-        # truncate explicitly so a future migration that drops the FK does
+        # CASCADE from "user" / "meeting" already wipes children, but we
+        # truncate explicitly so a future migration that drops a FK does
         # not silently leave stale rows behind.
+        await conn.execute(text('TRUNCATE TABLE "transcript_chunk" RESTART IDENTITY CASCADE'))
+        await conn.execute(text('TRUNCATE TABLE "recording" RESTART IDENTITY CASCADE'))
         await conn.execute(text('TRUNCATE TABLE "playbook" RESTART IDENTITY CASCADE'))
         await conn.execute(text('TRUNCATE TABLE "meeting" RESTART IDENTITY CASCADE'))
         await conn.execute(text('TRUNCATE TABLE "user" RESTART IDENTITY CASCADE'))

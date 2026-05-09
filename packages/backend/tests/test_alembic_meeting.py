@@ -29,6 +29,7 @@ _EXPECTED_COLUMNS = {
     "asr_provider",
     "calendar_event_id",
     "created_at",
+    "updated_at",  # added in slice-06 migration 0003 to support transition_status
     "started_at",
     "ended_at",
 }
@@ -42,6 +43,7 @@ _NOT_NULL_COLUMNS = {
     "status",
     "asr_provider",
     "created_at",
+    "updated_at",
 }
 
 

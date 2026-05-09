@@ -15,10 +15,36 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_playbook.meetings.models import Meeting
+
+# Allowed forward-only meeting status transitions (slice-06).
+# Any pair NOT in this set raises MeetingStatusConflict.
+_ALLOWED_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("scheduled", "in_progress"),
+        ("in_progress", "completed"),
+    }
+)
+
+
+class MeetingStatusConflict(Exception):
+    """Raised when `transition_status` cannot apply the requested transition.
+
+    Carries the requested (from, to) pair so callers can map to a typed
+    error code or log diagnostics.
+    """
+
+    def __init__(self, *, meeting_id: str, expected_from: str, target: str) -> None:
+        self.meeting_id = meeting_id
+        self.expected_from = expected_from
+        self.target = target
+        super().__init__(
+            f"Cannot transition meeting {meeting_id} from {expected_from!r} "
+            f"to {target!r}: row missing or current status differs."
+        )
 
 
 class MeetingRepository:
@@ -74,3 +100,46 @@ class MeetingRepository:
         )
         await self._session.commit()
         return (result.rowcount or 0) > 0
+
+    async def transition_status(
+        self,
+        *,
+        meeting_id: str,
+        expected_from: str,
+        target: str,
+    ) -> None:
+        """Atomically advance `meeting.status` from one state to the next.
+
+        Slice-06: this is the SOLE write path for the `status` column. Any
+        transition not in `_ALLOWED_TRANSITIONS` raises immediately. The
+        UPDATE filters by both id AND current status — if the RETURNING is
+        empty, either the row is missing OR the status was already past the
+        expected_from state, both of which surface as `MeetingStatusConflict`
+        so concurrent attempts and stale callers fail loudly.
+        """
+        if (expected_from, target) not in _ALLOWED_TRANSITIONS:
+            raise MeetingStatusConflict(
+                meeting_id=meeting_id,
+                expected_from=expected_from,
+                target=target,
+            )
+
+        result = await self._session.execute(
+            text(
+                """
+                UPDATE meeting
+                   SET status = :target,
+                       updated_at = now()
+                 WHERE id = :mid
+                   AND status = :expected_from
+             RETURNING id
+                """
+            ),
+            {"mid": meeting_id, "expected_from": expected_from, "target": target},
+        )
+        if result.first() is None:
+            raise MeetingStatusConflict(
+                meeting_id=meeting_id,
+                expected_from=expected_from,
+                target=target,
+            )

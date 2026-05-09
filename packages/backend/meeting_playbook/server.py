@@ -24,6 +24,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from meeting_playbook.calendar.router import router as calendar_router
 from meeting_playbook.meetings.router import router as meetings_router
 from meeting_playbook.playbooks.router import router as playbooks_router
+from meeting_playbook.sessions.router import router as sessions_router
 
 
 def _envelope(status_code: int, error_code: str, message: str) -> JSONResponse:
@@ -114,7 +115,18 @@ def create_app() -> FastAPI:
     app.include_router(meetings_router)
     app.include_router(playbooks_router)
     app.include_router(calendar_router)
+    app.include_router(sessions_router)
     return app
 
+
+import logging as _logging
+
+# Configure root logger so app-side `logger.info(...)` actually reaches the
+# uvicorn console. Without this, only WARNING+ from app loggers would surface
+# (Python's root default), making slow Whisper calls look hung.
+_logging.basicConfig(
+    level=_logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+)
 
 app = create_app()

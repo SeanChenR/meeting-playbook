@@ -12,6 +12,7 @@ import { Login } from "./routes/login";
 import { MeetingDetail } from "./routes/meetings/detail";
 import { MeetingsList } from "./routes/meetings/list";
 import { NewMeeting } from "./routes/meetings/new";
+import { UpcomingEvents } from "./routes/calendar/upcoming";
 import { Signup } from "./routes/signup";
 import { TotpEnroll } from "./routes/totp/enroll";
 import { TotpVerify } from "./routes/totp/verify";
@@ -76,6 +77,12 @@ const meetingDetailRoute = createRoute({
   component: MeetingDetail,
 });
 
+const calendarUpcomingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/calendar",
+  component: UpcomingEvents,
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -86,4 +93,5 @@ export const routeTree = rootRoute.addChildren([
   meetingsListRoute,
   meetingsNewRoute,
   meetingDetailRoute,
+  calendarUpcomingRoute,
 ]);

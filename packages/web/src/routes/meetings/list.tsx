@@ -21,9 +21,14 @@ export function MeetingsList() {
     <ProtectedShell>
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{t("meetings.list.heading")}</h1>
-        <Link to="/meetings/new" className={buttonVariants()}>
-          {t("meetings.list.newButton")}
-        </Link>
+        <div className="flex gap-2">
+          <Link to="/calendar" className={buttonVariants({ variant: "outline" })}>
+            {t("meetings.list.fromCalendarButton")}
+          </Link>
+          <Link to="/meetings/new" className={buttonVariants()}>
+            {t("meetings.list.newButton")}
+          </Link>
+        </div>
       </header>
 
       {error && (
@@ -36,8 +41,14 @@ export function MeetingsList() {
 
       {meetings && meetings.length === 0 && (
         <Card>
-          <CardContent className="text-center text-muted-foreground">
-            {t("meetings.list.empty")}
+          <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+            <div className="text-4xl" aria-hidden>
+              📋
+            </div>
+            <p className="text-base font-medium">{t("meetings.list.empty")}</p>
+            <p className="max-w-sm text-sm text-(--color-muted-foreground)">
+              {t("meetings.list.emptyHint")}
+            </p>
           </CardContent>
         </Card>
       )}

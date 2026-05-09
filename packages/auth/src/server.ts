@@ -301,17 +301,103 @@ if (import.meta.main) {
         })
       : undefined;
 
+  const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
   const gateway = createGatewayHandler({
     auth,
-    backendUrl: process.env.BACKEND_URL ?? "http://localhost:8000",
+    backendUrl,
     viteUrl: isDev ? (process.env.VITE_URL ?? "http://localhost:5173") : undefined,
     internalHandler,
   });
 
+  // ─── WebSocket proxy bridge (slice-06) ────────────────────────────────
+  // The fetch-based gateway path (createGatewayHandler) handles HTTP only.
+  // WS upgrades for /api/* are intercepted here: we authenticate, then
+  // upgrade the client connection and open a parallel WS to the upstream
+  // FastAPI backend, bridging frames in both directions.
+
+  type BridgeData = {
+    upstream: WebSocket | null;
+    pending: Array<string | Uint8Array>;
+    upstreamReady: boolean;
+  };
+
   const port = Number(process.env.PORT ?? 3001);
-  Bun.serve({
+  Bun.serve<BridgeData, undefined>({
     port,
-    fetch: gateway,
+    async fetch(req, server) {
+      const url = new URL(req.url);
+      const isApiNonAuth =
+        url.pathname.startsWith(API_PREFIX) &&
+        !url.pathname.startsWith(AUTH_PREFIX) &&
+        !PUBLIC_API_PATHS.has(url.pathname);
+
+      if (isApiNonAuth && isWebSocketUpgrade(req)) {
+        const session = await auth.api.getSession({ headers: req.headers });
+        if (!session) return unauthorized();
+
+        const wsUrl = backendUrl.replace(/^http/, "ws") + url.pathname + url.search;
+        const userName = encodeURIComponent(session.user.name ?? "");
+        const userEmail = encodeURIComponent(session.user.email ?? "");
+
+        // Open upstream WS to FastAPI with identity headers injected.
+        const upstream = new WebSocket(wsUrl, {
+          // Bun extension: custom headers on WebSocket client
+          headers: {
+            "X-User-Id": session.user.id,
+            "X-User-Name": userName,
+            "X-User-Email": userEmail,
+          },
+        } as never);
+
+        const upgraded = server.upgrade(req, {
+          data: {
+            upstream,
+            pending: [] as Array<string | Uint8Array>,
+            upstreamReady: false,
+          } satisfies BridgeData,
+        });
+        if (!upgraded) {
+          upstream.close();
+          return new Response("WebSocket upgrade failed", { status: 500 });
+        }
+        return undefined;
+      }
+
+      return gateway(req);
+    },
+    websocket: {
+      open(ws) {
+        const { upstream } = ws.data;
+        if (!upstream) return;
+
+        upstream.addEventListener("open", () => {
+          ws.data.upstreamReady = true;
+          for (const m of ws.data.pending) upstream.send(m);
+          ws.data.pending = [];
+        });
+        upstream.addEventListener("message", (ev) => {
+          ws.send(ev.data as string);
+        });
+        upstream.addEventListener("close", () => {
+          ws.close();
+        });
+        upstream.addEventListener("error", () => {
+          ws.close();
+        });
+      },
+      message(ws, message) {
+        const { upstream, upstreamReady } = ws.data;
+        if (!upstream) return;
+        if (upstreamReady) {
+          upstream.send(message as string);
+        } else {
+          ws.data.pending.push(message as string | Uint8Array);
+        }
+      },
+      close(ws) {
+        ws.data.upstream?.close();
+      },
+    },
   });
 
   // eslint-disable-next-line no-console

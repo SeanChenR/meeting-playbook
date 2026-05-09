@@ -104,7 +104,9 @@
     "list": {
       "heading": "我的 Meeting",
       "newButton": "+ 新會議",
-      "empty": "尚無 meeting，按下「+ 新會議」建立第一筆"
+      "fromCalendarButton": "從 Calendar 匯入",
+      "empty": "尚無 meeting",
+      "emptyHint": "按右上角「+ 新會議」手動建立，或「從 Calendar 匯入」自動生成 playbook 草稿"
     },
     "new": {
       "heading": "新增 Meeting",
@@ -140,6 +142,21 @@
       "completed": "已結束"
     }
   },
+  "calendar": {
+    "heading": "即將到來的會議",
+    "loading": "載入中…",
+    "empty": "未來 24 小時內沒有 Google Calendar 事件",
+    "emptyHint": "下次有會議時會自動列在這裡。也可以從會議列表頁手動建立 meeting。",
+    "connect": {
+      "cta": "連結 Google Calendar",
+      "description": "授權讀取 Calendar 事件後，可以一鍵匯入並用 LLM 自動生成 playbook 草稿"
+    },
+    "row": {
+      "attendees": "{{count}} 人",
+      "import": "匯入並生成",
+      "importing": "生成中…可能需 30~60 秒"
+    }
+  },
   "playbook": {
     "heading": "Playbook",
     "loading": "載入中…",
@@ -170,12 +187,22 @@
   },
   "errors": {
     "common": {
-      "unknown": "發生未知錯誤"
+      "unknown": "發生未知錯誤",
+      "internal_error": "伺服器錯誤，請稍後再試"
     },
     "auth": {
       "gateway_bypass": "請從正確的入口登入",
       "unauthenticated": "請先登入",
       "invalid_credentials": "帳號或密碼錯誤"
+    },
+    "calendar": {
+      "not_connected": "尚未連結 Google Calendar — 請先連結",
+      "token_expired": "Calendar 授權已過期 — 請重新連結",
+      "network_error": "無法連線到 Google Calendar — 請稍後再試"
+    },
+    "playbook": {
+      "generation_timeout": "Playbook 生成逾時（>60 秒）— 請稍後再試",
+      "generation_failed": "Playbook 生成失敗 — LLM 回傳內容無法解析"
     },
     "meeting": {
       "not_found": "找不到此 Meeting",

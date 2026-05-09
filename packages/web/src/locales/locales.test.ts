@@ -35,6 +35,30 @@ describe("locale files mirror each other", () => {
     expect(zhPaths).toEqual(enPaths);
   });
 
+  test("calendar.* namespace covers heading / connect / row / errors in both files", () => {
+    const zhPaths = new Set(collectPaths(zhTW));
+    const enPaths = new Set(collectPaths(en));
+    const requiredKeys = [
+      "calendar.heading",
+      "calendar.empty",
+      "calendar.connect.cta",
+      "calendar.connect.description",
+      "calendar.row.attendees",
+      "calendar.row.import",
+      "calendar.row.importing",
+      "errors.calendar.not_connected",
+      "errors.calendar.token_expired",
+      "errors.calendar.network_error",
+      "errors.playbook.generation_timeout",
+      "errors.playbook.generation_failed",
+      "meetings.list.fromCalendarButton",
+    ];
+    for (const k of requiredKeys) {
+      expect(zhPaths.has(k)).toBe(true);
+      expect(enPaths.has(k)).toBe(true);
+    }
+  });
+
   test("playbook.* namespace covers toggle / fields / save / errors in both files", () => {
     const zhPaths = new Set(collectPaths(zhTW));
     const enPaths = new Set(collectPaths(en));

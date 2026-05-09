@@ -104,7 +104,9 @@
     "list": {
       "heading": "My Meetings",
       "newButton": "+ New meeting",
-      "empty": "No meetings yet — tap “+ New meeting” to create the first one"
+      "fromCalendarButton": "Import from Calendar",
+      "empty": "No meetings yet",
+      "emptyHint": "Tap “+ New meeting” to create one by hand, or “Import from Calendar” to auto-generate a playbook draft"
     },
     "new": {
       "heading": "New meeting",
@@ -140,6 +142,21 @@
       "completed": "Completed"
     }
   },
+  "calendar": {
+    "heading": "Upcoming meetings",
+    "loading": "Loading…",
+    "empty": "No Google Calendar events in the next 24 hours",
+    "emptyHint": "When a meeting is on your calendar it will show up here. You can still create a meeting by hand from the meetings list.",
+    "connect": {
+      "cta": "Connect Google Calendar",
+      "description": "Grant Calendar read access to one-click import upcoming events and auto-generate a playbook draft via LLM"
+    },
+    "row": {
+      "attendees": "{{count}} attendees",
+      "import": "Import + generate",
+      "importing": "Generating… may take 30~60 seconds"
+    }
+  },
   "playbook": {
     "heading": "Playbook",
     "loading": "Loading…",
@@ -170,12 +187,22 @@
   },
   "errors": {
     "common": {
-      "unknown": "An unknown error occurred"
+      "unknown": "An unknown error occurred",
+      "internal_error": "Server error, please try again later"
     },
     "auth": {
       "gateway_bypass": "Please sign in through the gateway",
       "unauthenticated": "Please sign in first",
       "invalid_credentials": "Email or password is incorrect"
+    },
+    "calendar": {
+      "not_connected": "Google Calendar is not connected — please connect first",
+      "token_expired": "Calendar authorization has expired — please reconnect",
+      "network_error": "Could not reach Google Calendar — please try again later"
+    },
+    "playbook": {
+      "generation_timeout": "Playbook generation timed out (>60s) — please try again",
+      "generation_failed": "Playbook generation failed — the LLM response could not be parsed"
     },
     "meeting": {
       "not_found": "Meeting not found",

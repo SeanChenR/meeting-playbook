@@ -132,11 +132,12 @@ class EndMeetingMessage(BaseModel):
 
 
 class RequestAdviceMessage(BaseModel):
-    """Slice-08: client → server request for tactical advice.
+    """Slice-08: client → server request for tactical advice (button path).
 
-    Slice 8 ships a button-only path so `user_question` defaults to None.
-    Slice 9 (chatbox) populates `user_question` with the user's typed prompt;
-    the backend already reads it via `tactical_advisor.advise(...)`.
+    Slice 9 keeps this frame for the `Get Advice` button. The chatbox path
+    uses the new `ChatMessageRequestMessage` frame instead. `user_question`
+    remains optional and defaults to None; the router fills the user_content
+    with a locale-default prompt string before persisting.
     """
 
     type: Literal["request_advice"] = "request_advice"
@@ -147,8 +148,27 @@ class RequestAdviceMessage(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class ChatMessageRequestMessage(BaseModel):
+    """Slice-09: client → server chatbox follow-up.
+
+    Distinct frame (not reusing `request_advice`) so the button vs chatbox
+    paths stay traceable in logs + future analytics, per Issue #11
+    acceptance criteria. `content` is the user's typed question and SHALL
+    be non-empty; the router cancels any in-flight advice and spawns a new
+    advise task with `user_question=content` plus the meeting's prior
+    chat_history fetched from the DB.
+    """
+
+    type: Literal["chat_message"] = "chat_message"
+    request_id: str
+    content: str = Field(min_length=1)
+    locale: Literal["zh-TW", "en"]
+
+    model_config = {"extra": "forbid"}
+
+
 ClientMessage = Annotated[
-    StartMeetingMessage | EndMeetingMessage | RequestAdviceMessage,
+    StartMeetingMessage | EndMeetingMessage | RequestAdviceMessage | ChatMessageRequestMessage,
     Field(discriminator="type"),
 ]
 _ClientAdapter = TypeAdapter(ClientMessage)
@@ -170,6 +190,7 @@ __all__ = [
     "AdviceChunkMessage",
     "AdviceDoneMessage",
     "AdvisorFailedMessage",
+    "ChatMessageRequestMessage",
     "ClientMessage",
     "EndMeetingMessage",
     "ErrorMessage",

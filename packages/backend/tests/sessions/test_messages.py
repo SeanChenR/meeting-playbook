@@ -200,6 +200,25 @@ def test_request_advice_rejects_invalid_locale():
         RequestAdviceMessage(request_id="req_a", locale="ja-JP")
 
 
+def test_chat_message_frame_validates():
+    """Slice-09: ChatMessageRequestMessage round-trips; empty content rejected."""
+    from meeting_playbook.sessions.messages import ChatMessageRequestMessage
+
+    msg = ChatMessageRequestMessage(request_id="r1", content="hi", locale="zh-TW")
+    raw = msg.model_dump_json()
+    reparsed = parse_client_message(raw)
+    assert reparsed.type == "chat_message"
+    assert isinstance(reparsed, ChatMessageRequestMessage)
+    assert reparsed.content == "hi"
+    assert reparsed.locale == "zh-TW"
+
+    # Empty content MUST fail validation.
+    with pytest.raises(Exception):  # ValidationError
+        parse_client_message(
+            '{"type": "chat_message", "request_id": "r1", "content": "", "locale": "zh-TW"}'
+        )
+
+
 def test_advice_chunk_done_failed_serialization():
     """Slice-08: server → client `advice_chunk` / `advice_done` /
     `advisor_failed` all round-trip through the server discriminated union."""

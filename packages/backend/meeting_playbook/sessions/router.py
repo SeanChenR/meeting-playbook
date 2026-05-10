@@ -27,6 +27,7 @@ from meeting_playbook.advisor.base import TacticalAdvisor
 from meeting_playbook.advisor.dependencies import get_tactical_advisor_dependency
 from meeting_playbook.asr.base import ASRProvider
 from meeting_playbook.audio.devices import MicDeviceNotFound, NoBlackholeDevice
+from meeting_playbook.chat.repository import ChatMessageRepository
 from meeting_playbook.meetings.dependencies import (
     get_session_dependency,
     get_session_factory_dependency,
@@ -47,6 +48,7 @@ from meeting_playbook.sessions.messages import (
     AdviceChunkMessage,
     AdviceDoneMessage,
     AdvisorFailedMessage,
+    ChatMessageRequestMessage,
     EndMeetingMessage,
     ErrorMessage,
     MeetingEndedMessage,
@@ -67,6 +69,14 @@ _CLOSE_NOT_FOUND = 4404
 # _STREAM_TIMEOUT_S; kept as a separate display constant so the log line
 # doesn't have to import the advisor module just to print a number.
 _STREAM_TIMEOUT_S_DISPLAY = 15
+
+# Slice-09: locale-default user_content used when the Get Advice button is
+# pressed (no user_question). Persisted as the user message in chat_message
+# so multi-turn history is consistent across button + chatbox paths.
+_DEFAULT_PROMPT: dict[str, str] = {
+    "zh-TW": "請給出戰術建議。",
+    "en": "Please give tactical advice.",
+}
 
 
 def _classify_advisor_error(exc: BaseException) -> str:
@@ -256,18 +266,31 @@ async def meeting_session_endpoint(
             locale,
             "yes" if user_question else "no",
         )
+        # Slice-09: persist `user_content` derived from user_question OR the
+        # locale-default prompt so button + chatbox paths produce the same
+        # downstream history shape. Chatbox `content` is non-empty per spec
+        # (Pydantic `min_length=1`); button path passes None.
+        user_content = (
+            user_question
+            if user_question
+            else _DEFAULT_PROMPT.get(locale, _DEFAULT_PROMPT["zh-TW"])
+        )
         token_count = 0
+        advisor_tokens: list[str] = []
         try:
             async with session_factory() as advice_session:
                 advice_session_repo = SessionRepository(advice_session)
                 playbook_repo = PlaybookRepository(advice_session)
+                chat_repo = ChatMessageRepository(advice_session)
                 chunks = await advice_session_repo.list_chunks_last_60s(meeting_id)
                 playbook = await playbook_repo.get_or_create_for_meeting(meeting_id)
+                chat_history = await chat_repo.list_for_meeting(meeting_id)
             logger.info(
-                "advice request_id=%s context chunks=%d playbook=%s",
+                "advice request_id=%s context chunks=%d playbook=%s chat_history=%d",
                 request_id,
                 len(chunks),
                 "present" if playbook else "missing",
+                len(chat_history),
             )
 
             # AsyncIterator is returned from a Protocol method. Some tests
@@ -282,10 +305,34 @@ async def meeting_session_endpoint(
                 counterparty_display_name=meeting.counterparty_display_name,
                 user_question=user_question,
                 locale=locale,  # type: ignore[arg-type]
+                chat_history=chat_history,
             ):
                 token_count += 1
+                advisor_tokens.append(token)
                 await _send(AdviceChunkMessage(request_id=request_id, token=token))
             logger.info("advice request_id=%s done tokens=%d", request_id, token_count)
+
+            # Slice-09 Decision 2: persist (user, advisor) pair ONLY on
+            # successful stream. Open a fresh session for the INSERT so the
+            # write doesn't share connection state with the now-closed
+            # context-fetch session. INSERT failure is logged but does not
+            # block the user-facing `advice_done` frame.
+            advisor_content = "".join(advisor_tokens)
+            try:
+                async with session_factory() as insert_session:
+                    await ChatMessageRepository(insert_session).insert_pair_after_advice(
+                        meeting_id=meeting_id,
+                        user_content=user_content,
+                        advisor_content=advisor_content,
+                    )
+            except Exception as persist_exc:
+                logger.warning(
+                    "advice request_id=%s persist FAILED: %s: %s",
+                    request_id,
+                    type(persist_exc).__name__,
+                    persist_exc,
+                )
+
             await _send(AdviceDoneMessage(request_id=request_id))
         except asyncio.CancelledError:
             # End-of-meeting / superseding request cancelled us. Re-raise
@@ -348,16 +395,30 @@ async def meeting_session_endpoint(
                 if isinstance(msg, EndMeetingMessage):
                     return
                 if isinstance(msg, RequestAdviceMessage):
-                    # Defensive: cancel any in-flight prior advice before
-                    # spawning a new one. The UI disables the button, but
-                    # a misbehaving / duplicated client must not pile up
-                    # concurrent Vertex streams.
+                    # Slice-08 button path. Defensive: cancel any in-flight
+                    # prior advice before spawning a new one. The UI disables
+                    # the button, but a misbehaving / duplicated client must
+                    # not pile up concurrent Vertex streams.
                     if advice_task is not None and not advice_task.done():
                         advice_task.cancel()
                         with contextlib.suppress(asyncio.CancelledError, Exception):
                             await advice_task
                     advice_task = asyncio.create_task(
                         _run_advice(msg.request_id, msg.user_question, msg.locale),
+                        name=f"advice-{msg.request_id}",
+                    )
+                    continue
+                if isinstance(msg, ChatMessageRequestMessage):
+                    # Slice-09 chatbox path. Same cancel-previous policy as
+                    # the button path; the user typing a new question
+                    # supersedes any in-flight advice (which won't be
+                    # persisted because we only INSERT on success).
+                    if advice_task is not None and not advice_task.done():
+                        advice_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError, Exception):
+                            await advice_task
+                    advice_task = asyncio.create_task(
+                        _run_advice(msg.request_id, msg.content, msg.locale),
                         name=f"advice-{msg.request_id}",
                     )
                     continue

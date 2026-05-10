@@ -135,6 +135,7 @@ async def migrated_engine(_migrated_db_url: str) -> AsyncIterator[AsyncEngine]:
         # CASCADE from "user" / "meeting" already wipes children, but we
         # truncate explicitly so a future migration that drops a FK does
         # not silently leave stale rows behind.
+        await conn.execute(text('TRUNCATE TABLE "chat_message" RESTART IDENTITY CASCADE'))
         await conn.execute(text('TRUNCATE TABLE "transcript_chunk" RESTART IDENTITY CASCADE'))
         await conn.execute(text('TRUNCATE TABLE "recording" RESTART IDENTITY CASCADE'))
         await conn.execute(text('TRUNCATE TABLE "playbook" RESTART IDENTITY CASCADE'))

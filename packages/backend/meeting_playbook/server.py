@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from meeting_playbook.calendar.router import router as calendar_router
+from meeting_playbook.chat.router import router as chat_router
 from meeting_playbook.meetings.router import router as meetings_router
 from meeting_playbook.playbooks.router import router as playbooks_router
 from meeting_playbook.sessions.router import router as sessions_router
@@ -116,6 +117,7 @@ def create_app() -> FastAPI:
     app.include_router(playbooks_router)
     app.include_router(calendar_router)
     app.include_router(sessions_router)
+    app.include_router(chat_router)
     return app
 
 

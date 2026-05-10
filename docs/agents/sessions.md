@@ -1,6 +1,7 @@
 # Sessions — agent notes
 
-> Slice 6 (`slice-06-mic-transcript-session`) outcome.
+> Slice 6 (`slice-06-mic-transcript-session`) +
+> Slice 7 (`slice-07-dualstream-and-ui-bundle`) outcome.
 > Spec: `openspec/specs/meeting-session/spec.md` (after archive).
 > Module: `packages/backend/meeting_playbook/sessions/` + `audio/` + `asr/`.
 
@@ -51,9 +52,14 @@ Mirror across:
 | `end_meeting`       | `type`, `meeting_id`                                                                                       |
 | `meeting_started`   | `type`, `meeting_id`                                                                                       |
 | `transcript_chunk`  | `type`, `meeting_id`, `speaker`, `text`, `started_at`, `ended_at`, `asr_provider_used`, `confidence`       |
-| `silence_warning`   | `type`, `meeting_id`, `since`                                                                              |
+| `silence_warning`   | `type`, `meeting_id`, `stream`, `since`                                                                    |
+| `stream_stopped`    | `type`, `meeting_id`, `stream`, `reason`                                                                   |
 | `meeting_ended`     | `type`, `meeting_id`                                                                                       |
 | `error`             | `type`, `error_code`, `message`                                                                            |
+
+**Slice-7 changes**: `silence_warning` gained a required `stream` field and
+`stream_stopped` is a new server frame (sent when one capture stream fails
+mid-session — the OTHER stream keeps running until both stop).
 
 Adding a new server-side type is a breaking change to the contract: add the
 Pydantic model, the TS type, the spec example matrix row, and a test.
@@ -62,9 +68,46 @@ Pydantic model, the TS type, the spec example matrix row, and a test.
 
 The session router MUST NOT import any concrete provider. It depends only
 on the `meeting_playbook.asr.base.ASRProvider` Protocol; the concrete
-provider is injected via the `get_asr_provider_dependency` FastAPI
-dependency. Adding a second provider (Slice 12 VibeVoice) is a drop-in by
-implementing the Protocol; do NOT modify the router or AudioCaptureService.
+provider is injected via FastAPI dependencies. Adding a second provider
+(Slice 12 VibeVoice) is a drop-in by implementing the Protocol; do NOT
+modify the router or AudioCaptureService.
+
+**Slice-7 evolution**: `SessionService` now takes
+`providers: Mapping[Stream, ASRProvider]` (one provider PER stream).
+`get_asr_providers_dependency()` returns `{"me": ..., "counterparty": ...}` —
+each stream is wired to its own `WhisperProvider` instance so model
+inference can run in parallel without lock contention. The router warms up
+both providers concurrently via `asyncio.gather` before the first chunk
+arrives. The Protocol gained an optional `warmup() -> None` method (default
+implementations may no-op).
+
+## Slice-7 partial fault tolerance
+
+`SessionService` maintains `_active_streams: set[Stream]` for the current
+session. When a per-stream consumer task raises an exception (capture or
+ASR failure), it:
+
+1. Catches the exception.
+2. Broadcasts `stream_stopped {stream, reason}`.
+3. Drops the stream from `_active_streams`.
+4. Returns from its own consumer task. The OTHER stream continues.
+
+When `_active_streams` reaches empty (either by user `end_meeting` or by
+both streams failing), the router's `runner_task` returns and the normal
+finalize path runs — recording rows for whichever streams produced bytes,
+status → completed, `meeting_ended`.
+
+**Persist failure remains fatal**: a `SessionRepository.insert_chunk`
+failure raises `_PersistFailed`, sets the abort event, and exits ALL
+streams. DB-down means we can't trust any further writes.
+
+## Concurrency and the SQLAlchemy session
+
+SQLAlchemy AsyncSession is NOT safe for concurrent use. With two streams
+both inserting transcript_chunk rows in parallel, `SessionService` holds an
+`asyncio.Lock` (`_write_lock`) around the per-chunk
+`insert_chunk → send(transcript_chunk)` block. ASR runs unlocked (per-
+stream parallelism preserved); only the DB+WS emission step serialises.
 
 ## AudioCaptureService lifecycle
 

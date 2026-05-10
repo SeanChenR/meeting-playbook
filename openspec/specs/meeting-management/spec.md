@@ -598,3 +598,128 @@ tests:
   - packages/backend/tests/asr/fixtures/short_speech_en.wav
   - packages/backend/tests/sessions/test_repository.py
 -->
+---
+### Requirement: Meeting carries optional scheduled start and end timestamps
+
+The `meeting` table SHALL persist two optional timestamp columns: `scheduled_start_at` and `scheduled_end_at`, both `TIMESTAMP WITH TIME ZONE NULL`. These columns capture when a meeting is planned to occur (distinct from `created_at` which is when the row was created, and distinct from `started_at` / `ended_at` which capture actual session wall-clock times). Existing meeting rows created before this capability SHALL retain `NULL` in both new columns; no backfill SHALL be performed by the migration.
+
+The `POST /api/meetings` endpoint SHALL accept two optional ISO 8601 timestamp fields `scheduled_start_at` and `scheduled_end_at` in its request body. When omitted, both columns SHALL be persisted as `NULL`. When provided, the values SHALL be persisted as parsed timezone-aware timestamps. The `GET /api/meetings` (list) and `GET /api/meetings/{id}` (detail) endpoints SHALL include both fields in their response payloads (as ISO 8601 strings or `null`).
+
+The `MeetingRepository.create()` method signature SHALL accept two new optional keyword arguments `scheduled_start_at: datetime | None = None` and `scheduled_end_at: datetime | None = None`. The repository's read methods (`get_for_user`, `list_for_user`) SHALL include both columns in returned dataclasses.
+
+#### Scenario: Create with both schedule fields persists them
+
+- **WHEN** an authenticated user sends `POST /api/meetings` with body `{"title": "Q3 review", "counterparty_display_name": "林", "me_display_name": "Sean", "scheduled_start_at": "2026-06-15T14:00:00Z", "scheduled_end_at": "2026-06-15T15:00:00Z"}`
+- **THEN** the response status SHALL be HTTP 201, the response body SHALL include `scheduled_start_at = "2026-06-15T14:00:00Z"` and `scheduled_end_at = "2026-06-15T15:00:00Z"`, and the database row SHALL store those timezone-aware values
+
+#### Scenario: Create without schedule fields stores NULL
+
+- **WHEN** an authenticated user sends `POST /api/meetings` with body `{"title": "Q3 review", "counterparty_display_name": "林", "me_display_name": "Sean"}` (no schedule fields)
+- **THEN** the response SHALL be HTTP 201 with `scheduled_start_at = null` and `scheduled_end_at = null` in the response body; the database row SHALL hold `NULL` in both columns
+
+#### Scenario: List endpoint returns schedule fields for every row
+
+- **GIVEN** the authenticated user owns three meetings: one with both schedule fields set, one with only `scheduled_start_at` set, and one with both null
+- **WHEN** the user sends `GET /api/meetings`
+- **THEN** the response SHALL include all three meetings and each item in the array SHALL contain both `scheduled_start_at` and `scheduled_end_at` keys (with values or `null`)
+
+#### Scenario: Migration adds nullable columns without affecting existing rows
+
+- **GIVEN** the `meeting` table holds existing rows from prior slices
+- **WHEN** Alembic migration `0004_add_meeting_scheduled_times` upgrades the schema
+- **THEN** both `scheduled_start_at` and `scheduled_end_at` columns SHALL exist with type `TIMESTAMP WITH TIME ZONE`, nullable, and every existing row SHALL contain `NULL` in both columns; the downgrade SHALL drop both columns
+
+<!-- @trace
+source: slice-07-dualstream-and-ui-bundle
+updated: 2026-05-10
+-->
+
+<!-- @trace
+source: slice-07-dualstream-and-ui-bundle
+updated: 2026-05-10
+code:
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/backend/meeting_playbook/asr/whisper_provider.py
+  - packages/web/src/components/layout-switcher.tsx
+  - packages/backend/meeting_playbook/sessions/service.py
+  - docs/agents/audio.md
+  - packages/backend/alembic/versions/0004_add_meeting_scheduled_times.py
+  - packages/backend/meeting_playbook/asr/base.py
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/backend/meeting_playbook/sessions/dependencies.py
+  - packages/backend/meeting_playbook/audio/devices.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - packages/web/package.json
+  - .env.example
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/audio/capture.py
+  - docs/BLACKHOLE_SETUP.md
+  - packages/web/src/components/ui/alert.tsx
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/index.css
+  - docs/agents/sessions.md
+  - packages/backend/meeting_playbook/calendar/client.py
+  - bun.lock
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/components/headphones-hint.tsx
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/lib/session-ws.ts
+  - packages/web/src/route-tree.tsx
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/backend/meeting_playbook/config.py
+  - packages/web/src/components/protected-shell.tsx
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/web/src/hooks/use-detail-layout.ts
+  - packages/web/src/test-setup.ts
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/backend/meeting_playbook/playbooks/repository.py
+  - packages/web/src/lib/markdown-preview.tsx
+  - packages/web/vite.config.ts
+  - packages/web/src/hooks/use-meeting-session.ts
+  - packages/backend/meeting_playbook/sessions/messages.py
+  - packages/backend/meeting_playbook/sessions/repository.py
+  - packages/web/src/components/capture-indicator.tsx
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/web/src/routes/meetings/list.tsx
+  - packages/backend/meeting_playbook/playbook_generation/generator.py
+  - packages/web/src/routes/calendar/upcoming.tsx
+tests:
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/web/src/routes/calendar/upcoming.test.tsx
+  - packages/backend/tests/calendar/test_client.py
+  - packages/backend/tests/audio/test_capture_protocol.py
+  - packages/backend/tests/playbook_generation/test_generator.py
+  - packages/backend/tests/asr/test_whisper_provider.py
+  - packages/backend/tests/asr/fixtures/counterparty_short.wav
+  - packages/backend/tests/calendar/test_pick_counterparty.py
+  - packages/backend/tests/calendar/test_endpoints.py
+  - packages/backend/tests/sessions/test_service.py
+  - packages/web/src/components/layout-switcher.test.tsx
+  - packages/backend/tests/audio/test_devices.py
+  - packages/web/src/components/headphones-hint.test.tsx
+  - packages/backend/tests/asr/fixtures/README.md
+  - packages/backend/tests/sessions/test_repository.py
+  - packages/backend/tests/sessions/test_router.py
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/sessions/test_messages.py
+  - packages/web/src/components/playbook-pane.test.tsx
+  - packages/web/src/lib/session-ws.test.ts
+  - packages/web/src/components/capture-indicator.test.tsx
+  - packages/web/src/hooks/use-meeting-session.test.tsx
+  - packages/backend/tests/asr/test_base.py
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/backend/tests/test_preflight.py
+  - packages/backend/tests/audio/test_capture_integration.py
+  - packages/web/src/hooks/use-detail-layout.test.tsx
+  - packages/web/src/lib/markdown-preview.test.tsx
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/backend/tests/conftest.py
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/web/src/components/protected-shell.test.tsx
+  - packages/web/src/components/transcript-pane.test.tsx
+-->

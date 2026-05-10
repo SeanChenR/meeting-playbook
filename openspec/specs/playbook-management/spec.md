@@ -270,50 +270,129 @@ tests:
 ---
 ### Requirement: PlaybookPane UI exposes a free-form view, a structured view, and a save action
 
-The web UI SHALL provide a `PlaybookPane` component that the meeting detail page mounts. The component SHALL render a view-mode toggle with two states: a free-form view that exposes a single editor for `free_form_markdown`, and a structured view that exposes six labeled editors, one per structured field (`objective`, `counterparty_profile`, `anticipated_topics`, `anticipated_objections`, `talking_points`, `red_lines`). Switching between views MUST NOT discard any unsaved edits in either view. A save action MUST send a single PUT request carrying the current values of all seven fields and MUST refresh the displayed content after the response succeeds.
+The web UI SHALL provide a `PlaybookPane` component that the meeting detail page mounts. The component SHALL render a top-level view-mode toggle with two states: a free-form view that exposes a single editor for `free_form_markdown`, and a structured view that exposes six labeled editors, one per structured field (`objective`, `counterparty_profile`, `anticipated_topics`, `anticipated_objections`, `talking_points`, `red_lines`).
+
+The free-form view's primary editor SHALL be a plain `<textarea>` containing the markdown source. Inside the free-form view, a SECOND smaller toggle SHALL switch between two sub-modes:
+- **Edit** (default): the `<textarea>` is shown for editing markdown source.
+- **Preview**: a read-only rendered view powered by `react-markdown` + `remark-gfm` + `rehype-sanitize`. Switching to Preview MUST NOT mutate the `<textarea>` value; switching back to Edit MUST restore the user's caret position to the beginning of the textarea (or an acceptable default — caret restoration is not strictly required).
+
+The DB storage format for `free_form_markdown` SHALL remain markdown text (no schema change); the textarea writes the value verbatim, and Preview never mutates it. Switching between free-form and structured views MUST NOT discard any unsaved edits in either view. A save action MUST send a single PUT request carrying the current values of all seven fields and MUST refresh the displayed content after the response succeeds.
+
+The free-form view MUST NOT render a TipTap WYSIWYG editor or any toolbar of formatting buttons. Markdown is typed directly in the textarea using standard markdown syntax (`**bold**`, `# Heading`, `- bullet`, etc.).
 
 #### Scenario: Toggle preserves unsaved edits in both views
 
-- **GIVEN** the user has typed text into the free-form view and into the structured `objective` field, neither saved
+- **GIVEN** the user has typed text into the free-form `<textarea>` and into the structured `objective` field, neither saved
 - **WHEN** the user toggles to the structured view, then back to free-form
-- **THEN** both the free-form text and the structured `objective` text SHALL still be present
+- **THEN** both the free-form text (in the textarea) and the structured `objective` text SHALL still be present
 
 #### Scenario: Save dispatches a PUT and refreshes the displayed content
 
-- **GIVEN** the user has typed values into all seven fields
+- **GIVEN** the user has typed values into all seven fields (free-form value typed directly as markdown into the textarea)
 - **WHEN** the user clicks the save button
-- **THEN** the component SHALL issue exactly one `PUT /api/meetings/{id}/playbook` request whose body contains all seven fields with the typed values, and SHALL display those values after the response resolves
+- **THEN** the component SHALL issue exactly one `PUT /api/meetings/{id}/playbook` request whose body contains all seven fields with the typed values; the `free_form_markdown` field's value SHALL equal the textarea's current `value` property byte-for-byte; the component SHALL display those values after the response resolves
+
+#### Scenario: Preview sub-toggle renders rendered markdown without mutating the source
+
+- **GIVEN** the meeting's `free_form_markdown` field is stored in the database as `"# Goals\n\n- Discuss Q3 numbers\n- **Confirm deadlines**"`
+- **WHEN** the playbook detail loads, the user opens the free-form view, and clicks the Preview sub-toggle
+- **THEN** the rendered output SHALL contain an H1 reading "Goals", followed by an unordered list with two items, the second of which contains a bold "Confirm deadlines" run; the underlying `<textarea>`'s `value` MUST remain the original markdown source unchanged
+
+#### Scenario: Free-form view exposes Edit/Preview sub-toggle (no formatting toolbar)
+
+- **GIVEN** the free-form view is visible
+- **WHEN** the page renders
+- **THEN** the view SHALL contain a sub-toggle with exactly two options labeled via `playbook.freeform.editTab` and `playbook.freeform.previewTab` i18n keys; the view MUST NOT render any TipTap editor instance, formatting toolbar, or `playbook.toolbar.*` i18n keys
 
 
 <!-- @trace
-source: slice-04-playbook-editor
-updated: 2026-05-08
+source: slice-07-dualstream-and-ui-bundle
+updated: 2026-05-10
 code:
-  - packages/backend/alembic/versions/0002_create_playbook.py
-  - packages/web/src/locales/en.json
-  - packages/web/src/components/playbook-pane.tsx
-  - packages/backend/meeting_playbook/server.py
   - packages/web/src/routes/meetings/detail.tsx
-  - packages/backend/meeting_playbook/playbooks/repository.py
-  - packages/backend/meeting_playbook/playbooks/models.py
-  - packages/backend/meeting_playbook/playbooks/__init__.py
-  - packages/web/src/lib/playbook-api.ts
+  - packages/backend/meeting_playbook/asr/whisper_provider.py
+  - packages/web/src/components/layout-switcher.tsx
+  - packages/backend/meeting_playbook/sessions/service.py
+  - docs/agents/audio.md
+  - packages/backend/alembic/versions/0004_add_meeting_scheduled_times.py
+  - packages/backend/meeting_playbook/asr/base.py
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/backend/meeting_playbook/sessions/dependencies.py
+  - packages/backend/meeting_playbook/audio/devices.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - packages/web/package.json
+  - .env.example
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/audio/capture.py
+  - docs/BLACKHOLE_SETUP.md
+  - packages/web/src/components/ui/alert.tsx
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/index.css
+  - docs/agents/sessions.md
+  - packages/backend/meeting_playbook/calendar/client.py
+  - bun.lock
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/components/headphones-hint.tsx
   - packages/web/src/locales/zh-TW.json
-  - packages/backend/meeting_playbook/playbooks/router.py
-  - packages/backend/meeting_playbook/playbooks/schemas.py
-  - docs/agents/meetings.md
+  - packages/web/src/lib/session-ws.ts
+  - packages/web/src/route-tree.tsx
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/backend/meeting_playbook/config.py
+  - packages/web/src/components/protected-shell.tsx
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/web/src/hooks/use-detail-layout.ts
+  - packages/web/src/test-setup.ts
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/backend/meeting_playbook/playbooks/repository.py
+  - packages/web/src/lib/markdown-preview.tsx
+  - packages/web/vite.config.ts
+  - packages/web/src/hooks/use-meeting-session.ts
+  - packages/backend/meeting_playbook/sessions/messages.py
+  - packages/backend/meeting_playbook/sessions/repository.py
+  - packages/web/src/components/capture-indicator.tsx
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/web/src/routes/meetings/list.tsx
+  - packages/backend/meeting_playbook/playbook_generation/generator.py
+  - packages/web/src/routes/calendar/upcoming.tsx
 tests:
-  - packages/backend/tests/playbooks/test_validation.py
-  - packages/backend/tests/conftest.py
-  - packages/backend/tests/playbooks/test_endpoints.py
-  - packages/web/src/lib/playbook-api.mutations.test.tsx
-  - packages/web/src/locales/locales.test.ts
-  - packages/backend/tests/test_alembic_playbook.py
-  - packages/backend/tests/playbooks/__init__.py
-  - packages/web/src/routes/meetings/detail.test.tsx
-  - packages/web/src/lib/playbook-api.queries.test.ts
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/web/src/routes/calendar/upcoming.test.tsx
+  - packages/backend/tests/calendar/test_client.py
+  - packages/backend/tests/audio/test_capture_protocol.py
+  - packages/backend/tests/playbook_generation/test_generator.py
+  - packages/backend/tests/asr/test_whisper_provider.py
+  - packages/backend/tests/asr/fixtures/counterparty_short.wav
+  - packages/backend/tests/calendar/test_pick_counterparty.py
+  - packages/backend/tests/calendar/test_endpoints.py
+  - packages/backend/tests/sessions/test_service.py
+  - packages/web/src/components/layout-switcher.test.tsx
+  - packages/backend/tests/audio/test_devices.py
+  - packages/web/src/components/headphones-hint.test.tsx
+  - packages/backend/tests/asr/fixtures/README.md
+  - packages/backend/tests/sessions/test_repository.py
+  - packages/backend/tests/sessions/test_router.py
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/sessions/test_messages.py
   - packages/web/src/components/playbook-pane.test.tsx
-  - packages/backend/tests/playbooks/test_repository.py
+  - packages/web/src/lib/session-ws.test.ts
+  - packages/web/src/components/capture-indicator.test.tsx
+  - packages/web/src/hooks/use-meeting-session.test.tsx
+  - packages/backend/tests/asr/test_base.py
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/backend/tests/test_preflight.py
+  - packages/backend/tests/audio/test_capture_integration.py
+  - packages/web/src/hooks/use-detail-layout.test.tsx
+  - packages/web/src/lib/markdown-preview.test.tsx
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/backend/tests/conftest.py
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/web/src/components/protected-shell.test.tsx
+  - packages/web/src/components/transcript-pane.test.tsx
 -->
 
 ---

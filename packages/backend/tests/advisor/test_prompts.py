@@ -181,3 +181,92 @@ def test_locale_instruction_dict_has_both_locales():
     """Sanity: both supported locales appear in LOCALE_INSTRUCTION."""
     assert "zh-TW" in LOCALE_INSTRUCTION
     assert "en" in LOCALE_INSTRUCTION
+
+
+# ─── Slice 9: chat_history multi-turn context ─────────────────────────────
+
+
+def _chat(role: str, content: str) -> Any:
+    """Build a duck-typed ChatMessage-like object for prompt builder."""
+    return SimpleNamespace(role=role, content=content)
+
+
+def test_chat_history_section_omitted_when_empty():
+    """Slice-09 Decision 5: empty chat_history → no `## 對話紀錄` heading."""
+    msg = build_user_message(
+        playbook=_playbook(objective="拿下 deal"),
+        recent_chunks=[_chunk("me", "hello", _NOW)],
+        me_display_name="Sean",
+        counterparty_display_name="林經理",
+        user_question=None,
+        locale="zh-TW",
+        chat_history=[],
+    )
+    assert "## 對話紀錄" not in msg
+    assert "## Chat history" not in msg
+
+
+def test_chat_history_section_renders_in_order_with_role_labels():
+    """Slice-09 Decision 5: 4 messages render in array order with `Sean:` / `Advisor:`."""
+    history = [
+        _chat("user", "問題A"),
+        _chat("advisor", "回答A"),
+        _chat("user", "問題B"),
+        _chat("advisor", "回答B"),
+    ]
+    msg = build_user_message(
+        playbook=_playbook(objective="x"),
+        recent_chunks=[],
+        me_display_name="Sean",
+        counterparty_display_name="林經理",
+        user_question=None,
+        locale="zh-TW",
+        chat_history=history,
+    )
+    assert "## 對話紀錄" in msg
+    # All four lines present.
+    for needed in ("Sean: 問題A", "Advisor: 回答A", "Sean: 問題B", "Advisor: 回答B"):
+        assert needed in msg, f"missing line: {needed}"
+    # In-order check.
+    assert (
+        msg.index("Sean: 問題A")
+        < msg.index("Advisor: 回答A")
+        < msg.index("Sean: 問題B")
+        < msg.index("Advisor: 回答B")
+    )
+
+
+def test_chat_history_section_sits_between_transcript_and_question():
+    """Slice-09 Decision 5: section order is playbook → 60s dialogue → chat history → question."""
+    msg = build_user_message(
+        playbook=_playbook(objective="拿下 deal"),
+        recent_chunks=[_chunk("counterparty", "對方說", _NOW)],
+        me_display_name="Sean",
+        counterparty_display_name="林經理",
+        user_question="新問題",
+        locale="zh-TW",
+        chat_history=[_chat("user", "之前問過"), _chat("advisor", "之前回過")],
+    )
+    # Heading-by-heading order check.
+    assert (
+        msg.index("## 會議 playbook")
+        < msg.index("## 最近 60 秒對話")
+        < msg.index("## 對話紀錄")
+        < msg.index("新問題")
+    )
+
+
+def test_chat_history_uses_advisor_label_not_counterparty_name():
+    """Slice-09 Decision 5: advisor lines use literal 'Advisor:', not counterparty_display_name."""
+    msg = build_user_message(
+        playbook=_playbook(),
+        recent_chunks=[],
+        me_display_name="Sean",
+        counterparty_display_name="林經理",
+        user_question=None,
+        locale="zh-TW",
+        chat_history=[_chat("advisor", "建議內容")],
+    )
+    assert "Advisor: 建議內容" in msg
+    assert "林經理: 建議內容" not in msg
+    assert "林經理：建議內容" not in msg  # also not the full-width colon variant

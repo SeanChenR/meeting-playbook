@@ -181,3 +181,76 @@ async def test_advise_passes_system_instruction_and_user_message_to_sdk():
     assert temperature == 0.4
     max_out = getattr(config, "max_output_tokens", None) or config.get("max_output_tokens")
     assert max_out == 400
+
+
+# ─── Slice 9: chat_history pass-through ───────────────────────────────────
+
+
+def _chat(role: str, content: str) -> Any:
+    return SimpleNamespace(role=role, content=content)
+
+
+@pytest.mark.asyncio
+async def test_advise_passes_chat_history_to_prompt_builder():
+    """Slice-09: chat_history flows through advise() into the user_message."""
+    captured: dict[str, Any] = {}
+
+    async def _stream(**kw):
+        captured.update(kw)
+        for t in ["t1", "t2"]:
+            yield _MockSdkChunk(t)
+
+    client = _build_mock_client(_stream)
+    advisor = VertexFlashAdvisor(client_factory=lambda: client, model_id="gemini-2.5-flash")
+
+    history = [_chat("user", "之前問過A"), _chat("advisor", "之前回過A")]
+    out = [
+        token
+        async for token in advisor.advise(
+            meeting_id="m_h",
+            recent_chunks=[_chunk("me", "現在說")],
+            playbook=_playbook(objective="ABC"),
+            me_display_name="Sean",
+            counterparty_display_name="林經理",
+            user_question=None,
+            locale="zh-TW",
+            chat_history=history,
+        )
+    ]
+
+    assert out == ["t1", "t2"], "stream output unaffected by chat_history"
+    contents = captured["contents"]
+    assert "## 對話紀錄" in contents
+    assert "Sean: 之前問過A" in contents
+    assert "Advisor: 之前回過A" in contents
+
+
+@pytest.mark.asyncio
+async def test_advise_chat_history_defaults_to_empty_when_omitted():
+    """Slice-09: chat_history is keyword-only with empty-tuple default;
+    Slice-08 callers (no chat_history kwarg) must keep working."""
+    captured: dict[str, Any] = {}
+
+    async def _stream(**kw):
+        captured.update(kw)
+        if False:
+            yield  # generator, never yields
+
+    client = _build_mock_client(_stream)
+    advisor = VertexFlashAdvisor(client_factory=lambda: client, model_id="gemini-2.5-flash")
+
+    _ = [
+        t
+        async for t in advisor.advise(
+            meeting_id="m_x",
+            recent_chunks=[],
+            playbook=_playbook(),
+            me_display_name="Sean",
+            counterparty_display_name="林經理",
+            user_question=None,
+            locale="zh-TW",
+        )
+    ]
+
+    contents = captured["contents"]
+    assert "## 對話紀錄" not in contents

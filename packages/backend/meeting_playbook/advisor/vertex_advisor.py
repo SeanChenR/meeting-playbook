@@ -19,6 +19,7 @@ from typing import Any
 
 from meeting_playbook.advisor.base import Locale
 from meeting_playbook.advisor.prompts import build_system_instruction, build_user_message
+from meeting_playbook.chat.models import ChatMessage
 from meeting_playbook.playbooks.models import Playbook
 from meeting_playbook.sessions.models import TranscriptChunk
 
@@ -57,6 +58,7 @@ class VertexFlashAdvisor:
         counterparty_display_name: str,
         user_question: str | None,
         locale: Locale,
+        chat_history: Sequence[ChatMessage] = (),
     ) -> AsyncIterator[str]:
         system_instruction = build_system_instruction(locale)
         user_message = build_user_message(
@@ -66,6 +68,7 @@ class VertexFlashAdvisor:
             counterparty_display_name=counterparty_display_name,
             user_question=user_question,
             locale=locale,
+            chat_history=chat_history,
         )
 
         client = self._get_client()

@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Literal, Protocol, runtime_checkable
 
+from meeting_playbook.chat.models import ChatMessage
 from meeting_playbook.playbooks.models import Playbook
 from meeting_playbook.sessions.models import TranscriptChunk
 
@@ -39,6 +40,7 @@ class TacticalAdvisor(Protocol):
         counterparty_display_name: str,
         user_question: str | None,
         locale: Locale,
+        chat_history: list[ChatMessage],
     ) -> AsyncIterator[str]:
         """Yield text segments per upstream SDK chunk.
 
@@ -49,6 +51,8 @@ class TacticalAdvisor(Protocol):
         - `user_question` — None for slice-08 (button-only); slice-09 chatbox
           passes the user's question.
         - `locale` — affects the output language; comes from the WS frame.
+        - `chat_history` — slice-09: prior chat_message rows for this meeting,
+          ordered ascending by `created_at`. Empty list = first turn.
 
         Implementations SHALL:
         - apply a 15-second outer `asyncio.timeout` (raises `asyncio.TimeoutError`

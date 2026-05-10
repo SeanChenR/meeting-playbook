@@ -1505,3 +1505,79 @@ tests:
   - packages/backend/tests/advisor/test_prompts.py
   - packages/backend/tests/conftest.py
 -->
+
+---
+### Requirement: Meeting end finalize spawns a fire-and-forget summary generation task
+
+When the WebSocket session handler `meeting_session_endpoint` finishes its finalize block (recording rows persisted, meeting status transitioned to `completed`, `meeting_ended` frame sent, WebSocket closed), the handler SHALL invoke `summarization.runtime.spawn_summary_task(meeting_id)` BEFORE returning. The call SHALL be fire-and-forget — the handler MUST NOT `await` the spawned task. The spawned task runs in the background, and its outcome (success or failure) is observable only via `GET /api/meetings/{id}/summary` and the backend log.
+
+The spawn SHALL run only when the meeting actually transitioned to `completed` during this session (not when status was already `completed` from a prior session, and not when finalize raised partway through). If `runtime.spawn_summary_task` returns `False` (a prior session's task is still running), the handler SHALL log an info-level message and proceed to return without raising.
+
+The fire-and-forget invocation SHALL NOT introduce any new WebSocket frame, SHALL NOT delay the WebSocket close handshake, and SHALL NOT change the existing `meeting_ended` semantics.
+
+#### Scenario: Successful end_meeting spawns a summary task without blocking the response
+
+- **GIVEN** an `in_progress` WebSocket session
+- **WHEN** the client sends `end_meeting` and the finalize block completes (status → completed, `meeting_ended` sent)
+- **THEN** `runtime.is_pending(meeting_id)` SHALL return `True` immediately after the WebSocket closes AND the WebSocket close handshake SHALL NOT have been delayed by waiting on the summary generation
+
+#### Scenario: end_meeting on an already-completed session does not double-spawn
+
+- **GIVEN** a meeting whose status was already `completed` from a prior aborted attempt AND a summary task already running for it
+- **WHEN** the WebSocket finalize block runs (which is a no-op for status transition because it's already completed)
+- **THEN** `runtime.spawn_summary_task` SHALL return `False` AND the handler SHALL log an info message AND no second background task SHALL be created
+
+#### Scenario: WebSocket close timing is independent of summary generation duration
+
+- **GIVEN** a stub `MeetingSummarizer` whose `summarize` sleeps 30 seconds
+- **WHEN** the client sends `end_meeting`
+- **THEN** the WebSocket SHALL receive `meeting_ended` and close within 5 seconds (the same upper bound as without the summary spawn) AND the summary task SHALL still be running in the background
+
+<!-- @trace
+source: slice-10-post-meeting-summary
+updated: 2026-05-11
+code:
+  - packages/backend/meeting_playbook/server.py
+  - packages/backend/alembic/versions/0006_create_summary.py
+  - packages/backend/meeting_playbook/summarization/repository.py
+  - .env.example
+  - packages/backend/meeting_playbook/summarization/base.py
+  - docs/agents/summarization.md
+  - packages/backend/meeting_playbook/summarization/runtime.py
+  - packages/backend/meeting_playbook/summarization/prompts.py
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/summarization/__init__.py
+  - packages/web/src/lib/markdown-export.ts
+  - packages/web/src/locales/en.json
+  - packages/web/src/components/summary-pane.tsx
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/web/src/components/ui/tabs.tsx
+  - packages/web/src/locales/zh-TW.json
+  - packages/backend/meeting_playbook/summarization/vertex_summarizer.py
+  - packages/backend/meeting_playbook/summarization/models.py
+  - packages/web/src/hooks/use-detail-tab.ts
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/config.py
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/web/src/lib/summary-api.ts
+  - packages/backend/meeting_playbook/summarization/dependencies.py
+  - packages/backend/meeting_playbook/summarization/router.py
+  - packages/web/tsconfig.json
+  - bun.lock
+tests:
+  - packages/backend/tests/summarization/test_runtime.py
+  - packages/web/src/lib/summary-api.test.ts
+  - packages/web/src/lib/markdown-export.test.ts
+  - packages/backend/tests/sessions/test_router_summary_spawn.py
+  - packages/backend/tests/test_alembic_summary.py
+  - packages/backend/tests/conftest.py
+  - packages/backend/tests/summarization/test_dependencies.py
+  - packages/backend/tests/summarization/test_vertex_summarizer.py
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/web/src/hooks/use-detail-tab.test.tsx
+  - packages/backend/tests/summarization/test_repository.py
+  - packages/backend/tests/summarization/test_prompts.py
+  - packages/web/src/components/summary-pane.test.tsx
+  - packages/backend/tests/summarization/test_router.py
+  - packages/backend/tests/summarization/__init__.py
+-->

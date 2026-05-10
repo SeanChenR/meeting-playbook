@@ -80,6 +80,12 @@ describe("MeetingDetail route", () => {
 
   test("renders title, display names, status, and the embedded PlaybookPane", async () => {
     fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
       if (url.includes("/playbook")) {
         return new Response(
           JSON.stringify({
@@ -129,6 +135,12 @@ describe("MeetingDetail route", () => {
         deleted = true;
         return new Response(null, { status: 204 });
       }
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify(SAMPLE_MEETING), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -156,10 +168,16 @@ describe("MeetingDetail route", () => {
   test("delete dialog cancel keeps the meeting visible", async () => {
     const user = userEvent.setup();
     let deleted = false;
-    fetchHandler = async (_, init) => {
+    fetchHandler = async (url, init) => {
       if (init?.method === "DELETE") {
         deleted = true;
         return new Response(null, { status: 204 });
+      }
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
       return new Response(JSON.stringify(SAMPLE_MEETING), {
         status: 200,
@@ -213,6 +231,12 @@ class _MockSessionWS {
 describe("MeetingDetail slice-06 session UI", () => {
   beforeEach(() => {
     fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
       if (url.includes("/playbook")) {
         return new Response(
           JSON.stringify({
@@ -356,5 +380,116 @@ describe("MeetingDetail slice-06 session UI", () => {
     const empties = screen.getAllByTestId("advisor-pane-empty");
     expect(empties.length).toBeGreaterThan(0);
     expect(screen.queryByTestId("get-advice-button")).toBeNull();
+  });
+
+  // ─── Slice-09: chat history hydrate + cache invalidate ─────────────
+
+  test("AdvisorPane renders persisted chat history bubbles on mount via React Query", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "cm_1",
+              meeting_id: "m_abc",
+              role: "user",
+              content: "對方剛說的話怎麼回",
+              created_at: "2026-05-09T10:00:00Z",
+            },
+            {
+              id: "cm_2",
+              meeting_id: "m_abc",
+              role: "advisor",
+              content: "建議內容",
+              created_at: "2026-05-09T10:00:01Z",
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/playbook")) {
+        return new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    await renderInRouter();
+
+    // Both bubbles should appear once the React Query GET resolves.
+    await waitFor(() => {
+      const bubbles = screen.queryAllByTestId("chat-bubble");
+      // Slice-7 dual layouts mount AdvisorPane twice; expect 2 bubbles per
+      // mount, so ≥ 2 total.
+      expect(bubbles.length).toBeGreaterThanOrEqual(2);
+    });
+
+    expect(screen.getAllByTestId("chat-bubble")[0]!.textContent).toContain("對方剛說的話怎麼回");
+  });
+
+  test("advice_done causes a follow-up GET /chat_messages refetch (cache invalidation)", async () => {
+    const user = userEvent.setup();
+    let chatGetCount = 0;
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        chatGetCount += 1;
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/playbook")) {
+        return new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    await waitFor(() => {
+      expect(chatGetCount).toBeGreaterThanOrEqual(1);
+    });
+    const initialCount = chatGetCount;
+
+    // Drive into in_progress, then simulate a complete advice cycle on
+    // the first WS instance (slice-7 dual layout creates 2 — both share
+    // the same hook so triggering one is enough).
+    const startButtons = screen.getAllByRole("button", { name: /^開始會議$/ });
+    await user.click(startButtons[0]!);
+    const ws = _MockSessionWS.instances[0]!;
+    ws.simulateMessage({ type: "meeting_started", meeting_id: "m_abc" });
+
+    // Click Get Advice — generates a request_id we can use for the
+    // matching advice_done frame.
+    await waitFor(() => {
+      expect(screen.queryAllByTestId("get-advice-button").length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getAllByTestId("get-advice-button")[0]!);
+
+    // Pull the request_id from the request_advice frame the hook just sent.
+    const sentReqAdvice = ws.sent
+      .map((s) => JSON.parse(s) as { type: string; request_id?: string })
+      .find((m) => m.type === "request_advice");
+    expect(sentReqAdvice).toBeDefined();
+    const requestId = sentReqAdvice!.request_id!;
+
+    ws.simulateMessage({ type: "advice_done", request_id: requestId });
+
+    await waitFor(() => {
+      expect(chatGetCount).toBeGreaterThan(initialCount);
+    });
   });
 });

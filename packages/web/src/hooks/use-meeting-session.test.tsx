@@ -271,9 +271,41 @@ describe("useMeetingSession", () => {
     });
   });
 
-  // ─── Slice 8: TacticalAdvisor lifecycle ─────────────────────────────
+  // ─── Slice 9: chat history hydration + chatbox lifecycle ──────────
 
-  test("requestAdvice + advice_chunk × 3 + advice_done → one done request with concatenated tokens", async () => {
+  test("HISTORY_LOADED replaces messages on the advisor slice", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    const sample = [
+      {
+        id: "cm_1",
+        meeting_id: "m_a",
+        role: "user" as const,
+        content: "Q1",
+        created_at: "2026-05-10T10:00:00Z",
+      },
+      {
+        id: "cm_2",
+        meeting_id: "m_a",
+        role: "advisor" as const,
+        content: "A1",
+        created_at: "2026-05-10T10:00:01Z",
+      },
+      {
+        id: "cm_3",
+        meeting_id: "m_a",
+        role: "user" as const,
+        content: "Q2",
+        created_at: "2026-05-10T10:01:00Z",
+      },
+    ];
+    act(() => {
+      result.current.loadHistory(sample);
+    });
+    expect(result.current.state.advisor.messages).toHaveLength(3);
+    expect(result.current.state.advisor.messages[1]!.content).toBe("A1");
+  });
+
+  test("sendChatMessage sends a chat_message frame with a uuid request_id and locale", () => {
     const { result } = renderHook(() => useMeetingSession("m_a"));
     act(() => {
       result.current.start();
@@ -284,33 +316,52 @@ describe("useMeetingSession", () => {
       ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
     });
     act(() => {
-      result.current.requestAdvice();
+      result.current.sendChatMessage("如果他繼續砍價呢");
     });
-    // The request_advice frame should have been sent over the wire with a
-    // generated request_id.
-    const requestAdviceSent = ws.sent
-      .map((s) => JSON.parse(s) as { type: string })
-      .find((m) => m.type === "request_advice") as
-      | { type: string; request_id: string; locale: string }
-      | undefined;
-    expect(requestAdviceSent).toBeDefined();
-    const requestId = requestAdviceSent!.request_id;
-    expect(requestAdviceSent!.locale === "zh-TW" || requestAdviceSent!.locale === "en").toBe(true);
+    const sent = ws.sent
+      .map(
+        (s) =>
+          JSON.parse(s) as { type: string; request_id?: string; content?: string; locale?: string },
+      )
+      .find((m) => m.type === "chat_message");
+    expect(sent).toBeDefined();
+    expect(sent!.content).toBe("如果他繼續砍價呢");
+    expect(typeof sent!.request_id).toBe("string");
+    expect(sent!.request_id!.length).toBeGreaterThan(0);
+    expect(["zh-TW", "en"]).toContain(sent!.locale!);
+  });
+
+  test("advice_chunk × 3 appends to inFlight.advisorTokens (concatenation)", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
+    });
+    act(() => {
+      result.current.sendChatMessage("Q");
+    });
+    const sent = ws.sent
+      .map((s) => JSON.parse(s) as { type: string; request_id?: string })
+      .find((m) => m.type === "chat_message")!;
+    const requestId = sent.request_id!;
 
     act(() => {
       ws.simulateMessage({ type: "advice_chunk", request_id: requestId, token: "a" });
       ws.simulateMessage({ type: "advice_chunk", request_id: requestId, token: "b" });
       ws.simulateMessage({ type: "advice_chunk", request_id: requestId, token: "c" });
-      ws.simulateMessage({ type: "advice_done", request_id: requestId });
     });
 
-    const reqs = result.current.state.advisor.requests;
-    expect(reqs).toHaveLength(1);
-    expect(reqs[0]!.tokens).toBe("abc");
-    expect(reqs[0]!.status).toBe("done");
+    expect(result.current.state.advisor.inFlight).not.toBeNull();
+    expect(result.current.state.advisor.inFlight!.advisorTokens).toBe("abc");
+    expect(result.current.state.advisor.inFlight!.status).toBe("streaming");
+    expect(result.current.state.advisor.inFlight!.userContent).toBe("Q");
   });
 
-  test("advisor_failed records error code on the matching request", async () => {
+  test("advice_done clears inFlight (route is responsible for refetching history)", () => {
     const { result } = renderHook(() => useMeetingSession("m_a"));
     act(() => {
       result.current.start();
@@ -321,13 +372,38 @@ describe("useMeetingSession", () => {
       ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
     });
     act(() => {
-      result.current.requestAdvice();
+      result.current.sendChatMessage("Q");
     });
-    const requestId = (
-      ws.sent
-        .map((s) => JSON.parse(s) as { type: string; request_id?: string })
-        .find((m) => m.type === "request_advice") as { request_id: string }
-    ).request_id;
+    const sent = ws.sent
+      .map((s) => JSON.parse(s) as { type: string; request_id?: string })
+      .find((m) => m.type === "chat_message")!;
+    const requestId = sent.request_id!;
+
+    act(() => {
+      ws.simulateMessage({ type: "advice_chunk", request_id: requestId, token: "ok" });
+      ws.simulateMessage({ type: "advice_done", request_id: requestId });
+    });
+
+    expect(result.current.state.advisor.inFlight).toBeNull();
+  });
+
+  test("advisor_failed sets inFlight.status='failed' with the error code", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
+    });
+    act(() => {
+      result.current.sendChatMessage("Q");
+    });
+    const sent = ws.sent
+      .map((s) => JSON.parse(s) as { type: string; request_id?: string })
+      .find((m) => m.type === "chat_message")!;
+    const requestId = sent.request_id!;
 
     act(() => {
       ws.simulateMessage({
@@ -338,10 +414,62 @@ describe("useMeetingSession", () => {
       });
     });
 
-    const reqs = result.current.state.advisor.requests;
-    expect(reqs).toHaveLength(1);
-    expect(reqs[0]!.status).toBe("failed");
-    expect(reqs[0]!.error?.code).toBe("advisor.timeout");
+    expect(result.current.state.advisor.inFlight).not.toBeNull();
+    expect(result.current.state.advisor.inFlight!.status).toBe("failed");
+    expect(result.current.state.advisor.inFlight!.error?.code).toBe("advisor.timeout");
+    // userContent preserved so the UI can offer a retry that resends the same message.
+    expect(result.current.state.advisor.inFlight!.userContent).toBe("Q");
+  });
+
+  test("requestAdvice (button path) sends request_advice frame and sets inFlight with default prompt as userContent", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
+    });
+    act(() => {
+      result.current.requestAdvice();
+    });
+    const sent = ws.sent
+      .map((s) => JSON.parse(s) as { type: string })
+      .find((m) => m.type === "request_advice");
+    expect(sent).toBeDefined();
+    // userContent is the i18n default prompt (zh-TW): 「請給出戰術建議。」
+    expect(result.current.state.advisor.inFlight!.userContent).toBe("請給出戰術建議。");
+    expect(result.current.state.advisor.inFlight!.source).toBe("button");
+  });
+
+  test("onAdviceDone callback fires when advice_done arrives", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    let observedReqId: string | null = null;
+    result.current.onAdviceDone = (rid: string) => {
+      observedReqId = rid;
+    };
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
+    });
+    act(() => {
+      result.current.sendChatMessage("Q");
+    });
+    const sent = ws.sent
+      .map((s) => JSON.parse(s) as { type: string; request_id?: string })
+      .find((m) => m.type === "chat_message")!;
+    const requestId = sent.request_id!;
+
+    act(() => {
+      ws.simulateMessage({ type: "advice_done", request_id: requestId });
+    });
+
+    expect(observedReqId).toBe(requestId);
   });
 
   test("unexpected close during in_progress triggers ONE retry then enters error", async () => {

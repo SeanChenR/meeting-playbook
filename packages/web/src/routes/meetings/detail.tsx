@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AdvisorPane } from "../../components/advisor-pane";
+import { chatMessagesQueryOptions } from "../../lib/chat-api";
 import { CaptureIndicator } from "../../components/capture-indicator";
 import { HeadphonesHint } from "../../components/headphones-hint";
 import { LayoutSwitcher } from "../../components/layout-switcher";
@@ -37,6 +38,25 @@ export function MeetingDetail() {
 
   const meeting = query.data ?? null;
   const session = useMeetingSession(meetingId);
+  const queryClient = useQueryClient();
+
+  // Slice-9: hydrate persisted chat history into the advisor reducer +
+  // wire the advice-done callback so the React Query cache invalidates
+  // when a stream completes (so the just-persisted pair refetches).
+  const chatMessagesQuery = useQuery(chatMessagesQueryOptions(meetingId, !!meetingId));
+  useEffect(() => {
+    if (Array.isArray(chatMessagesQuery.data)) {
+      session.loadHistory(chatMessagesQuery.data);
+    }
+  }, [chatMessagesQuery.data, session]);
+  useEffect(() => {
+    session.onAdviceDone = () => {
+      queryClient.invalidateQueries({ queryKey: ["chat_messages", meetingId] });
+    };
+    return () => {
+      session.onAdviceDone = null;
+    };
+  }, [session, queryClient, meetingId]);
 
   // Slice-7: derive per-stream pill state for the indicator. Outside an
   // active session (idle / connecting / ended / error) the indicator is
@@ -107,7 +127,9 @@ export function MeetingDetail() {
       counterpartyDisplayName={meeting.counterparty_display_name}
     />
   );
-  const advisorPane = meeting && <AdvisorPane session={session} />;
+  const advisorPane = meeting && (
+    <AdvisorPane session={session} meDisplayName={meeting.me_display_name} />
+  );
 
   return (
     <ProtectedShell fullBleed>
@@ -184,19 +206,19 @@ export function MeetingDetail() {
         >
           <div
             data-testid="detail-pane-playbook"
-            className="lg:h-full lg:overflow-y-auto lg:[&>*]:h-full"
+            className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
           >
             {playbookPane}
           </div>
           <div
             data-testid="detail-pane-transcript"
-            className="lg:h-full lg:overflow-y-auto lg:[&>*]:h-full"
+            className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
           >
             {transcriptPane}
           </div>
           <div
             data-testid="detail-pane-advisor"
-            className="lg:h-full lg:overflow-y-auto lg:[&>*]:h-full"
+            className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
           >
             {advisorPane}
           </div>

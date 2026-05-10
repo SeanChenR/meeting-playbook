@@ -200,7 +200,13 @@
       "thinking": "Thinking…",
       "retry": "Retry",
       "emptyState": "Start the meeting to receive live tactical advice here",
-      "cardHeading": "Tactical advice"
+      "cardHeading": "Tactical advice",
+      "send": "Send",
+      "chatPlaceholder": "Type your question…",
+      "defaultPromptText": "Please give tactical advice.",
+      "userLabel": "Me",
+      "advisorLabel": "Advisor",
+      "cmdEnterHint": "⌘+Enter to send"
     }
   },
   "calendar": {

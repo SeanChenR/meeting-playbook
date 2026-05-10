@@ -157,6 +157,31 @@ describe("openSessionSocket", () => {
     }
   });
 
+  // ─── Slice 9: chatbox client frame ────────────────────────────────
+
+  test("send({type: 'chat_message', ...}) writes the JSON payload to the underlying WS", () => {
+    installMock();
+    const sock = openSessionSocket("m_chat");
+    const ws = MockWebSocket.instances[0]!;
+    ws.simulateOpen();
+
+    sock.send({
+      type: "chat_message",
+      request_id: "r_x",
+      content: "對方剛說 X 怎麼回",
+      locale: "zh-TW",
+    });
+
+    expect(ws.sent).toHaveLength(1);
+    const parsed = JSON.parse(ws.sent[0]!);
+    expect(parsed).toEqual({
+      type: "chat_message",
+      request_id: "r_x",
+      content: "對方剛說 X 怎麼回",
+      locale: "zh-TW",
+    });
+  });
+
   // ─── Slice 8: TacticalAdvisor frames ──────────────────────────────
 
   test("parses advice_chunk / advice_done / advisor_failed into the discriminated union", () => {

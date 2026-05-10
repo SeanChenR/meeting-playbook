@@ -9,10 +9,17 @@
  *   1-second backoff, then transition to `error` if reconnect also fails
  * - On unmount: closes WS without sending end_meeting (router treats
  *   client-close as end-of-session per design)
+ *
+ * Slice-9 changes: reducer's advisor slice replaced with chat-history shape
+ * (`messages: ChatMessage[]` + `inFlight` snapshot). Persisted history is
+ * hydrated via React Query GET; in-flight token streams are local state
+ * only and clear on `advice_done` (the React Query cache is then
+ * invalidated by the route, which refetches and brings the new pair in).
  */
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import type { ChatMessage } from "../lib/chat-api";
 import {
   openSessionSocket,
   type SessionMessage,
@@ -40,23 +47,27 @@ const initialSilenceSince: SilenceSinceByStream = {
   counterparty: null,
 };
 
-// Slice-8: each user-initiated `Get Advice` press creates one AdviceRequest.
-// Past requests stay in the list so the user can scroll up (history).
-export type AdviceRequestStatus = "streaming" | "done" | "failed";
+// Slice-9: advisor slice = persisted chat history + at-most-one in-flight
+// advice. Persisted messages come from the GET /chat_messages hydration;
+// in-flight advice is local UI state only and disappears on done/failed.
+export type InFlightStatus = "streaming" | "failed";
 
-export interface AdviceRequest {
+export interface InFlightAdvice {
   requestId: string;
-  startedAt: string; // ISO8601
-  status: AdviceRequestStatus;
-  tokens: string;
+  userContent: string; // what the user actually sent (chatbox content or default prompt)
+  advisorTokens: string;
+  status: InFlightStatus;
+  // Source path so retry can pick the right WS frame to resend.
+  source: "button" | "chatbox";
   error?: { code: string; message: string };
 }
 
 export interface AdvisorState {
-  requests: AdviceRequest[];
+  messages: ChatMessage[];
+  inFlight: InFlightAdvice | null;
 }
 
-const initialAdvisor: AdvisorState = { requests: [] };
+const initialAdvisor: AdvisorState = { messages: [], inFlight: null };
 
 export type SessionState =
   | { phase: "idle"; advisor: AdvisorState }
@@ -69,8 +80,6 @@ export type SessionState =
       advisor: AdvisorState;
     }
   | {
-      // After the user clicks End: server is still draining the queued
-      // audio chunks. Late transcript_chunk frames continue to arrive.
       phase: "ending";
       chunks: TranscriptChunkMessage[];
       streamStatus: StreamStatusByStream;
@@ -89,18 +98,16 @@ type Action =
   | { type: "START" }
   | { type: "END_REQUESTED" }
   | { type: "WS_MESSAGE"; payload: SessionMessage }
-  | { type: "ADVICE_REQUESTED"; requestId: string; startedAt: string }
+  | { type: "HISTORY_LOADED"; messages: ChatMessage[] }
+  | {
+      type: "USER_MESSAGE_SENT";
+      requestId: string;
+      userContent: string;
+      source: "button" | "chatbox";
+    }
   | { type: "UNEXPECTED_CLOSE" }
   | { type: "RETRY_FAILED" }
   | { type: "RESET" };
-
-function _updateRequest(
-  requests: AdviceRequest[],
-  requestId: string,
-  patch: (r: AdviceRequest) => AdviceRequest,
-): AdviceRequest[] {
-  return requests.map((r) => (r.requestId === requestId ? patch(r) : r));
-}
 
 const initialState: SessionState = { phase: "idle", advisor: initialAdvisor };
 
@@ -118,54 +125,67 @@ function reducer(state: SessionState, action: Action): SessionState {
         };
       }
       return state;
-    case "ADVICE_REQUESTED":
+    case "HISTORY_LOADED":
+      // Equality guard: if the same array reference (React Query stable
+      // cache) lands here, return the same state object so React skips
+      // the re-render and the route's useEffect doesn't loop.
+      if (state.advisor.messages === action.messages) return state;
+      return {
+        ...state,
+        advisor: { ...state.advisor, messages: action.messages },
+      };
+    case "USER_MESSAGE_SENT":
+      // Set the in-flight advice. If something was already in-flight (e.g.
+      // failed but not retried), it is replaced — the new send supersedes.
       return {
         ...state,
         advisor: {
-          requests: [
-            ...state.advisor.requests,
-            {
-              requestId: action.requestId,
-              startedAt: action.startedAt,
-              status: "streaming",
-              tokens: "",
-            },
-          ],
+          ...state.advisor,
+          inFlight: {
+            requestId: action.requestId,
+            userContent: action.userContent,
+            advisorTokens: "",
+            status: "streaming",
+            source: action.source,
+          },
         },
       };
     case "WS_MESSAGE": {
       const msg = action.payload;
       if (msg.type === "advice_chunk") {
+        // Only mutate if the chunk's request_id matches the current in-flight.
+        const cur = state.advisor.inFlight;
+        if (cur === null || cur.requestId !== msg.request_id) return state;
         return {
           ...state,
           advisor: {
-            requests: _updateRequest(state.advisor.requests, msg.request_id, (r) => ({
-              ...r,
-              tokens: r.tokens + msg.token,
-            })),
+            ...state.advisor,
+            inFlight: { ...cur, advisorTokens: cur.advisorTokens + msg.token },
           },
         };
       }
       if (msg.type === "advice_done") {
+        // Clear in-flight; the route invalidates the React Query cache and
+        // the refetch will bring the persisted pair into `messages`.
+        const cur = state.advisor.inFlight;
+        if (cur === null || cur.requestId !== msg.request_id) return state;
         return {
           ...state,
-          advisor: {
-            requests: _updateRequest(state.advisor.requests, msg.request_id, (r) => ({
-              ...r,
-              status: "done",
-            })),
-          },
+          advisor: { ...state.advisor, inFlight: null },
         };
       }
       if (msg.type === "advisor_failed") {
+        const cur = state.advisor.inFlight;
+        if (cur === null || cur.requestId !== msg.request_id) return state;
         return {
           ...state,
           advisor: {
-            requests: _updateRequest(state.advisor.requests, msg.request_id, (r) => ({
-              ...r,
+            ...state.advisor,
+            inFlight: {
+              ...cur,
               status: "failed",
               error: { code: msg.error_code, message: msg.message },
-            })),
+            },
           },
         };
       }
@@ -196,7 +216,6 @@ function reducer(state: SessionState, action: Action): SessionState {
       }
       if (msg.type === "transcript_chunk") {
         if (state.phase === "in_progress") {
-          // Receiving chunks for a stream means it is no longer silent.
           return {
             ...state,
             chunks: [...state.chunks, msg],
@@ -224,9 +243,6 @@ function reducer(state: SessionState, action: Action): SessionState {
         };
       }
       if (msg.type === "stream_stopped") {
-        // A stream crashed mid-session. Mark it stopped; do NOT end the
-        // session — the other stream keeps producing chunks. silence_warning
-        // for the stopped stream is no longer meaningful, clear it.
         if (state.phase !== "in_progress" && state.phase !== "ending") return state;
         const next = {
           ...state,
@@ -279,22 +295,44 @@ export interface UseMeetingSessionResult {
   start: () => void;
   end: () => void;
   requestAdvice: () => void;
+  sendChatMessage: (content: string) => void;
+  loadHistory: (messages: ChatMessage[]) => void;
+  /** Notification hook: invoked after the reducer processes `advice_done`.
+   * The route uses this to invalidate the React Query cache so the persisted
+   * pair lands in `messages`. Slice-9 design.md Decision 6. */
+  onAdviceDone: ((requestId: string) => void) | null;
+}
+
+function _generateRequestId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const socketRef = useRef<SessionSocket | null>(null);
   const retryAttemptedRef = useRef<boolean>(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // True when WE close the socket (end() or unmount), so onClose can skip
-  // the unexpected-close retry path.
   const intentionalCloseRef = useRef<boolean>(false);
+  // Slice-9: route registers a callback here so the reducer can notify
+  // when a stream completes (so React Query can invalidate the chat_messages
+  // cache and refetch). Stored in a ref so the route can update it without
+  // re-wiring the WS.
+  const onAdviceDoneRef = useRef<((requestId: string) => void) | null>(null);
 
   const wireSocket = useCallback(
     (sock: SessionSocket) => {
       sock.onMessage = (msg) => {
         dispatch({ type: "WS_MESSAGE", payload: msg });
+        // Notify the route on advice_done so it can invalidate the React
+        // Query cache. Done AFTER dispatch so reducer state reflects the
+        // cleared in-flight before the route reads it.
+        if (msg.type === "advice_done" && onAdviceDoneRef.current) {
+          onAdviceDoneRef.current(msg.request_id);
+        }
         if (msg.type === "error" || msg.type === "meeting_ended") {
           intentionalCloseRef.current = true;
           sock.close();
@@ -330,9 +368,6 @@ export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
     const sock = openSessionSocket(meetingId);
     socketRef.current = sock;
     wireSocket(sock);
-    // Browser WebSocket.send before OPEN throws InvalidStateError silently
-    // inside microtasks. Defer the start_meeting frame to onOpen so it
-    // always lands.
     sock.onOpen = () => {
       sock.send({ type: "start_meeting", meeting_id: meetingId });
     };
@@ -344,26 +379,57 @@ export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
     socketRef.current.send({ type: "end_meeting", meeting_id: meetingId });
   }, [meetingId]);
 
+  const _coerceLocale = useCallback((): "zh-TW" | "en" => {
+    return i18n.language?.toLowerCase().startsWith("en") ? "en" : "zh-TW";
+  }, [i18n]);
+
   const requestAdvice = useCallback(() => {
     if (!socketRef.current) return;
-    const requestId =
-      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    const startedAt = new Date().toISOString();
-    // The backend strictly accepts "zh-TW" | "en"; coerce anything else
-    // (e.g. "en-US") down to its base by checking the prefix.
-    const lng = i18n.language?.toLowerCase().startsWith("en") ? "en" : "zh-TW";
-    dispatch({ type: "ADVICE_REQUESTED", requestId, startedAt });
+    const requestId = _generateRequestId();
+    const locale = _coerceLocale();
+    // Mirror the backend's locale-default prompt so the local in-flight
+    // bubble shows the same text the server will eventually persist.
+    const userContent = t("meetings.advisor.defaultPromptText");
+    dispatch({
+      type: "USER_MESSAGE_SENT",
+      requestId,
+      userContent,
+      source: "button",
+    });
     socketRef.current.send({
       type: "request_advice",
       request_id: requestId,
-      locale: lng,
+      locale,
     });
-  }, [i18n]);
+  }, [_coerceLocale, t]);
 
-  // Unmount cleanup: close the socket without sending end_meeting so the
-  // router treats it as a client-disconnect end-of-session.
+  const sendChatMessage = useCallback(
+    (content: string) => {
+      const trimmed = content.trim();
+      if (!trimmed || !socketRef.current) return;
+      const requestId = _generateRequestId();
+      const locale = _coerceLocale();
+      dispatch({
+        type: "USER_MESSAGE_SENT",
+        requestId,
+        userContent: trimmed,
+        source: "chatbox",
+      });
+      socketRef.current.send({
+        type: "chat_message",
+        request_id: requestId,
+        content: trimmed,
+        locale,
+      });
+    },
+    [_coerceLocale],
+  );
+
+  const loadHistory = useCallback((messages: ChatMessage[]) => {
+    dispatch({ type: "HISTORY_LOADED", messages });
+  }, []);
+
+  // Unmount cleanup
   useEffect(() => {
     return () => {
       if (retryTimerRef.current !== null) {
@@ -378,5 +444,22 @@ export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
     };
   }, []);
 
-  return { state, start, end, requestAdvice };
+  // Expose `onAdviceDone` as a getter/setter via the result object so the
+  // route can register its callback. We return a stable shape: assigning to
+  // `result.onAdviceDone = fn` writes to the ref.
+  const result: UseMeetingSessionResult = {
+    state,
+    start,
+    end,
+    requestAdvice,
+    sendChatMessage,
+    loadHistory,
+    get onAdviceDone() {
+      return onAdviceDoneRef.current;
+    },
+    set onAdviceDone(fn: ((requestId: string) => void) | null) {
+      onAdviceDoneRef.current = fn;
+    },
+  };
+  return result;
 }

@@ -1,12 +1,11 @@
 /**
- * AdvisorPane — slice-8 right-column TacticalAdvisor surface tests.
+ * AdvisorPane — slice-9 chatbox surface tests.
  *
- * Per spec tactical-advisor + meeting-detail-layout ADDED requirements:
- * - hides Get Advice button when phase != in_progress (advisor needs live ctx)
- * - keeps prior advice cards visible (history) ordered oldest → newest
- * - streaming card body grows token-by-token via MarkdownPreview
- * - failed card surfaces a Retry button bound to session.requestAdvice()
- * - disables Get Advice while a request is streaming (prevents pile-up)
+ * Per spec tactical-advisor MODIFIED requirement scenarios:
+ * - History list renders persisted chat_message rows from React Query cache
+ * - Get Advice button + chatbox controls visible only in_progress
+ * - Send button disabled while streaming
+ * - Failed in-flight surfaces a retry button bound to the right source path
  */
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
@@ -14,10 +13,12 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { AdvisorPane } from "./advisor-pane";
 import type {
-  AdviceRequest,
+  AdvisorState,
+  InFlightAdvice,
   SessionState,
   UseMeetingSessionResult,
 } from "../hooks/use-meeting-session";
+import type { ChatMessage } from "../lib/chat-api";
 
 afterEach(cleanup);
 
@@ -30,101 +31,232 @@ function _stubSession(
     start: () => {},
     end: () => {},
     requestAdvice: () => {},
+    sendChatMessage: () => {},
+    loadHistory: () => {},
+    onAdviceDone: null,
     ...overrides,
   };
 }
 
-function _idleState(advisorRequests: AdviceRequest[] = []): SessionState {
-  return { phase: "idle", advisor: { requests: advisorRequests } };
+function _advisor(
+  messages: ChatMessage[] = [],
+  inFlight: InFlightAdvice | null = null,
+): AdvisorState {
+  return { messages, inFlight };
 }
 
-function _inProgressState(advisorRequests: AdviceRequest[] = []): SessionState {
+function _idleState(advisor: AdvisorState = _advisor()): SessionState {
+  return { phase: "idle", advisor };
+}
+
+function _inProgressState(advisor: AdvisorState = _advisor()): SessionState {
   return {
     phase: "in_progress",
     chunks: [],
     silenceSinceByStream: { me: null, counterparty: null },
     streamStatus: { me: "active", counterparty: "active" },
-    advisor: { requests: advisorRequests },
+    advisor,
   };
 }
 
+function _endedState(advisor: AdvisorState = _advisor()): SessionState {
+  return { phase: "ended", chunks: [], advisor };
+}
+
+const _MSG = (id: string, role: "user" | "advisor", content: string): ChatMessage => ({
+  id,
+  meeting_id: "m_x",
+  role,
+  content,
+  created_at: "2026-05-10T10:00:00Z",
+});
+
 describe("AdvisorPane", () => {
-  test("phase=idle shows empty state and HIDES the Get Advice button", () => {
-    render(<AdvisorPane session={_stubSession(_idleState())} />);
+  test("renders persisted chat history bubbles when state has messages", () => {
+    const messages = [
+      _MSG("cm_1", "user", "Q1"),
+      _MSG("cm_2", "advisor", "A1"),
+      _MSG("cm_3", "user", "Q2"),
+      _MSG("cm_4", "advisor", "A2"),
+    ];
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(_advisor(messages)))}
+        meDisplayName="Sean"
+      />,
+    );
+    const bubbles = screen.getAllByTestId("chat-bubble");
+    expect(bubbles).toHaveLength(4);
+    expect(bubbles[0]!.getAttribute("data-role")).toBe("user");
+    expect(bubbles[1]!.getAttribute("data-role")).toBe("advisor");
+  });
+
+  test("phase=idle with no history → empty state visible, no chatbox / button", () => {
+    render(<AdvisorPane session={_stubSession(_idleState())} meDisplayName="Sean" />);
     expect(screen.queryByTestId("advisor-pane-empty")).not.toBeNull();
     expect(screen.queryByTestId("get-advice-button")).toBeNull();
+    expect(screen.queryByTestId("chat-input-textarea")).toBeNull();
+    expect(screen.queryByTestId("chat-input-send")).toBeNull();
   });
 
-  test("two consecutive done requests render two cards in array order (oldest first)", () => {
-    const reqs: AdviceRequest[] = [
-      {
-        requestId: "req_1",
-        startedAt: "2026-05-10T10:00:00Z",
-        status: "done",
-        tokens: "first advice",
-      },
-      {
-        requestId: "req_2",
-        startedAt: "2026-05-10T10:05:00Z",
-        status: "done",
-        tokens: "second advice",
-      },
-    ];
-    render(<AdvisorPane session={_stubSession(_inProgressState(reqs))} />);
-    const cards = screen.getAllByTestId("advice-card");
-    expect(cards).toHaveLength(2);
-    // First card should be the oldest (req_1).
-    expect(cards[0]!.textContent).toContain("first advice");
-    expect(cards[1]!.textContent).toContain("second advice");
+  test("phase=in_progress with no history → empty state hidden, button + chatbox visible", () => {
+    render(<AdvisorPane session={_stubSession(_inProgressState())} meDisplayName="Sean" />);
+    // In-progress + zero messages: empty state suppressed; controls show.
+    expect(screen.queryByTestId("get-advice-button")).not.toBeNull();
+    expect(screen.queryByTestId("chat-input-textarea")).not.toBeNull();
+    expect(screen.queryByTestId("chat-input-send")).not.toBeNull();
   });
 
-  test("streaming request body shows the accumulated tokens via MarkdownPreview", () => {
-    const reqs: AdviceRequest[] = [
-      {
-        requestId: "req_1",
-        startedAt: "2026-05-10T10:00:00Z",
-        status: "streaming",
-        tokens: "abc",
-      },
-    ];
-    render(<AdvisorPane session={_stubSession(_inProgressState(reqs))} />);
-    // MarkdownPreview wraps the body in [data-testid="markdown-preview"].
-    const preview = screen.getByTestId("markdown-preview");
-    expect(preview.textContent).toContain("abc");
-    // Streaming card surfaces the "thinking" indicator next to the heading.
-    expect(screen.queryByTestId("advice-thinking")).not.toBeNull();
+  test("phase=ended with persisted history → bubbles visible, controls hidden", () => {
+    const messages = [_MSG("cm_1", "user", "Q1"), _MSG("cm_2", "advisor", "A1")];
+    render(
+      <AdvisorPane session={_stubSession(_endedState(_advisor(messages)))} meDisplayName="Sean" />,
+    );
+    expect(screen.getAllByTestId("chat-bubble")).toHaveLength(2);
+    expect(screen.queryByTestId("get-advice-button")).toBeNull();
+    expect(screen.queryByTestId("chat-input-textarea")).toBeNull();
+    expect(screen.queryByTestId("chat-input-send")).toBeNull();
   });
 
-  test("failed request renders Retry button; clicking it calls session.requestAdvice", () => {
+  test("inFlight streaming → 2 virtual bubbles appended; advisor bubble shows accumulated tokens", () => {
+    const inFlight: InFlightAdvice = {
+      requestId: "r1",
+      userContent: "X",
+      advisorTokens: "abc",
+      status: "streaming",
+      source: "chatbox",
+    };
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(_advisor([], inFlight)))}
+        meDisplayName="Sean"
+      />,
+    );
+    const bubbles = screen.getAllByTestId("chat-bubble");
+    expect(bubbles).toHaveLength(2);
+    expect(bubbles[0]!.getAttribute("data-role")).toBe("user");
+    expect(bubbles[0]!.textContent).toContain("X");
+    expect(bubbles[1]!.getAttribute("data-role")).toBe("advisor");
+    expect(bubbles[1]!.textContent).toContain("abc");
+  });
+
+  test("inFlight streaming with empty tokens → advisor bubble shows the localised 'thinking' text", () => {
+    const inFlight: InFlightAdvice = {
+      requestId: "r1",
+      userContent: "X",
+      advisorTokens: "",
+      status: "streaming",
+      source: "chatbox",
+    };
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(_advisor([], inFlight)))}
+        meDisplayName="Sean"
+      />,
+    );
+    const bubbles = screen.getAllByTestId("chat-bubble");
+    // zh-TW default: "思考中…"
+    expect(bubbles[1]!.textContent).toContain("思考中");
+  });
+
+  test("Send button is disabled while inFlight is streaming", () => {
+    const inFlight: InFlightAdvice = {
+      requestId: "r1",
+      userContent: "X",
+      advisorTokens: "...",
+      status: "streaming",
+      source: "chatbox",
+    };
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(_advisor([], inFlight)))}
+        meDisplayName="Sean"
+      />,
+    );
+    const send = screen.getByTestId("chat-input-send") as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    const adv = screen.getByTestId("get-advice-button") as HTMLButtonElement;
+    expect(adv.disabled).toBe(true);
+  });
+
+  test("Failed in-flight (chatbox source) renders Retry → calls sendChatMessage with original userContent", () => {
+    const sendChatMessage = mock(() => {});
     const requestAdvice = mock(() => {});
-    const reqs: AdviceRequest[] = [
-      {
-        requestId: "req_x",
-        startedAt: "2026-05-10T10:00:00Z",
-        status: "failed",
-        tokens: "",
-        error: { code: "advisor.timeout", message: "Vertex timed out" },
-      },
-    ];
-    render(<AdvisorPane session={_stubSession(_inProgressState(reqs), { requestAdvice })} />);
-    const retry = screen.getByTestId("advice-retry-button");
-    fireEvent.click(retry);
-    expect(requestAdvice).toHaveBeenCalledTimes(1);
-    // The localized timeout error text (zh-TW default) should appear.
-    expect(screen.getByTestId("advice-card").textContent).toContain("逾時");
+    const inFlight: InFlightAdvice = {
+      requestId: "r1",
+      userContent: "如果他繼續砍價",
+      advisorTokens: "",
+      status: "failed",
+      source: "chatbox",
+      error: { code: "advisor.timeout", message: "Vertex stream timed out after 15s" },
+    };
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(_advisor([], inFlight)), {
+          sendChatMessage,
+          requestAdvice,
+        })}
+        meDisplayName="Sean"
+      />,
+    );
+    fireEvent.click(screen.getByTestId("advice-retry-button"));
+    expect(sendChatMessage).toHaveBeenCalledTimes(1);
+    expect(sendChatMessage.mock.calls[0]![0]).toBe("如果他繼續砍價");
+    expect(requestAdvice).not.toHaveBeenCalled();
+    // Failed advisor bubble shows the localised error.
+    const bubbles = screen.getAllByTestId("chat-bubble");
+    expect(bubbles[1]!.textContent).toContain("逾時");
   });
 
-  test("Get Advice button is disabled while last request is streaming", () => {
-    const reqs: AdviceRequest[] = [
-      {
-        requestId: "req_1",
-        startedAt: "2026-05-10T10:00:00Z",
-        status: "streaming",
-        tokens: "...",
-      },
-    ];
-    render(<AdvisorPane session={_stubSession(_inProgressState(reqs))} />);
-    const button = screen.getByTestId("get-advice-button") as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
+  test("Failed in-flight (button source) renders Retry → calls requestAdvice", () => {
+    const sendChatMessage = mock(() => {});
+    const requestAdvice = mock(() => {});
+    const inFlight: InFlightAdvice = {
+      requestId: "r1",
+      userContent: "請給出戰術建議。",
+      advisorTokens: "",
+      status: "failed",
+      source: "button",
+      error: { code: "advisor.unknown", message: "boom" },
+    };
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(_advisor([], inFlight)), {
+          sendChatMessage,
+          requestAdvice,
+        })}
+        meDisplayName="Sean"
+      />,
+    );
+    fireEvent.click(screen.getByTestId("advice-retry-button"));
+    expect(requestAdvice).toHaveBeenCalledTimes(1);
+    expect(sendChatMessage).not.toHaveBeenCalled();
+  });
+
+  test("Get Advice button calls session.requestAdvice when clicked", () => {
+    const requestAdvice = mock(() => {});
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(), { requestAdvice })}
+        meDisplayName="Sean"
+      />,
+    );
+    fireEvent.click(screen.getByTestId("get-advice-button"));
+    expect(requestAdvice).toHaveBeenCalledTimes(1);
+  });
+
+  test("Sending a chat message via ChatInput Send calls session.sendChatMessage", () => {
+    const sendChatMessage = mock(() => {});
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(), { sendChatMessage })}
+        meDisplayName="Sean"
+      />,
+    );
+    const ta = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "對方剛說 X" } });
+    fireEvent.click(screen.getByTestId("chat-input-send"));
+    expect(sendChatMessage).toHaveBeenCalledTimes(1);
+    expect(sendChatMessage.mock.calls[0]![0]).toBe("對方剛說 X");
   });
 });

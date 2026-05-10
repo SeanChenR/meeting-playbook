@@ -98,7 +98,21 @@ export type RequestAdviceMessage = {
   user_question?: string | null;
 };
 
-export type ClientMessage = StartMeetingMessage | EndMeetingMessage | RequestAdviceMessage;
+// Slice-9: chatbox follow-up. `content` is the user's typed question;
+// `request_id` is a client-generated UUID used for correlating the response
+// back to the right card.
+export type ChatMessageRequestMessage = {
+  type: "chat_message";
+  request_id: string;
+  content: string;
+  locale: "zh-TW" | "en";
+};
+
+export type ClientMessage =
+  | StartMeetingMessage
+  | EndMeetingMessage
+  | RequestAdviceMessage
+  | ChatMessageRequestMessage;
 
 // ─── Wrapper ───────────────────────────────────────────────────────────────
 

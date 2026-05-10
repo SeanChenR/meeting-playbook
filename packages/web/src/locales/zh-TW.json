@@ -200,7 +200,13 @@
       "thinking": "思考中…",
       "retry": "重試",
       "emptyState": "會議開始後可在此取得即時戰術建議",
-      "cardHeading": "戰術建議"
+      "cardHeading": "戰術建議",
+      "send": "傳送",
+      "chatPlaceholder": "輸入問題…",
+      "defaultPromptText": "請給出戰術建議。",
+      "userLabel": "我",
+      "advisorLabel": "Advisor",
+      "cmdEnterHint": "⌘+Enter 送出"
     }
   },
   "calendar": {

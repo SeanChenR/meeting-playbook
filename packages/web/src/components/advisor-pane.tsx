@@ -1,140 +1,125 @@
 /**
- * AdvisorPane — right-column TacticalAdvisor surface.
+ * AdvisorPane — slice-9 right-column TacticalAdvisor surface.
  *
- * Slice-8: replaces the slice-7 placeholder pane. Renders:
- * - history list of advice cards (oldest → newest), each rendered via
- *   MarkdownPreview so Vertex Flash's bullet markdown shows nicely
- * - "Get Advice" button at the bottom (slice-9 will add a chatbox above it)
- * - failed cards include a Retry button that re-issues request_advice
+ * Three vertical sections per design.md Decision 8:
+ *   1. ChatMessageList (top, scrolling) — persisted history + virtual
+ *      in-flight bubbles
+ *   2. Get Advice button (middle) — only rendered when phase === "in_progress"
+ *   3. ChatInput (bottom) — textarea + Send, also only when in_progress
  *
- * When `session.state.phase !== "in_progress"`, the pane shows an empty
- * state and HIDES the Get Advice button — advice only makes sense while
- * the meeting is live (we need recent transcript chunks for context).
+ * Outside `in_progress`, the input controls hide but history bubbles
+ * remain visible so the user can review past conversation.
+ *
+ * In-flight advice is rendered as two virtual ChatMessage bubbles
+ * (user + advisor) appended to the persisted list. On `advice_done` the
+ * route invalidates the React Query cache; the refetched response
+ * brings the persisted pair into messages and the virtual pair vanishes.
  */
 
-import { useEffect, useRef } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { localizedErrorMessage } from "../lib/i18n-errors";
-import { MarkdownPreview } from "../lib/markdown-preview";
 import type { UseMeetingSessionResult } from "../hooks/use-meeting-session";
+import type { ChatMessage } from "../lib/chat-api";
+import { localizedErrorMessage } from "../lib/i18n-errors";
+import { ChatInput } from "./chat-input";
+import { ChatMessageList } from "./chat-message-list";
 import { Button } from "./ui/button";
-import { Card } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 export interface AdvisorPaneProps {
   session: UseMeetingSessionResult;
+  meDisplayName: string;
 }
 
-function _formatTime(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "";
-  }
-}
+const _IN_FLIGHT_USER_ID = "__inflight_user__";
+const _IN_FLIGHT_ADVISOR_ID = "__inflight_advisor__";
 
-export function AdvisorPane({ session }: AdvisorPaneProps) {
+export function AdvisorPane({ session, meDisplayName }: AdvisorPaneProps) {
   const { t } = useTranslation();
-  const requests = session.state.advisor.requests;
-  const lastStatus = requests.at(-1)?.status;
-  const isStreaming = lastStatus === "streaming";
+  const phase = session.state.phase;
+  const isLive = phase === "in_progress";
+  const advisor = session.state.advisor;
+  const inFlight = advisor.inFlight;
+  const isStreaming = inFlight?.status === "streaming";
 
-  const listRef = useRef<HTMLDivElement | null>(null);
-  // Auto-scroll the list to the latest card whenever a new card is added or
-  // the streaming card grows. Cheap because the only thing that changes here
-  // is `requests.length` + the current card's `tokens` length.
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [requests.length, requests.at(-1)?.tokens.length]);
+  // Combine persisted messages with the in-flight virtual bubbles. The
+  // virtual user bubble shows the user's typed content immediately so the
+  // UI doesn't feel laggy while waiting for the first advice token. The
+  // virtual advisor bubble grows as `advice_chunk` frames arrive; while
+  // empty it shows the localised "thinking…" placeholder.
+  const renderedMessages: ChatMessage[] = useMemo(() => {
+    if (inFlight === null) return advisor.messages;
+    const meeting_id = advisor.messages[0]?.meeting_id ?? "__inflight__";
+    const now = new Date().toISOString();
+    const userBubble: ChatMessage = {
+      id: _IN_FLIGHT_USER_ID,
+      meeting_id,
+      role: "user",
+      content: inFlight.userContent,
+      created_at: now,
+    };
+    const advisorContent =
+      inFlight.status === "failed"
+        ? localizedErrorMessage(inFlight.error?.code ?? "advisor.unknown", t)
+        : inFlight.advisorTokens === ""
+          ? t("meetings.advisor.thinking")
+          : inFlight.advisorTokens;
+    const advisorBubble: ChatMessage = {
+      id: _IN_FLIGHT_ADVISOR_ID,
+      meeting_id,
+      role: "advisor",
+      content: advisorContent,
+      created_at: now,
+    };
+    return [...advisor.messages, userBubble, advisorBubble];
+  }, [advisor.messages, inFlight, t]);
 
-  // Slice-08 round 2: keep history visible across phases. The "Get Advice"
-  // button only makes sense while the meeting is live (we need recent
-  // transcript chunks for context), but past advice cards stay readable
-  // even after End — Sean asked for this so he can review the LLM output
-  // post-meeting without losing it the moment he clicks End.
-  const isLive = session.state.phase === "in_progress";
-  const showEmptyState = !isLive && requests.length === 0;
+  const showEmptyState = renderedMessages.length === 0 && !isLive;
+
+  // Retry for a failed in-flight: resend via the original source path.
+  const _retry = () => {
+    if (inFlight === null || !isLive) return;
+    if (inFlight.source === "chatbox") {
+      session.sendChatMessage(inFlight.userContent);
+    } else {
+      session.requestAdvice();
+    }
+  };
 
   return (
-    <section
-      data-testid="advisor-pane"
-      className="flex h-full flex-col gap-3 rounded-md border border-border bg-card p-4"
-    >
-      <header className="flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold">{t("meetings.advisor.heading")}</h2>
-      </header>
-
-      {showEmptyState ? (
-        <div
-          data-testid="advisor-pane-empty"
-          className="flex flex-1 items-center justify-center text-sm text-muted-foreground"
-        >
-          {t("meetings.advisor.emptyState")}
-        </div>
-      ) : (
-        <>
-          <div ref={listRef} className="flex flex-1 flex-col gap-3 overflow-y-auto">
-            {requests.length === 0 ? (
-              <div
-                data-testid="advisor-pane-no-requests"
-                className="flex flex-1 items-center justify-center text-sm text-muted-foreground"
-              >
-                {t("meetings.advisor.emptyState")}
-              </div>
-            ) : (
-              requests.map((req) => (
-                <Card
-                  key={req.requestId}
-                  data-testid="advice-card"
-                  data-status={req.status}
-                  className="p-3"
-                >
-                  <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      {_formatTime(req.startedAt)} · {t("meetings.advisor.cardHeading")}
-                    </span>
-                    {req.status === "streaming" ? (
-                      <span data-testid="advice-thinking">{t("meetings.advisor.thinking")}</span>
-                    ) : null}
-                  </div>
-                  {req.status === "failed" ? (
-                    <div className="space-y-2">
-                      <p className="text-sm text-destructive">
-                        {localizedErrorMessage(req.error?.code ?? "advisor.unknown", t)}
-                      </p>
-                      {/* Slice-08 round 2: surface the raw backend message
-                          so Sean can debug from the UI without tailing logs.
-                          Hidden when message is empty / equal to the code. */}
-                      {req.error?.message && req.error.message !== req.error.code ? (
-                        <p
-                          data-testid="advice-failed-detail"
-                          className="text-xs text-muted-foreground break-words"
-                        >
-                          {req.error.message}
-                        </p>
-                      ) : null}
-                      {isLive ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          data-testid="advice-retry-button"
-                          onClick={() => session.requestAdvice()}
-                        >
-                          {t("meetings.advisor.retry")}
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <MarkdownPreview source={req.tokens} />
-                  )}
-                </Card>
-              ))
-            )}
+    <Card data-testid="advisor-pane" className="flex h-full flex-col">
+      <CardHeader>
+        <CardTitle>{t("meetings.advisor.heading")}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-1 flex-col gap-3 overflow-hidden">
+        {showEmptyState ? (
+          <div
+            data-testid="advisor-pane-empty"
+            className="flex flex-1 items-center justify-center text-sm text-(--color-muted-foreground)"
+          >
+            {t("meetings.advisor.emptyState")}
           </div>
-          {isLive ? (
+        ) : (
+          <ChatMessageList messages={renderedMessages} meDisplayName={meDisplayName} />
+        )}
+
+        {/* Failed in-flight: surface a retry button (only meaningful in_progress). */}
+        {inFlight?.status === "failed" && isLive ? (
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="advice-retry-button"
+              onClick={_retry}
+            >
+              {t("meetings.advisor.retry")}
+            </Button>
+          </div>
+        ) : null}
+
+        {isLive ? (
+          <>
             <Button
               type="button"
               data-testid="get-advice-button"
@@ -143,9 +128,10 @@ export function AdvisorPane({ session }: AdvisorPaneProps) {
             >
               {t("meetings.advisor.getAdviceButton")}
             </Button>
-          ) : null}
-        </>
-      )}
-    </section>
+            <ChatInput onSend={session.sendChatMessage} disabled={isStreaming} />
+          </>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

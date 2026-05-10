@@ -14,6 +14,8 @@ use; tests pin its surface contract here.
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -181,3 +183,62 @@ async def test_create_defaults_asr_provider_to_whisper(db_session: AsyncSession)
     )
 
     assert meeting.asr_provider == "whisper"
+
+
+@pytest.mark.asyncio
+async def test_create_with_scheduled_times(db_session: AsyncSession):
+    """Slice-07: scheduled_start_at + scheduled_end_at round-trip via get_for_user."""
+    from datetime import datetime
+
+    await _seed_user(db_session, user_id="user_sched")
+    start = datetime(2026, 6, 15, 14, 0, tzinfo=UTC)
+    end = datetime(2026, 6, 15, 15, 0, tzinfo=UTC)
+
+    repo = MeetingRepository(db_session)
+    created = await repo.create(
+        user_id="user_sched",
+        title="with schedule",
+        counterparty_display_name="林",
+        me_display_name="Sean",
+        scheduled_start_at=start,
+        scheduled_end_at=end,
+    )
+
+    fetched = await repo.get_for_user(user_id="user_sched", meeting_id=created.id)
+    assert fetched is not None
+    assert fetched.scheduled_start_at == start
+    assert fetched.scheduled_end_at == end
+
+
+@pytest.mark.asyncio
+async def test_create_without_scheduled_times_stays_null(db_session: AsyncSession):
+    """Slice-07: scheduled_start_at / scheduled_end_at default to NULL when omitted."""
+    await _seed_user(db_session, user_id="user_no_sched")
+
+    repo = MeetingRepository(db_session)
+    created = await repo.create(
+        user_id="user_no_sched",
+        title="no schedule",
+        counterparty_display_name="林",
+        me_display_name="Sean",
+    )
+
+    assert created.scheduled_start_at is None
+    assert created.scheduled_end_at is None
+
+
+@pytest.mark.asyncio
+async def test_create_with_calendar_event_id(db_session: AsyncSession):
+    """Slice-07: calendar_event_id is now a create() kwarg (was UPDATEd post-hoc)."""
+    await _seed_user(db_session, user_id="user_cal")
+
+    repo = MeetingRepository(db_session)
+    created = await repo.create(
+        user_id="user_cal",
+        title="from calendar",
+        counterparty_display_name="林",
+        me_display_name="Sean",
+        calendar_event_id="gcal_evt_42",
+    )
+
+    assert created.calendar_event_id == "gcal_evt_42"

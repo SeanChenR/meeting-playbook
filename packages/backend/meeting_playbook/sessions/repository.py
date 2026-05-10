@@ -10,11 +10,10 @@ emission").
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_playbook.sessions.models import Recording, TranscriptChunk
 
@@ -29,6 +28,15 @@ class SessionRepository:
             select(TranscriptChunk)
             .where(TranscriptChunk.meeting_id == meeting_id)
             .order_by(TranscriptChunk.started_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def list_recordings_for_meeting(self, meeting_id: str) -> list[Recording]:
+        """All recording rows for a meeting (slice-7: up to two — me + counterparty)."""
+        result = await self._session.execute(
+            select(Recording)
+            .where(Recording.meeting_id == meeting_id)
+            .order_by(Recording.stream.asc())
         )
         return list(result.scalars().all())
 
@@ -52,7 +60,7 @@ class SessionRepository:
             ended_at=ended_at,
             asr_provider_used=asr_provider_used,
             confidence=confidence,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         self._session.add(chunk)
         # Commit per chunk (NOT just flush) so a server crash mid-session
@@ -76,7 +84,7 @@ class SessionRepository:
             stream=stream,
             file_path=file_path,
             bytes=bytes_size,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         self._session.add(rec)
         await self._session.flush()

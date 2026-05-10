@@ -22,6 +22,8 @@ class MeetingCreate(BaseModel):
     title: str = Field(min_length=1)
     counterparty_display_name: str = Field(min_length=1)
     me_display_name: str = Field(min_length=1)
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
 
     @field_validator("title", "counterparty_display_name", "me_display_name", mode="before")
     @classmethod
@@ -46,5 +48,7 @@ class MeetingRead(BaseModel):
     created_at: datetime
     started_at: datetime | None
     ended_at: datetime | None
+    scheduled_start_at: datetime | None
+    scheduled_end_at: datetime | None
 
     model_config = {"from_attributes": True}

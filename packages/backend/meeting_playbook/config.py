@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     whisper_device: str = "auto"
     whisper_compute_type: str = "auto"
 
+    # Slice 7 — dual-stream device discovery overrides (both optional)
+    blackhole_device_name: str | None = None
+    mic_device_name: str | None = None
+
     # Backend service URL (gateway forwards /api/* here)
     backend_url: str = "http://localhost:8000"
 

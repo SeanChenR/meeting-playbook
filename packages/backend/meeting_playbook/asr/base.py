@@ -45,5 +45,15 @@ class ASRProvider(Protocol):
         language_hint: str | None = None,
     ) -> TranscriptChunk: ...
 
+    async def warmup(self) -> None:
+        """Optional: pre-load any heavy resources so the first transcribe_chunk
+        does not pay the cold-start cost. Idempotent. Implementations that
+        have no expensive setup MAY make this a no-op.
+
+        Slice-7 SessionService awaits warmup() on every per-stream provider in
+        parallel via asyncio.gather before the first audio chunk arrives.
+        """
+        ...
+
 
 __all__ = ["ASRProvider", "TranscriptChunk"]

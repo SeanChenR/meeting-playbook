@@ -89,3 +89,18 @@ def _event(
 def test_pick_counterparty(attendees, user_email, organizer, title, expected):
     result = pick_counterparty(_event(attendees, organizer, title), user_email)
     assert result == expected
+
+
+def test_pick_counterparty_skips_room_after_upstream_filter():
+    """Slice-7 round 2 regression guard: when `_event_from_resource` has already
+    dropped resource attendees, `pick_counterparty` sees only humans and returns
+    the right one. The bug was the room name landing here before the filter."""
+    # Post-filter state: room is gone, only Sean (viewer) and 林經理 remain.
+    attendees = ['"Sean" <sean@x>', '"林經理" <lin@x>']
+    result = pick_counterparty(
+        _event(attendees, organizer="Sean", title="Q3 review"),
+        user_email="sean@x",
+    )
+    assert result == "林經理"
+    assert "龍貓" not in result
+    assert "MCTW" not in result

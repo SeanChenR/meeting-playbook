@@ -1,12 +1,14 @@
 """WebSocket router — /api/meetings/{id}/session.
 
-Per slice-06 design ("WebSocket endpoint design"):
-- Auth + ownership gate BEFORE the WebSocket accept handshake
-- First client message MUST be `start_meeting` with matching id
-- Atomic status transition scheduled → in_progress before capture starts
-- One serial pipeline (SessionService) drives capture → ASR → persist → emit
-- Client `end_meeting` OR client disconnect both finalize: capture closed,
-  WAV file persisted to recording row, status → completed, meeting_ended sent
+Slice-07 evolution: opens TWO capture streams (me + counterparty) via the
+dual-stream capture factory. Pre-flight rejects the session with
+`session.no_blackhole_device` when BlackHole is missing. Two ASRProviders
+are warmed up in parallel before the first chunk arrives. Per-stream
+failures during the session are handled inside SessionService and surface
+as `stream_stopped` frames.
+
+Per design.md (`Pre-flight check: device-exists only (relaxed)`,
+`Failure isolation: partial fault tolerance during in_progress`).
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from contextlib import AsyncExitStack
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket
@@ -21,6 +24,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_playbook.asr.base import ASRProvider
+from meeting_playbook.audio.devices import MicDeviceNotFound, NoBlackholeDevice
 from meeting_playbook.meetings.dependencies import (
     get_session_dependency,
     get_user_id_dependency,
@@ -31,7 +35,8 @@ from meeting_playbook.meetings.repository import (
 )
 from meeting_playbook.sessions.dependencies import (
     CaptureFactory,
-    get_asr_provider_dependency,
+    Stream,
+    get_asr_providers_dependency,
     get_capture_factory_dependency,
 )
 from meeting_playbook.sessions.messages import (
@@ -48,7 +53,6 @@ from meeting_playbook.sessions.service import SessionService
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["sessions"])
 
-# Custom WebSocket close codes (4000-4999 reserved for application use).
 _CLOSE_AUTH_BYPASS = 4401
 _CLOSE_NOT_FOUND = 4404
 
@@ -88,7 +92,7 @@ async def list_transcript_chunks(
 async def meeting_session_endpoint(
     websocket: WebSocket,
     meeting_id: str,
-    asr_provider: Annotated[ASRProvider, Depends(get_asr_provider_dependency)],
+    providers: Annotated[dict[Stream, ASRProvider], Depends(get_asr_providers_dependency)],
     capture_factory: Annotated[CaptureFactory, Depends(get_capture_factory_dependency)],
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
 ) -> None:
@@ -105,7 +109,6 @@ async def meeting_session_endpoint(
 
     await websocket.accept()
 
-    # Helper: send a Pydantic message as JSON.
     async def _send(model_or_dict) -> None:
         if hasattr(model_or_dict, "model_dump_json"):
             await websocket.send_text(model_or_dict.model_dump_json())
@@ -117,7 +120,7 @@ async def meeting_session_endpoint(
     async def _send_error(code: str, message: str) -> None:
         await _send(ErrorMessage(error_code=code, message=message))
 
-    # ─── Wait for the first client message: must be start_meeting ──────────
+    # ─── First client message: must be start_meeting matching path id ─────
     try:
         raw = await websocket.receive_text()
         client_msg = parse_client_message(raw)
@@ -138,7 +141,23 @@ async def meeting_session_endpoint(
         await websocket.close()
         return
 
-    # ─── Transition status scheduled → in_progress ─────────────────────────
+    # ─── Pre-flight: build the two captures (BlackHole + mic) ─────────────
+    # The factory raises NoBlackholeDevice / MicDeviceNotFound on failure;
+    # we map both to typed error frames before any status transition or
+    # WebSocket teardown. Status remains `scheduled` so the user can retry
+    # after fixing their audio config.
+    try:
+        captures = capture_factory(meeting_id)
+    except NoBlackholeDevice as exc:
+        await _send_error("session.no_blackhole_device", str(exc))
+        await websocket.close()
+        return
+    except MicDeviceNotFound as exc:
+        await _send_error("session.no_audio_device", str(exc))
+        await websocket.close()
+        return
+
+    # ─── Transition status scheduled → in_progress ────────────────────────
     try:
         await meeting_repo.transition_status(
             meeting_id=meeting_id, expected_from="scheduled", target="in_progress"
@@ -152,20 +171,38 @@ async def meeting_session_endpoint(
         await websocket.close()
         return
 
+    # ─── Warm up both providers in parallel — model load is the slowest
+    # cold-start step (~10–25s on first ever run); running both providers
+    # via asyncio.gather keeps the wall-clock cost equivalent to one. ────
+    try:
+        await asyncio.gather(*(p.warmup() for p in providers.values()))
+    except Exception as exc:
+        logger.exception("ASR warmup failed: %s", exc)
+        await _send_error("session.stream_failed_at_start", f"ASR warmup failed: {exc}")
+        # Roll status back so the user can retry.
+        with contextlib.suppress(MeetingStatusConflict):
+            await meeting_repo.transition_status(
+                meeting_id=meeting_id,
+                expected_from="in_progress",
+                target="completed",
+            )
+            await session.commit()
+        await websocket.close()
+        return
+
     await _send(MeetingStartedMessage(meeting_id=meeting_id))
 
-    # ─── Run the orchestration loop until end_meeting OR client disconnect ─
-    capture = capture_factory(meeting_id)
     session_repo = SessionRepository(session)
     service = SessionService(
         meeting_id=meeting_id,
-        asr_provider=asr_provider,
+        captures=captures,
+        providers=providers,
         session_repo=session_repo,
         send=_send,
     )
 
     async def _client_listener() -> None:
-        """Listen for the client's end_meeting (or disconnect); request stop."""
+        """Listen for end_meeting (or disconnect); request graceful capture stop."""
         try:
             while True:
                 raw = await websocket.receive_text()
@@ -180,23 +217,31 @@ async def meeting_session_endpoint(
                 if isinstance(msg, EndMeetingMessage):
                     return
         finally:
-            # Either end_meeting was received OR the client disconnected.
-            # Request graceful stop on the capture; service.run will then
-            # drain the queued chunks (including the final partial buffer)
-            # and exit naturally instead of being cancelled mid-transcribe.
-            await capture.stop()
+            # Gracefully stop both captures so service.run drains queued
+            # chunks (including each capture's final partial buffer) before
+            # the WebSocket finalizes.
+            for cap in captures.values():
+                with contextlib.suppress(Exception):
+                    await cap.stop()
 
     async def _capture_runner() -> None:
-        async with capture:
-            await service.run(capture)
+        # AsyncExitStack atomically enters BOTH capture contexts. If either
+        # fails to enter (e.g. RawInputStream couldn't open the device),
+        # the stack closes anything that was already entered and re-raises.
+        async with AsyncExitStack() as stack:
+            try:
+                for cap in captures.values():
+                    await stack.enter_async_context(cap)
+            except Exception as exc:
+                logger.exception("Capture stream failed at start: %s", exc)
+                with contextlib.suppress(Exception):
+                    await _send_error("session.stream_failed_at_start", str(exc))
+                return
+            await service.run()
 
     listener_task = asyncio.create_task(_client_listener())
     runner_task = asyncio.create_task(_capture_runner())
 
-    # Wait for the runner to finish naturally — that guarantees all queued
-    # chunks (including the final partial flush triggered by capture.stop())
-    # are transcribed and emitted before we close the WS. If capture itself
-    # crashes the task raises and we proceed to finalize.
     try:
         await runner_task
     except Exception as exc:
@@ -207,16 +252,21 @@ async def meeting_session_endpoint(
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await listener_task
 
-    # ─── Finalize: persist recording row, status → completed, send meeting_ended ─
+    # ─── Finalize: persist per-stream recording rows, status → completed ──
     try:
-        wav_path = capture.wav_path
-        wav_bytes = wav_path.stat().st_size if wav_path.exists() else 0
-        await session_repo.insert_recording(
-            meeting_id=meeting_id,
-            stream="me",
-            file_path=str(wav_path),
-            bytes_size=wav_bytes,
-        )
+        for stream_label, cap in captures.items():
+            wav_path = cap.wav_path
+            if wav_path.exists():
+                wav_bytes = wav_path.stat().st_size
+                # Skip zero-byte WAVs — per spec, a stream that produced no
+                # audio MUST NOT cause a recording row to be written.
+                if wav_bytes > 0:
+                    await session_repo.insert_recording(
+                        meeting_id=meeting_id,
+                        stream=stream_label,
+                        file_path=str(wav_path),
+                        bytes_size=wav_bytes,
+                    )
         with contextlib.suppress(MeetingStatusConflict):
             await meeting_repo.transition_status(
                 meeting_id=meeting_id,

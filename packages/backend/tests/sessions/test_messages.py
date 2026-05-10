@@ -45,7 +45,7 @@ from meeting_playbook.sessions.messages import (
         ),
         (
             SilenceWarningMessage,
-            {"meeting_id": "m_t", "since": "2026-05-09T10:00:00+00:00"},
+            {"meeting_id": "m_t", "stream": "me", "since": "2026-05-09T10:00:00+00:00"},
             "silence_warning",
         ),
         (
@@ -112,3 +112,53 @@ def test_transcript_chunk_message_carries_all_required_keys():
     )
     actual = set(msg.model_dump().keys())
     assert required <= actual, f"missing keys: {required - actual}"
+
+
+# ─── Slice 7 ──────────────────────────────────────────────────────
+
+
+def test_stream_stopped_serialization():
+    """Slice-07: StreamStopped accepts valid stream values, rejects invalid."""
+    from meeting_playbook.sessions.messages import StreamStoppedMessage
+
+    msg = StreamStoppedMessage(
+        meeting_id="m_t",
+        stream="counterparty",
+        reason="BlackHole device disconnected",
+    )
+    raw = msg.model_dump_json()
+    reparsed = parse_server_message(raw)
+    assert reparsed.type == "stream_stopped"
+    assert isinstance(reparsed, StreamStoppedMessage)
+    assert reparsed.stream == "counterparty"
+    assert reparsed.reason == "BlackHole device disconnected"
+
+
+def test_stream_stopped_rejects_invalid_stream_value():
+    """Slice-07: stream is Literal['me','counterparty'] — anything else fails."""
+    from meeting_playbook.sessions.messages import StreamStoppedMessage
+
+    with pytest.raises(Exception):  # ValidationError
+        StreamStoppedMessage(meeting_id="m_t", stream="other", reason="x")
+
+
+def test_silence_warning_includes_stream():
+    """Slice-07: SilenceWarning now requires `stream` field; legacy payload (no stream) fails."""
+    # New shape works.
+    msg = SilenceWarningMessage(
+        meeting_id="m_t",
+        stream="me",
+        since="2026-05-10T10:00:00+00:00",
+    )
+    raw = msg.model_dump_json()
+    reparsed = parse_server_message(raw)
+    assert reparsed.type == "silence_warning"
+    assert isinstance(reparsed, SilenceWarningMessage)
+    assert reparsed.stream == "me"
+
+    # Old shape (no stream) MUST be rejected — backwards-incompatible by design.
+    legacy = (
+        '{"type": "silence_warning", "meeting_id": "m_t", "since": "2026-05-10T10:00:00+00:00"}'
+    )
+    with pytest.raises(Exception):  # ValidationError
+        parse_server_message(legacy)

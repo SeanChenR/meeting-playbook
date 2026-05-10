@@ -18,7 +18,7 @@ import asyncio
 import logging
 import math
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 from faster_whisper import WhisperModel
@@ -58,10 +58,25 @@ class WhisperProvider:
         self._device = device or settings.whisper_device
         self._compute_type = compute_type or settings.whisper_compute_type
         self._model: WhisperModel | None = None
+        self._warmup_lock = asyncio.Lock()
 
     @property
     def name(self) -> str:
         return "whisper"
+
+    async def warmup(self) -> None:
+        """Idempotent: load the underlying WhisperModel if not already loaded.
+
+        Safe to call concurrently — an internal lock serialises racing callers
+        so the (slow, blocking) model constructor runs at most once. Slice-07
+        SessionService awaits two providers' warmup() in parallel via
+        `asyncio.gather` so the cold-start cost (one ~10–25s model load) does
+        not double when both streams are running.
+        """
+        async with self._warmup_lock:
+            if self._model is not None:
+                return
+            await asyncio.to_thread(self._ensure_model)
 
     def _ensure_model(self) -> WhisperModel:
         if self._model is None:
@@ -87,7 +102,7 @@ class WhisperProvider:
         sample_rate_hz: int,
         language_hint: str | None = None,
     ) -> TranscriptChunk:
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
 
         def _sync_transcribe() -> tuple[str, float | None]:
             model = self._ensure_model()
@@ -132,7 +147,7 @@ class WhisperProvider:
             return text, _logprob_to_confidence(mean)
 
         text, confidence = await asyncio.to_thread(_sync_transcribe)
-        ended_at = datetime.now(timezone.utc)
+        ended_at = datetime.now(UTC)
 
         return TranscriptChunk(
             text=text,

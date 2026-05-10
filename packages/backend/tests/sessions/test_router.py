@@ -16,24 +16,23 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.websockets import WebSocketDisconnect
 
 from meeting_playbook.asr.base import TranscriptChunk
-from meeting_playbook.audio.capture import AudioChunk, AudioCaptureService
+from meeting_playbook.audio.capture import AudioChunk
 from meeting_playbook.meetings.dependencies import get_session_dependency
+from meeting_playbook.server import create_app
 from meeting_playbook.sessions.dependencies import (
-    get_asr_provider_dependency,
+    get_asr_providers_dependency,
     get_capture_factory_dependency,
 )
-from meeting_playbook.server import create_app
-
 
 # ─── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -41,11 +40,14 @@ from meeting_playbook.server import create_app
 class _StubASRProvider:
     name = "mock_asr"
 
+    async def warmup(self) -> None:
+        return None
+
     async def transcribe_chunk(self, audio_bytes, sample_rate_hz, language_hint=None):
         return TranscriptChunk(
             text="hello world",
-            started_at=datetime.now(timezone.utc),
-            ended_at=datetime.now(timezone.utc) + timedelta(milliseconds=100),
+            started_at=datetime.now(UTC),
+            ended_at=datetime.now(UTC) + timedelta(milliseconds=100),
             asr_provider_used=self.name,
             confidence=0.9,
         )
@@ -54,29 +56,46 @@ class _StubASRProvider:
 class _ScriptedCapture:
     """Mock capture session: yields N AudioChunks then is closed by service."""
 
-    def __init__(self, *, meeting_id: str, recordings_dir: Path, n_chunks: int = 2):
+    def __init__(
+        self,
+        *,
+        meeting_id: str,
+        recordings_dir: Path,
+        n_chunks: int = 2,
+        stream_label: str = "me",
+        raise_on_enter: bool = False,
+    ):
         self._n = n_chunks
         self.meeting_id = meeting_id
         self.recordings_dir = Path(recordings_dir)
-        self.wav_path = self.recordings_dir / meeting_id / "me.wav"
+        self.stream_label = stream_label
+        self.wav_path = self.recordings_dir / meeting_id / f"{stream_label}.wav"
+        self._raise_on_enter = raise_on_enter
 
     async def __aenter__(self):
+        if self._raise_on_enter:
+            raise RuntimeError(f"simulated open failure for {self.stream_label}")
         self.wav_path.parent.mkdir(parents=True, exist_ok=True)
-        # Write a stub WAV file so the recording row's file_size is non-zero.
+        # Stub WAV so the recording row's file_size is non-zero.
         self.wav_path.write_bytes(b"\x00" * 100)
         return self
 
     async def __aexit__(self, *exc):
         return None
 
+    async def stop(self) -> None:
+        # No-op for scripted captures (events() exhausts naturally).
+        return None
+
     async def events(self) -> AsyncIterator[AudioChunk]:
         for _ in range(self._n):
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             yield AudioChunk(
                 audio_bytes=b"\x00\x00" * 100,
                 sample_rate_hz=16000,
                 started_at=now,
                 ended_at=now + timedelta(seconds=1),
+                stream=self.stream_label,
             )
             await asyncio.sleep(0)
 
@@ -151,7 +170,7 @@ def _build_client(
     db_url_sync: str,
     *,
     capture_factory_override,
-    asr_override=None,
+    providers_override=None,
 ) -> TestClient:
     db_url_async = _async_url(db_url_sync)
     engine = create_async_engine(db_url_async, future=True)
@@ -164,16 +183,31 @@ def _build_client(
     app = create_app()
     app.dependency_overrides[get_session_dependency] = _override_session
     app.dependency_overrides[get_capture_factory_dependency] = lambda: capture_factory_override
-    if asr_override:
-        app.dependency_overrides[get_asr_provider_dependency] = lambda: asr_override
-    else:
-        app.dependency_overrides[get_asr_provider_dependency] = lambda: _StubASRProvider()
+    app.dependency_overrides[get_asr_providers_dependency] = lambda: (
+        providers_override or {"me": _StubASRProvider(), "counterparty": _StubASRProvider()}
+    )
     return TestClient(app)
 
 
 def _make_capture_factory(tmp_path: Path, n_chunks: int = 2):
-    def factory(meeting_id: str) -> AudioCaptureService:
-        return _ScriptedCapture(meeting_id=meeting_id, recordings_dir=tmp_path, n_chunks=n_chunks)
+    """Slice-7: factory returns a dict[Stream, capture]. Both me + counterparty
+    captures by default emit `n_chunks` events."""
+
+    def factory(meeting_id: str):
+        return {
+            "me": _ScriptedCapture(
+                meeting_id=meeting_id,
+                recordings_dir=tmp_path,
+                n_chunks=n_chunks,
+                stream_label="me",
+            ),
+            "counterparty": _ScriptedCapture(
+                meeting_id=meeting_id,
+                recordings_dir=tmp_path,
+                n_chunks=n_chunks,
+                stream_label="counterparty",
+            ),
+        }
 
     return factory
 
@@ -204,11 +238,11 @@ def test_cross_user_ws_is_rejected_with_not_found(_migrated_db_url, tmp_path):
         _migrated_db_url,
         capture_factory_override=_make_capture_factory(tmp_path),
     )
-    with pytest.raises(WebSocketDisconnect) as exc_info:
-        with client.websocket_connect(
-            "/api/meetings/m_b/session", headers={"X-User-Id": "u_attacker"}
-        ):
-            pass
+    with (
+        pytest.raises(WebSocketDisconnect) as exc_info,
+        client.websocket_connect("/api/meetings/m_b/session", headers={"X-User-Id": "u_attacker"}),
+    ):
+        pass
     assert exc_info.value.code == 4404
     assert "meeting.not_found" in (exc_info.value.reason or "")
 
@@ -275,7 +309,105 @@ def test_full_session_round_trip_emits_started_chunks_ended_and_completes_status
 
     assert types_seen[0] == "meeting_started"
     assert types_seen[-1] == "meeting_ended"
-    assert types_seen.count("transcript_chunk") == 2
+    # Slice-7: now two streams each yield 2 chunks → 4 transcript frames total.
+    assert types_seen.count("transcript_chunk") == 4
 
     final_status = asyncio.run(_read_meeting_status(_async_url(_migrated_db_url), "m_e"))
     assert final_status == "completed"
+
+
+# ─── Slice 7: dual-stream router tests ────────────────────────────────────
+
+
+def test_no_blackhole_device_aborts_session(_migrated_db_url, tmp_path):
+    """Pre-flight: missing BlackHole → error frame + close, status stays scheduled."""
+    from meeting_playbook.audio.devices import NoBlackholeDevice
+
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_nb", meeting_id="m_nb"))
+
+    def failing_factory(meeting_id: str):
+        raise NoBlackholeDevice("BlackHole 2ch not detected — see docs/BLACKHOLE_SETUP.md")
+
+    client = _build_client(_migrated_db_url, capture_factory_override=failing_factory)
+
+    with client.websocket_connect(
+        "/api/meetings/m_nb/session", headers={"X-User-Id": "u_nb"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_nb"}))
+        msg = json.loads(ws.receive_text())
+
+    assert msg["type"] == "error"
+    assert msg["error_code"] == "session.no_blackhole_device"
+
+    # Status MUST remain `scheduled` so the user can retry after fixing audio.
+    final_status = asyncio.run(_read_meeting_status(_async_url(_migrated_db_url), "m_nb"))
+    assert final_status == "scheduled"
+
+
+def test_dual_stream_session_emits_transcripts_for_both_speakers(_migrated_db_url, tmp_path):
+    """Both me + counterparty transcript frames arrive over the WebSocket."""
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_ds", meeting_id="m_ds"))
+
+    client = _build_client(
+        _migrated_db_url,
+        capture_factory_override=_make_capture_factory(tmp_path, n_chunks=3),
+    )
+    transcript_speakers: list[str] = []
+    with client.websocket_connect(
+        "/api/meetings/m_ds/session", headers={"X-User-Id": "u_ds"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_ds"}))
+        try:
+            while True:
+                raw = ws.receive_text()
+                msg = json.loads(raw)
+                if msg["type"] == "transcript_chunk":
+                    transcript_speakers.append(msg["speaker"])
+        except WebSocketDisconnect:
+            pass
+
+    # Each stream emitted 3 chunks → 3 me + 3 counterparty.
+    assert transcript_speakers.count("me") == 3
+    assert transcript_speakers.count("counterparty") == 3
+
+
+def test_stream_failed_at_start_aborts(_migrated_db_url, tmp_path):
+    """Capture __aenter__ raising → error frame `session.stream_failed_at_start`."""
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_sf", meeting_id="m_sf"))
+
+    def factory(meeting_id: str):
+        return {
+            "me": _ScriptedCapture(
+                meeting_id=meeting_id,
+                recordings_dir=tmp_path,
+                n_chunks=2,
+                stream_label="me",
+            ),
+            "counterparty": _ScriptedCapture(
+                meeting_id=meeting_id,
+                recordings_dir=tmp_path,
+                n_chunks=2,
+                stream_label="counterparty",
+                raise_on_enter=True,  # simulate device open failure
+            ),
+        }
+
+    client = _build_client(_migrated_db_url, capture_factory_override=factory)
+    error_codes: list[str] = []
+    with client.websocket_connect(
+        "/api/meetings/m_sf/session", headers={"X-User-Id": "u_sf"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_sf"}))
+        try:
+            while True:
+                raw = ws.receive_text()
+                msg = json.loads(raw)
+                if msg["type"] == "error":
+                    error_codes.append(msg["error_code"])
+        except WebSocketDisconnect:
+            pass
+
+    assert "session.stream_failed_at_start" in error_codes

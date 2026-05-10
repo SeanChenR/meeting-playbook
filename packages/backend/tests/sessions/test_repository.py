@@ -6,7 +6,7 @@ in chronological order" + "Audio capture writes one WAV file per session".
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -42,7 +42,7 @@ async def _seed_meeting(session: AsyncSession, *, mid: str = "m_s") -> None:
 async def test_insert_chunk_persists_and_returns_orm_object(db_session):
     await _seed_meeting(db_session)
     repo = SessionRepository(db_session)
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     chunk = await repo.insert_chunk(
         meeting_id="m_s",
         speaker="me",
@@ -62,7 +62,7 @@ async def test_insert_chunk_persists_and_returns_orm_object(db_session):
 async def test_chunks_query_back_in_started_at_ascending(db_session):
     await _seed_meeting(db_session, mid="m_order")
     repo = SessionRepository(db_session)
-    base = datetime.now(timezone.utc)
+    base = datetime.now(UTC)
     # Insert OUT OF ORDER
     for offset in (5, 1, 3):
         await repo.insert_chunk(
@@ -94,8 +94,8 @@ async def test_insert_chunk_rejects_invalid_speaker(db_session):
             meeting_id="m_bad",
             speaker="stranger",
             text_content="x",
-            started_at=datetime.now(timezone.utc),
-            ended_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
+            ended_at=datetime.now(UTC),
             asr_provider_used="whisper",
             confidence=None,
         )
@@ -137,3 +137,29 @@ async def test_insert_recording_unique_per_meeting_stream(db_session):
             bytes_size=200,
         )
         await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_dual_recordings_persisted(db_session):
+    """Slice-07: a dual-stream session writes ONE row per stream
+    (`me` + `counterparty`); list_recordings_for_meeting returns both."""
+    await _seed_meeting(db_session, mid="m_dual_rec")
+    repo = SessionRepository(db_session)
+
+    await repo.insert_recording(
+        meeting_id="m_dual_rec",
+        stream="me",
+        file_path="/tmp/m_dual_rec/me.wav",
+        bytes_size=100,
+    )
+    await repo.insert_recording(
+        meeting_id="m_dual_rec",
+        stream="counterparty",
+        file_path="/tmp/m_dual_rec/counterparty.wav",
+        bytes_size=200,
+    )
+    await db_session.commit()
+
+    rows = await repo.list_recordings_for_meeting("m_dual_rec")
+    streams = {r.stream for r in rows}
+    assert streams == {"me", "counterparty"}, f"expected both streams, got {streams}"

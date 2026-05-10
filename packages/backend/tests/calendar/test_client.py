@@ -12,7 +12,7 @@ Per spec slice-05-calendar-llm-playbook (calendar-integration):
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -95,7 +95,7 @@ def _build_service_factory(pages):
 
 @pytest.mark.asyncio
 async def test_get_upcoming_events_returns_events_ordered_by_start():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     e1 = _make_event_resource("evt_1", "earlier", (now + timedelta(hours=1)).isoformat())
     e2 = _make_event_resource("evt_2", "later", (now + timedelta(hours=3)).isoformat())
     pages = [([e1, e2], None)]
@@ -112,7 +112,7 @@ async def test_get_upcoming_events_returns_events_ordered_by_start():
 
 @pytest.mark.asyncio
 async def test_get_upcoming_events_follows_pagination_until_done():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     page1 = [
         _make_event_resource("evt_1", "p1a", (now + timedelta(hours=1)).isoformat()),
         _make_event_resource("evt_2", "p1b", (now + timedelta(hours=2)).isoformat()),
@@ -149,7 +149,7 @@ async def test_first_401_triggers_refresh_and_retries_once_successfully():
     and retries once. The second attempt succeeds and returns events."""
     from googleapiclient.errors import HttpError
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     success_pages = [
         (
             [
@@ -247,7 +247,7 @@ async def test_persistent_5xx_raises_calendar_network_error():
 @pytest.mark.asyncio
 async def test_event_from_resource_populates_organizer_email():
     """When Google returns organizer.email, CalendarEvent.organizer_email is set."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     raw_event = {
         "id": "evt_org_email",
         "summary": "Demo",
@@ -271,7 +271,7 @@ async def test_event_from_resource_populates_organizer_email():
 @pytest.mark.asyncio
 async def test_event_from_resource_organizer_email_defaults_to_empty_when_absent():
     """Subscribed-calendar events sometimes omit organizer.email."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     raw_event = {
         "id": "evt_no_org_email",
         "summary": "Subscribed",
@@ -289,3 +289,103 @@ async def test_event_from_resource_organizer_email_defaults_to_empty_when_absent
     events = await client.get_upcoming_events("u_alpha", hours=24)
     assert events[0].organizer_email == ""
     assert events[0].organizer == "Course Bot"
+
+
+# ─── Slice 7 round 2: resource attendee filter ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_event_from_resource_drops_room_accounts():
+    """Slice-7 round 2: meeting room attendees (resource: True) are filtered out."""
+    now = datetime.now(UTC)
+    raw_event = {
+        "id": "evt_with_room",
+        "summary": "Q3 review",
+        "start": {"dateTime": (now + timedelta(hours=1)).isoformat()},
+        "end": {"dateTime": (now + timedelta(hours=2)).isoformat()},
+        "attendees": [
+            {"email": "sean@x", "displayName": "Sean"},
+            {
+                "email": "c_xx@resource.calendar.google.com",
+                "displayName": "MCTW - 6/F-6-龍貓 (3)",
+                "resource": True,
+            },
+            {"email": "lin@x", "displayName": "林經理"},
+        ],
+        "description": "",
+        "organizer": {"email": "sean@x", "displayName": "Sean"},
+    }
+
+    client = CalendarClient(
+        token_store=_make_token_store(),
+        build_service=_build_service_factory([([raw_event], None)]),
+    )
+    events = await client.get_upcoming_events("u_alpha", hours=24)
+
+    assert len(events) == 1
+    attendees = events[0].attendees
+    assert len(attendees) == 2, f"expected 2 human attendees, got {attendees}"
+    joined = " | ".join(attendees)
+    assert "Sean" in joined
+    assert "林經理" in joined
+    assert "龍貓" not in joined
+    assert "MCTW" not in joined
+
+
+@pytest.mark.asyncio
+async def test_event_from_resource_drops_attendees_via_email_suffix():
+    """Slice-7 round 2: resource detected via @resource.calendar.google.com when no explicit flag."""
+    now = datetime.now(UTC)
+    raw_event = {
+        "id": "evt_room_no_flag",
+        "summary": "Standup",
+        "start": {"dateTime": (now + timedelta(hours=1)).isoformat()},
+        "end": {"dateTime": (now + timedelta(hours=2)).isoformat()},
+        "attendees": [
+            {"email": "sean@x", "displayName": "Sean"},
+            {"email": "c_abc@resource.calendar.google.com", "displayName": "Some Room"},
+        ],
+        "description": "",
+        "organizer": {"email": "sean@x", "displayName": "Sean"},
+    }
+
+    client = CalendarClient(
+        token_store=_make_token_store(),
+        build_service=_build_service_factory([([raw_event], None)]),
+    )
+    events = await client.get_upcoming_events("u_alpha", hours=24)
+    attendees = events[0].attendees
+    assert len(attendees) == 1
+    assert "Sean" in attendees[0]
+    assert "Some Room" not in " | ".join(attendees)
+
+
+@pytest.mark.asyncio
+async def test_event_from_resource_drops_attendees_via_resource_email_field():
+    """Slice-7 round 2: resourceEmail field alone marks the entry as a resource."""
+    now = datetime.now(UTC)
+    raw_event = {
+        "id": "evt_resource_email",
+        "summary": "Demo",
+        "start": {"dateTime": (now + timedelta(hours=1)).isoformat()},
+        "end": {"dateTime": (now + timedelta(hours=2)).isoformat()},
+        "attendees": [
+            {"email": "lin@x", "displayName": "林經理"},
+            {
+                "email": "demo-room@x.com",
+                "displayName": "Demo Room",
+                "resourceEmail": "demo-room@x.com",
+            },
+        ],
+        "description": "",
+        "organizer": {"email": "sean@x", "displayName": "Sean"},
+    }
+    client = CalendarClient(
+        token_store=_make_token_store(),
+        build_service=_build_service_factory([([raw_event], None)]),
+    )
+    events = await client.get_upcoming_events("u_alpha", hours=24)
+    attendees = events[0].attendees
+    assert len(attendees) == 1
+    assert "林經理" in attendees[0]
+    assert "Demo Room" not in " | ".join(attendees)

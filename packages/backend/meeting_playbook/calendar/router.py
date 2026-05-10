@@ -23,12 +23,12 @@ from meeting_playbook.calendar.dependencies import (
     get_calendar_client_dependency,
     get_playbook_generator_dependency,
 )
+from meeting_playbook.calendar.identity import pick_counterparty
 from meeting_playbook.calendar.schemas import (
     FromCalendarBody,
     FromCalendarResponse,
     UpcomingEventRead,
 )
-from meeting_playbook.calendar.identity import pick_counterparty
 from meeting_playbook.meetings.dependencies import (
     get_session_dependency,
     get_user_email_dependency,

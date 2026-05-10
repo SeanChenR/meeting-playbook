@@ -7,10 +7,9 @@ the meeting session". The frontend's TypeScript types in
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
-
 
 # ─── Server → client ────────────────────────────────────────────────────────
 
@@ -34,7 +33,21 @@ class TranscriptChunkMessage(BaseModel):
 class SilenceWarningMessage(BaseModel):
     type: Literal["silence_warning"] = "silence_warning"
     meeting_id: str
+    stream: Literal["me", "counterparty"]
     since: str
+
+
+class StreamStoppedMessage(BaseModel):
+    """Slice-07: emitted when one capture stream fails mid-session.
+
+    The other stream continues; the WebSocket stays open. Per design.md
+    `Failure isolation: partial fault tolerance during in_progress`.
+    """
+
+    type: Literal["stream_stopped"] = "stream_stopped"
+    meeting_id: str
+    stream: Literal["me", "counterparty"]
+    reason: str
 
 
 class MeetingEndedMessage(BaseModel):
@@ -49,13 +62,12 @@ class ErrorMessage(BaseModel):
 
 
 ServerMessage = Annotated[
-    Union[
-        MeetingStartedMessage,
-        TranscriptChunkMessage,
-        SilenceWarningMessage,
-        MeetingEndedMessage,
-        ErrorMessage,
-    ],
+    MeetingStartedMessage
+    | TranscriptChunkMessage
+    | SilenceWarningMessage
+    | StreamStoppedMessage
+    | MeetingEndedMessage
+    | ErrorMessage,
     Field(discriminator="type"),
 ]
 _ServerAdapter = TypeAdapter(ServerMessage)
@@ -79,7 +91,7 @@ class EndMeetingMessage(BaseModel):
 
 
 ClientMessage = Annotated[
-    Union[StartMeetingMessage, EndMeetingMessage],
+    StartMeetingMessage | EndMeetingMessage,
     Field(discriminator="type"),
 ]
 _ClientAdapter = TypeAdapter(ClientMessage)
@@ -106,6 +118,7 @@ __all__ = [
     "ServerMessage",
     "SilenceWarningMessage",
     "StartMeetingMessage",
+    "StreamStoppedMessage",
     "TranscriptChunkMessage",
     "parse_client_message",
     "parse_server_message",

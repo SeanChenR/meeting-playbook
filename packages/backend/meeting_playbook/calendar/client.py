@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from google.auth.exceptions import RefreshError
@@ -84,8 +84,32 @@ def _format_attendee(a: dict) -> str:
     return email or name
 
 
+def _is_resource_attendee(a: dict) -> bool:
+    """True for Google Calendar room / equipment resource accounts.
+
+    Slice-7 round-2 fix: Google's `attendees` list mixes humans with resources
+    (meeting rooms, equipment). Resources are detected via:
+      - explicit `resource: true` flag
+      - `resourceEmail` field present
+      - email ending with `@resource.calendar.google.com` (Google's resource
+        domain — case-insensitive)
+
+    Filtering at the parsing boundary keeps `pick_counterparty` and any
+    downstream prompt formatting from accidentally selecting a room name.
+    """
+    if a.get("resource") is True:
+        return True
+    if a.get("resourceEmail"):
+        return True
+    email = (a.get("email") or "").strip().lower()
+    return email.endswith("@resource.calendar.google.com")
+
+
 def _event_from_resource(item: dict) -> CalendarEvent:
     attendees_raw = item.get("attendees") or []
+    # Slice-7 round 2: drop resource (room / equipment) accounts before
+    # formatting so they never become candidates for counterparty derivation.
+    attendees_raw = [a for a in attendees_raw if not _is_resource_attendee(a)]
     attendees = [_format_attendee(a) for a in attendees_raw if a]
     attendees = [s for s in attendees if s]  # drop empty strings
     organizer_raw = item.get("organizer") or {}
@@ -115,7 +139,7 @@ class CalendarClient:
 
     async def get_upcoming_events(self, user_id: str, hours: int = 24) -> list[CalendarEvent]:
         """Fetch events in the next `hours` window for the user, ordered by start asc."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         time_min = now.isoformat()
         time_max = (now + timedelta(hours=hours)).isoformat()
 

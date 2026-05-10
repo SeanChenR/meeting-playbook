@@ -38,6 +38,8 @@ async def create_meeting(
         title=body.title,
         counterparty_display_name=body.counterparty_display_name,
         me_display_name=body.me_display_name,
+        scheduled_start_at=body.scheduled_start_at,
+        scheduled_end_at=body.scheduled_end_at,
     )
     return MeetingRead.model_validate(meeting)
 

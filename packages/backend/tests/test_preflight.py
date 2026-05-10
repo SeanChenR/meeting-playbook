@@ -47,12 +47,14 @@ async def test_check_database_passes_when_connect_succeeds():
 async def test_check_database_raises_runtime_error_on_failure():
     fake_logger = MagicMock()
 
-    with patch(
-        "meeting_playbook.preflight.asyncpg.connect",
-        new=AsyncMock(side_effect=ConnectionRefusedError("connection refused")),
+    with (
+        patch(
+            "meeting_playbook.preflight.asyncpg.connect",
+            new=AsyncMock(side_effect=ConnectionRefusedError("connection refused")),
+        ),
+        pytest.raises(RuntimeError, match="PostgreSQL unreachable"),
     ):
-        with pytest.raises(RuntimeError, match="PostgreSQL unreachable"):
-            await check_database("postgresql://localhost:5432/test", fake_logger)
+        await check_database("postgresql://localhost:5432/test", fake_logger)
 
 
 def test_check_vertex_ai_warns_when_unset(monkeypatch):

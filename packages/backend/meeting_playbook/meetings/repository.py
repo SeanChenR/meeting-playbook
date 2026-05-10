@@ -13,7 +13,7 @@ Per design.md (slice-03-meeting-crud):
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,6 +59,9 @@ class MeetingRepository:
         counterparty_display_name: str,
         me_display_name: str,
         asr_provider: str = "whisper",
+        scheduled_start_at: datetime | None = None,
+        scheduled_end_at: datetime | None = None,
+        calendar_event_id: str | None = None,
     ) -> Meeting:
         meeting = Meeting(
             id=f"m_{secrets.token_urlsafe(16)}",
@@ -68,8 +71,10 @@ class MeetingRepository:
             me_display_name=me_display_name,
             status="scheduled",
             asr_provider=asr_provider,
-            calendar_event_id=None,
-            created_at=datetime.now(timezone.utc),
+            calendar_event_id=calendar_event_id,
+            created_at=datetime.now(UTC),
+            scheduled_start_at=scheduled_start_at,
+            scheduled_end_at=scheduled_end_at,
         )
         self._session.add(meeting)
         await self._session.commit()

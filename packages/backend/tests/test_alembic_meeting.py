@@ -32,6 +32,9 @@ _EXPECTED_COLUMNS = {
     "updated_at",  # added in slice-06 migration 0003 to support transition_status
     "started_at",
     "ended_at",
+    # added in slice-07 migration 0004 (calendar view + scheduled-import paths)
+    "scheduled_start_at",
+    "scheduled_end_at",
 }
 
 _NOT_NULL_COLUMNS = {

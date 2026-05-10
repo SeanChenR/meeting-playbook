@@ -65,3 +65,58 @@ async def test_whisper_provider_reuses_loaded_model(provider: WhisperProvider):
 
     await provider.transcribe_chunk(audio_bytes, sample_rate, "zh")
     assert id(provider._model) == first_model_id
+
+
+# ─── Slice 7: warmup() ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_warmup_loads_model_once(monkeypatch):
+    """warmup() called twice loads the model exactly once (idempotent)."""
+
+    from meeting_playbook.asr import whisper_provider as wp_module
+
+    load_count = 0
+
+    class _DummyModel:
+        def __init__(self, *a, **kw):
+            nonlocal load_count
+            load_count += 1
+
+    monkeypatch.setattr(wp_module, "WhisperModel", _DummyModel)
+
+    p = WhisperProvider()
+    await p.warmup()
+    await p.warmup()
+
+    assert load_count == 1, f"expected exactly one load, got {load_count}"
+    assert p._model is not None
+
+
+@pytest.mark.asyncio
+async def test_warmup_concurrent_calls_load_once(monkeypatch):
+    """Two warmup() calls awaited via asyncio.gather load the model exactly once."""
+    import asyncio
+
+    from meeting_playbook.asr import whisper_provider as wp_module
+
+    load_count = 0
+
+    class _SlowModel:
+        def __init__(self, *a, **kw):
+            nonlocal load_count
+            load_count += 1
+            # Simulate an ~80ms model construction so concurrent warmup() calls
+            # actually overlap (would race without the internal lock).
+            import time
+
+            time.sleep(0.08)
+
+    monkeypatch.setattr(wp_module, "WhisperModel", _SlowModel)
+
+    p = WhisperProvider()
+    await asyncio.gather(p.warmup(), p.warmup())
+
+    assert load_count == 1, (
+        f"expected exactly one load even with concurrent warmup, got {load_count}"
+    )

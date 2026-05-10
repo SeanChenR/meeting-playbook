@@ -14,7 +14,7 @@ Per spec slice-05-calendar-llm-playbook (calendar-integration):
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -23,7 +23,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from meeting_playbook.calendar.client import (
-    CalendarClient,
     CalendarEvent,
     CalendarNetworkError,
     CalendarNotConnected,
@@ -36,7 +35,6 @@ from meeting_playbook.calendar.dependencies import (
 from meeting_playbook.meetings.dependencies import get_session_dependency
 from meeting_playbook.playbook_generation.generator import (
     PlaybookGenerationTimeout,
-    PlaybookGenerator,
 )
 from meeting_playbook.server import create_app
 
@@ -45,8 +43,8 @@ def _sample_event(event_id: str = "gcal_evt_42", title: str = "Q3 review") -> Ca
     return CalendarEvent(
         id=event_id,
         title=title,
-        start=datetime.now(timezone.utc).isoformat(),
-        end=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        start=datetime.now(UTC).isoformat(),
+        end=(datetime.now(UTC) + timedelta(hours=1)).isoformat(),
         attendees=["lin@acme.com", "sean@example.com"],
         description="quarterly review",
         organizer="Sean",
@@ -307,8 +305,8 @@ def _multi_attendee_event(event_id: str, attendees, organizer="", title="T") -> 
     return CalendarEvent(
         id=event_id,
         title=title,
-        start=datetime.now(timezone.utc).isoformat(),
-        end=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        start=datetime.now(UTC).isoformat(),
+        end=(datetime.now(UTC) + timedelta(hours=1)).isoformat(),
         attendees=list(attendees),
         description="",
         organizer=organizer,
@@ -500,8 +498,8 @@ async def test_from_calendar_external_viewer_role_imports_successfully(
     event = CalendarEvent(
         id="gcal_evt_external",
         title="實戰營 Live Session",
-        start=datetime.now(timezone.utc).isoformat(),
-        end=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        start=datetime.now(UTC).isoformat(),
+        end=(datetime.now(UTC) + timedelta(hours=1)).isoformat(),
         attendees=["instructor@course.com"],
         description="course session",
         organizer="Course Bot",

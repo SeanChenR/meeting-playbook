@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import wave
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -156,10 +156,85 @@ async def test_capture_emits_silence_warning_after_threshold(tmp_path: Path):
 
         try:
             await asyncio.wait_for(_drain(), timeout=5.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
     warnings = [e for e in events if isinstance(e, SilenceWarning)]
     assert len(warnings) == 1, (
         f"expected exactly one silence warning, got {len(warnings)} out of {len(events)} events"
     )
+
+
+@pytest.mark.asyncio
+async def test_init_accepts_device_name_and_stream_label(tmp_path: Path):
+    """Slice-07: AudioCaptureService takes device_name + stream_label kwargs.
+
+    The stream_label is carried on every emitted event so SessionService can
+    route per-stream. The wav_path uses the label so two instances write to
+    distinct files (me.wav + counterparty.wav).
+    """
+    frames = [_voice_frame(0.5)]
+
+    chunks: list[AudioChunk] = []
+    warnings: list[SilenceWarning] = []
+    async with AudioCaptureService(
+        meeting_id="m_dual",
+        recordings_dir=tmp_path,
+        sample_rate_hz=SAMPLE_RATE,
+        chunk_seconds=0.5,
+        silence_warning_after=30.0,
+        device_name="BlackHole 2ch",  # accepted; ignored by scripted factory
+        stream_label="counterparty",
+        _input_stream_factory=_scripted_factory(frames),
+    ) as session:
+        assert session.wav_path == tmp_path / "m_dual" / "counterparty.wav"
+
+        async def _drain() -> None:
+            async for ev in session.events():
+                if isinstance(ev, AudioChunk):
+                    chunks.append(ev)
+                elif isinstance(ev, SilenceWarning):
+                    warnings.append(ev)
+                if chunks:
+                    return
+
+        await asyncio.wait_for(_drain(), timeout=5.0)
+
+    assert chunks, "should have at least one AudioChunk"
+    for ch in chunks:
+        assert ch.stream == "counterparty", (
+            f"AudioChunk emitted by counterparty service must carry stream='counterparty', got {ch.stream!r}"
+        )
+
+    # WAV written under the labeled filename (not me.wav).
+    wav_path = tmp_path / "m_dual" / "counterparty.wav"
+    assert wav_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_default_stream_label_is_me_keeping_slice6_behaviour(tmp_path: Path):
+    """Slice-07 must not break Slice-06: default stream_label='me' + me.wav path."""
+    frames = [_voice_frame(0.5)]
+
+    chunks: list[AudioChunk] = []
+    async with AudioCaptureService(
+        meeting_id="m_solo",
+        recordings_dir=tmp_path,
+        sample_rate_hz=SAMPLE_RATE,
+        chunk_seconds=0.5,
+        silence_warning_after=30.0,
+        _input_stream_factory=_scripted_factory(frames),
+    ) as session:
+        assert session.wav_path == tmp_path / "m_solo" / "me.wav"
+
+        async def _drain() -> None:
+            async for ev in session.events():
+                if isinstance(ev, AudioChunk):
+                    chunks.append(ev)
+                if chunks:
+                    return
+
+        await asyncio.wait_for(_drain(), timeout=5.0)
+
+    for ch in chunks:
+        assert ch.stream == "me"

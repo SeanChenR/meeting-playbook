@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -20,8 +20,8 @@ def test_transcript_chunk_is_frozen_dataclass_with_expected_fields():
     # frozen=True forbids attribute assignment
     chunk = TranscriptChunk(
         text="hello",
-        started_at=datetime.now(timezone.utc),
-        ended_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
+        ended_at=datetime.now(UTC),
         asr_provider_used="whisper",
         confidence=0.9,
     )
@@ -52,13 +52,17 @@ def test_asr_provider_protocol_declares_name_and_transcribe_chunk():
 
 def test_asr_provider_is_runtime_checkable_protocol():
     # A duck-typed instance with the right attributes satisfies the Protocol
-    # at runtime so DI can validate without a registry.
+    # at runtime so DI can validate without a registry. Slice-7 added
+    # warmup() to the Protocol — stub MUST implement it (no-op is fine).
     class _Stub:
         @property
         def name(self) -> str:
             return "stub"
 
         async def transcribe_chunk(self, audio_bytes, sample_rate_hz, language_hint=None):  # type: ignore[no-untyped-def]
+            return None
+
+        async def warmup(self) -> None:
             return None
 
     assert isinstance(_Stub(), ASRProvider)

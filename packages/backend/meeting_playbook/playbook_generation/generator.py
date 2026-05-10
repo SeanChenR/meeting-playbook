@@ -200,7 +200,7 @@ class PlaybookGenerator:
     async def _call_with_timeout(self, prompt: str) -> str:
         try:
             return await asyncio.wait_for(self._call_model(prompt), timeout=self._timeout)
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise PlaybookGenerationTimeout(
                 f"Vertex AI call exceeded {self._timeout}s deadline."
             ) from exc

@@ -14,14 +14,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from pathlib import Path
 
 import pytest
 
 from meeting_playbook.calendar.client import CalendarEvent
 from meeting_playbook.playbook_generation.generator import (
-    PlaybookDraft,
     PlaybookGenerationFailed,
     PlaybookGenerationTimeout,
     PlaybookGenerator,
@@ -156,7 +154,9 @@ async def test_second_fallback_still_empty_inserts_sentinel_string():
         return _bad_response_with_empty("red_lines")
 
     gen = PlaybookGenerator(call_model=fake_call)
-    draft = await gen.generate(_load_event("sparse.json"), viewer_email="me@x.com", viewer_name="Me")
+    draft = await gen.generate(
+        _load_event("sparse.json"), viewer_email="me@x.com", viewer_name="Me"
+    )
 
     assert draft["red_lines"].strip() != ""
     assert "請自行填寫" in draft["red_lines"]

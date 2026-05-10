@@ -13,7 +13,7 @@ Per design.md (slice-04-playbook-editor):
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TypedDict
 
 from sqlalchemy import select
@@ -56,7 +56,7 @@ class PlaybookRepository:
         existence-check + insert into a single round-trip and remains correct
         under concurrency.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stmt = (
             pg_insert(Playbook)
             .values(
@@ -78,7 +78,7 @@ class PlaybookRepository:
 
     async def upsert_for_meeting(self, meeting_id: str, payload: PlaybookUpsertPayload) -> Playbook:
         """Full upsert of the seven content fields; stamps updated_at = now()."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         values = {
             "id": f"pb_{secrets.token_urlsafe(16)}",
             "meeting_id": meeting_id,

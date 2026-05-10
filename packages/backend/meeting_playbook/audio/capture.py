@@ -22,10 +22,13 @@ import math
 import wave
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
+
+Stream = Literal["me", "counterparty"]
 
 # Silence threshold expressed as int16 RMS — anything quieter than this for
 # `silence_warning_after` seconds triggers a SilenceWarning. ~50 corresponds
@@ -44,11 +47,13 @@ class AudioChunk:
     sample_rate_hz: int
     started_at: datetime
     ended_at: datetime
+    stream: Stream = "me"
 
 
 @dataclass(frozen=True)
 class SilenceWarning:
     since: datetime
+    stream: Stream = "me"
 
 
 class CaptureDeviceUnavailable(Exception):
@@ -57,8 +62,13 @@ class CaptureDeviceUnavailable(Exception):
 
 def _default_input_stream_factory(
     sample_rate_hz: int,
+    device: int | str | None = None,
 ) -> Callable[[asyncio.Queue[bytes]], asyncio.Task[None]]:
-    """Production factory wrapping `sounddevice.RawInputStream`."""
+    """Production factory wrapping `sounddevice.RawInputStream`.
+
+    `device` is forwarded to `RawInputStream(device=...)`. None → system default
+    input device. A string is treated as a device name (sounddevice resolves it).
+    """
 
     def factory(queue: asyncio.Queue[bytes]) -> asyncio.Task[None]:
         async def _open_and_pump() -> None:
@@ -76,6 +86,7 @@ def _default_input_stream_factory(
                     channels=1,
                     dtype="int16",
                     callback=_callback,
+                    device=device,
                 )
             except Exception as exc:  # PortAudioError, etc.
                 raise CaptureDeviceUnavailable(f"Could not open input stream: {exc}") from exc
@@ -122,6 +133,8 @@ class AudioCaptureService:
         sample_rate_hz: int = 16000,
         chunk_seconds: float = 10.0,
         silence_warning_after: float = 30.0,
+        device_name: str | int | None = None,
+        stream_label: Stream = "me",
         _input_stream_factory: Callable[[asyncio.Queue[bytes]], asyncio.Task[None]] | None = None,
     ) -> None:
         self._meeting_id = meeting_id
@@ -129,7 +142,10 @@ class AudioCaptureService:
         self._sample_rate = sample_rate_hz
         self._chunk_seconds = chunk_seconds
         self._silence_after = silence_warning_after
-        self._factory = _input_stream_factory or _default_input_stream_factory(sample_rate_hz)
+        self._stream_label: Stream = stream_label
+        self._factory = _input_stream_factory or _default_input_stream_factory(
+            sample_rate_hz, device=device_name
+        )
 
         self._raw_queue: asyncio.Queue[bytes] = asyncio.Queue()
         # event_queue carries `None` as a graceful-shutdown sentinel.
@@ -144,7 +160,7 @@ class AudioCaptureService:
 
     @property
     def wav_path(self) -> Path:
-        return self._recordings_dir / self._meeting_id / "me.wav"
+        return self._recordings_dir / self._meeting_id / f"{self._stream_label}.wav"
 
     async def __aenter__(self) -> AudioCaptureService:
         self.wav_path.parent.mkdir(parents=True, exist_ok=True)
@@ -176,7 +192,7 @@ class AudioCaptureService:
         if self._consumer_task and not self._consumer_task.done():
             try:
                 await asyncio.wait_for(self._consumer_task, timeout=5.0)
-            except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+            except (TimeoutError, asyncio.CancelledError, Exception):
                 if not self._consumer_task.done():
                     self._consumer_task.cancel()
                     with contextlib.suppress(BaseException):
@@ -200,7 +216,7 @@ class AudioCaptureService:
         while not self._closed:
             try:
                 ev = await asyncio.wait_for(self._event_queue.get(), timeout=0.5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if self._closed:
                     break
                 continue
@@ -218,7 +234,7 @@ class AudioCaptureService:
         """
         bytes_per_chunk = int(self._sample_rate * self._chunk_seconds) * 2  # int16
         chunk_buf = bytearray()
-        chunk_started_at = datetime.now(timezone.utc)
+        chunk_started_at = datetime.now(UTC)
         silent_since: datetime | None = None
         warning_emitted_for: datetime | None = None
 
@@ -230,13 +246,14 @@ class AudioCaptureService:
                 if chunk_buf:
                     payload = bytes(chunk_buf)
                     chunk_buf.clear()
-                    ended_at = datetime.now(timezone.utc)
+                    ended_at = datetime.now(UTC)
                     await self._event_queue.put(
                         AudioChunk(
                             audio_bytes=payload,
                             sample_rate_hz=self._sample_rate,
                             started_at=chunk_started_at,
                             ended_at=ended_at,
+                            stream=self._stream_label,
                         )
                     )
                 # Sentinel signalling end-of-stream.
@@ -245,10 +262,10 @@ class AudioCaptureService:
 
             try:
                 frame = await asyncio.wait_for(self._raw_queue.get(), timeout=0.05)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Periodically re-check silence even when no new audio arrives.
                 if silent_since is not None and warning_emitted_for != silent_since:
-                    elapsed = (datetime.now(timezone.utc) - silent_since).total_seconds()
+                    elapsed = (datetime.now(UTC) - silent_since).total_seconds()
                     if elapsed >= self._silence_after:
                         await self._emit_silence_warning(silent_since)
                         warning_emitted_for = silent_since
@@ -259,7 +276,7 @@ class AudioCaptureService:
 
             # Silence detection on this incoming frame.
             rms = _rms(frame)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if rms < _SILENCE_RMS_THRESHOLD:
                 if silent_since is None:
                     silent_since = now
@@ -275,18 +292,19 @@ class AudioCaptureService:
             while len(chunk_buf) >= bytes_per_chunk:
                 payload = bytes(chunk_buf[:bytes_per_chunk])
                 chunk_buf = chunk_buf[bytes_per_chunk:]
-                ended_at = datetime.now(timezone.utc)
+                ended_at = datetime.now(UTC)
                 chunk = AudioChunk(
                     audio_bytes=payload,
                     sample_rate_hz=self._sample_rate,
                     started_at=chunk_started_at,
                     ended_at=ended_at,
+                    stream=self._stream_label,
                 )
                 await self._event_queue.put(chunk)
                 chunk_started_at = ended_at
 
     async def _emit_silence_warning(self, since: datetime) -> None:
-        await self._event_queue.put(SilenceWarning(since=since))
+        await self._event_queue.put(SilenceWarning(since=since, stream=self._stream_label))
 
 
 __all__ = [

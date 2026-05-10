@@ -271,3 +271,82 @@ async def test_get_returns_persisted_asr_provider_whisper(
     resp = await api_client.get(f"/api/meetings/{mid}", headers={"X-User-Id": "user_asr"})
     assert resp.status_code == 200
     assert resp.json()["asr_provider"] == "whisper"
+
+
+@pytest.mark.asyncio
+async def test_create_with_scheduled_times(api_client: AsyncClient, migrated_engine: AsyncEngine):
+    """Slice-07: POST accepts scheduled_start_at + scheduled_end_at and echoes them."""
+    await _seed_user(migrated_engine, "user_sched_post")
+
+    resp = await api_client.post(
+        "/api/meetings",
+        headers={"X-User-Id": "user_sched_post"},
+        json={
+            "title": "Q3 review",
+            "counterparty_display_name": "林",
+            "me_display_name": "Sean",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
+            "scheduled_end_at": "2026-06-15T15:00:00Z",
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["scheduled_start_at"].startswith("2026-06-15T14:00:00")
+    assert body["scheduled_end_at"].startswith("2026-06-15T15:00:00")
+
+
+@pytest.mark.asyncio
+async def test_create_without_scheduled_times_returns_null(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Slice-07: scheduled fields default to null when omitted from POST body."""
+    await _seed_user(migrated_engine, "user_no_sched_post")
+
+    resp = await api_client.post(
+        "/api/meetings",
+        headers={"X-User-Id": "user_no_sched_post"},
+        json={
+            "title": "no schedule",
+            "counterparty_display_name": "林",
+            "me_display_name": "Sean",
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["scheduled_start_at"] is None
+    assert body["scheduled_end_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_includes_scheduled_times(api_client: AsyncClient, migrated_engine: AsyncEngine):
+    """Slice-07: GET /api/meetings includes scheduled fields per row (mix of null + set)."""
+    await _seed_user(migrated_engine, "user_list_sched")
+
+    await api_client.post(
+        "/api/meetings",
+        headers={"X-User-Id": "user_list_sched"},
+        json={
+            "title": "with",
+            "counterparty_display_name": "L",
+            "me_display_name": "S",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
+            "scheduled_end_at": "2026-06-15T15:00:00Z",
+        },
+    )
+    await api_client.post(
+        "/api/meetings",
+        headers={"X-User-Id": "user_list_sched"},
+        json={
+            "title": "without",
+            "counterparty_display_name": "L",
+            "me_display_name": "S",
+        },
+    )
+
+    resp = await api_client.get("/api/meetings", headers={"X-User-Id": "user_list_sched"})
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) == 2
+    for item in items:
+        assert "scheduled_start_at" in item
+        assert "scheduled_end_at" in item

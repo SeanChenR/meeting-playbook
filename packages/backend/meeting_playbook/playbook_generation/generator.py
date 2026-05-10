@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from collections.abc import Awaitable, Callable
 from typing import TypedDict
 
 from meeting_playbook.calendar.client import CalendarEvent
+from meeting_playbook.config import get_settings
 from meeting_playbook.playbook_generation.prompts import (
     EMPTY_FIELD_SENTINEL,
     build_fallback_prompt,
@@ -69,9 +69,16 @@ def _default_call_model() -> CallModel:
         from google import genai
         from google.genai import types as genai_types
 
-        project = os.environ.get("VERTEX_AI_PROJECT", "")
-        location = os.environ.get("VERTEX_AI_LOCATION", "us-central1")
-        client = genai.Client(vertexai=True, project=project, location=location)
+        # Read from Settings, NOT os.environ — pydantic-settings loads
+        # `.env` into Settings but does NOT export those values to the
+        # process environment, so `os.environ.get(...)` would silently
+        # fall back to defaults whenever the user configures via `.env`.
+        settings = get_settings()
+        client = genai.Client(
+            vertexai=True,
+            project=settings.vertex_ai_project,
+            location=settings.vertex_ai_location,
+        )
 
         response_schema = {
             "type": "object",

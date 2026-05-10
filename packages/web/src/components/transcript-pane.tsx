@@ -47,11 +47,11 @@ export function TranscriptPane({
   const { t } = useTranslation();
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <CardHeader>
         <CardTitle>{t("meetings.session.transcriptHeading")}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-1 flex-col overflow-hidden">
         {chunks.length === 0 ? (
           <div
             data-testid="transcript-empty"
@@ -60,7 +60,7 @@ export function TranscriptPane({
             {t("meetings.session.transcriptEmpty")}
           </div>
         ) : (
-          <ol className="space-y-3">
+          <ol className="flex-1 space-y-3 overflow-y-auto pr-1">
             {chunks.map((chunk, idx) => (
               <li
                 key={`${chunk.started_at}-${idx}`}
@@ -83,7 +83,9 @@ export function TranscriptPane({
                   <span aria-hidden>·</span>
                   <span>{_formatTime(chunk.started_at)}</span>
                 </div>
-                <p className="whitespace-pre-wrap text-(--color-foreground)">{chunk.text}</p>
+                <p className="break-words whitespace-pre-wrap text-(--color-foreground)">
+                  {chunk.text}
+                </p>
               </li>
             ))}
           </ol>

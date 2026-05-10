@@ -83,7 +83,7 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
       : t("playbook.save.idle");
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <CardTitle>{t("playbook.heading")}</CardTitle>
         {/* Slice-7 round 3: Edit / Preview sub-toggle promoted to header. */}
@@ -110,7 +110,7 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-1 flex-col space-y-4 overflow-y-auto">
         {query.isLoading && <div>{t("playbook.loading")}</div>}
         {error && <Alert variant="destructive">{error}</Alert>}
 

@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   openSessionSocket,
   type SessionMessage,
@@ -39,14 +40,33 @@ const initialSilenceSince: SilenceSinceByStream = {
   counterparty: null,
 };
 
+// Slice-8: each user-initiated `Get Advice` press creates one AdviceRequest.
+// Past requests stay in the list so the user can scroll up (history).
+export type AdviceRequestStatus = "streaming" | "done" | "failed";
+
+export interface AdviceRequest {
+  requestId: string;
+  startedAt: string; // ISO8601
+  status: AdviceRequestStatus;
+  tokens: string;
+  error?: { code: string; message: string };
+}
+
+export interface AdvisorState {
+  requests: AdviceRequest[];
+}
+
+const initialAdvisor: AdvisorState = { requests: [] };
+
 export type SessionState =
-  | { phase: "idle" }
-  | { phase: "connecting" }
+  | { phase: "idle"; advisor: AdvisorState }
+  | { phase: "connecting"; advisor: AdvisorState }
   | {
       phase: "in_progress";
       chunks: TranscriptChunkMessage[];
       silenceSinceByStream: SilenceSinceByStream;
       streamStatus: StreamStatusByStream;
+      advisor: AdvisorState;
     }
   | {
       // After the user clicks End: server is still draining the queued
@@ -54,36 +74,101 @@ export type SessionState =
       phase: "ending";
       chunks: TranscriptChunkMessage[];
       streamStatus: StreamStatusByStream;
+      advisor: AdvisorState;
     }
-  | { phase: "ended"; chunks: TranscriptChunkMessage[] }
+  | { phase: "ended"; chunks: TranscriptChunkMessage[]; advisor: AdvisorState }
   | {
       phase: "error";
       errorCode: string;
       message: string;
       chunks: TranscriptChunkMessage[];
+      advisor: AdvisorState;
     };
 
 type Action =
   | { type: "START" }
   | { type: "END_REQUESTED" }
   | { type: "WS_MESSAGE"; payload: SessionMessage }
+  | { type: "ADVICE_REQUESTED"; requestId: string; startedAt: string }
   | { type: "UNEXPECTED_CLOSE" }
   | { type: "RETRY_FAILED" }
   | { type: "RESET" };
 
-const initialState: SessionState = { phase: "idle" };
+function _updateRequest(
+  requests: AdviceRequest[],
+  requestId: string,
+  patch: (r: AdviceRequest) => AdviceRequest,
+): AdviceRequest[] {
+  return requests.map((r) => (r.requestId === requestId ? patch(r) : r));
+}
+
+const initialState: SessionState = { phase: "idle", advisor: initialAdvisor };
 
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case "START":
-      return { phase: "connecting" };
+      return { phase: "connecting", advisor: state.advisor };
     case "END_REQUESTED":
       if (state.phase === "in_progress") {
-        return { phase: "ending", chunks: state.chunks, streamStatus: state.streamStatus };
+        return {
+          phase: "ending",
+          chunks: state.chunks,
+          streamStatus: state.streamStatus,
+          advisor: state.advisor,
+        };
       }
       return state;
+    case "ADVICE_REQUESTED":
+      return {
+        ...state,
+        advisor: {
+          requests: [
+            ...state.advisor.requests,
+            {
+              requestId: action.requestId,
+              startedAt: action.startedAt,
+              status: "streaming",
+              tokens: "",
+            },
+          ],
+        },
+      };
     case "WS_MESSAGE": {
       const msg = action.payload;
+      if (msg.type === "advice_chunk") {
+        return {
+          ...state,
+          advisor: {
+            requests: _updateRequest(state.advisor.requests, msg.request_id, (r) => ({
+              ...r,
+              tokens: r.tokens + msg.token,
+            })),
+          },
+        };
+      }
+      if (msg.type === "advice_done") {
+        return {
+          ...state,
+          advisor: {
+            requests: _updateRequest(state.advisor.requests, msg.request_id, (r) => ({
+              ...r,
+              status: "done",
+            })),
+          },
+        };
+      }
+      if (msg.type === "advisor_failed") {
+        return {
+          ...state,
+          advisor: {
+            requests: _updateRequest(state.advisor.requests, msg.request_id, (r) => ({
+              ...r,
+              status: "failed",
+              error: { code: msg.error_code, message: msg.message },
+            })),
+          },
+        };
+      }
       if (msg.type === "error") {
         const chunks =
           state.phase === "in_progress" ||
@@ -97,6 +182,7 @@ function reducer(state: SessionState, action: Action): SessionState {
           errorCode: msg.error_code,
           message: msg.message,
           chunks,
+          advisor: state.advisor,
         };
       }
       if (msg.type === "meeting_started") {
@@ -105,6 +191,7 @@ function reducer(state: SessionState, action: Action): SessionState {
           chunks: [],
           silenceSinceByStream: { ...initialSilenceSince },
           streamStatus: { ...initialStreamStatus },
+          advisor: state.advisor,
         };
       }
       if (msg.type === "transcript_chunk") {
@@ -158,7 +245,7 @@ function reducer(state: SessionState, action: Action): SessionState {
       }
       if (msg.type === "meeting_ended") {
         if (state.phase !== "in_progress" && state.phase !== "ending") return state;
-        return { phase: "ended", chunks: state.chunks };
+        return { phase: "ended", chunks: state.chunks, advisor: state.advisor };
       }
       return state;
     }
@@ -177,6 +264,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         errorCode: "session.connection_lost",
         message: "WebSocket disconnected; retry attempt also failed.",
         chunks,
+        advisor: state.advisor,
       };
     }
     case "RESET":
@@ -190,10 +278,12 @@ export interface UseMeetingSessionResult {
   state: SessionState;
   start: () => void;
   end: () => void;
+  requestAdvice: () => void;
 }
 
 export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const { i18n } = useTranslation();
   const socketRef = useRef<SessionSocket | null>(null);
   const retryAttemptedRef = useRef<boolean>(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -254,6 +344,24 @@ export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
     socketRef.current.send({ type: "end_meeting", meeting_id: meetingId });
   }, [meetingId]);
 
+  const requestAdvice = useCallback(() => {
+    if (!socketRef.current) return;
+    const requestId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const startedAt = new Date().toISOString();
+    // The backend strictly accepts "zh-TW" | "en"; coerce anything else
+    // (e.g. "en-US") down to its base by checking the prefix.
+    const lng = i18n.language?.toLowerCase().startsWith("en") ? "en" : "zh-TW";
+    dispatch({ type: "ADVICE_REQUESTED", requestId, startedAt });
+    socketRef.current.send({
+      type: "request_advice",
+      request_id: requestId,
+      locale: lng,
+    });
+  }, [i18n]);
+
   // Unmount cleanup: close the socket without sending end_meeting so the
   // router treats it as a client-disconnect end-of-session.
   useEffect(() => {
@@ -270,5 +378,5 @@ export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
     };
   }, []);
 
-  return { state, start, end };
+  return { state, start, end, requestAdvice };
 }

@@ -193,6 +193,14 @@
       "viewWeek": "Week",
       "unscheduledTitle": "Unscheduled meetings",
       "empty": "No meetings in this period"
+    },
+    "advisor": {
+      "heading": "Tactical advisor",
+      "getAdviceButton": "Get Advice",
+      "thinking": "Thinking…",
+      "retry": "Retry",
+      "emptyState": "Start the meeting to receive live tactical advice here",
+      "cardHeading": "Tactical advice"
     }
   },
   "calendar": {
@@ -266,6 +274,12 @@
       "persist_failed": "Failed to persist transcript — session aborted",
       "unknown_message": "Unrecognized message",
       "connection_lost": "WebSocket connection lost"
+    },
+    "advisor": {
+      "timeout": "Vertex timeout, please retry",
+      "quota": "Vertex API quota exhausted",
+      "auth": "Vertex authentication failed; check GOOGLE_APPLICATION_CREDENTIALS",
+      "unknown": "Tactical advice temporarily unavailable"
     },
     "meeting": {
       "not_found": "Meeting not found",

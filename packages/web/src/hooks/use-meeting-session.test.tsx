@@ -271,6 +271,79 @@ describe("useMeetingSession", () => {
     });
   });
 
+  // ─── Slice 8: TacticalAdvisor lifecycle ─────────────────────────────
+
+  test("requestAdvice + advice_chunk × 3 + advice_done → one done request with concatenated tokens", async () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
+    });
+    act(() => {
+      result.current.requestAdvice();
+    });
+    // The request_advice frame should have been sent over the wire with a
+    // generated request_id.
+    const requestAdviceSent = ws.sent
+      .map((s) => JSON.parse(s) as { type: string })
+      .find((m) => m.type === "request_advice") as
+      | { type: string; request_id: string; locale: string }
+      | undefined;
+    expect(requestAdviceSent).toBeDefined();
+    const requestId = requestAdviceSent!.request_id;
+    expect(requestAdviceSent!.locale === "zh-TW" || requestAdviceSent!.locale === "en").toBe(true);
+
+    act(() => {
+      ws.simulateMessage({ type: "advice_chunk", request_id: requestId, token: "a" });
+      ws.simulateMessage({ type: "advice_chunk", request_id: requestId, token: "b" });
+      ws.simulateMessage({ type: "advice_chunk", request_id: requestId, token: "c" });
+      ws.simulateMessage({ type: "advice_done", request_id: requestId });
+    });
+
+    const reqs = result.current.state.advisor.requests;
+    expect(reqs).toHaveLength(1);
+    expect(reqs[0]!.tokens).toBe("abc");
+    expect(reqs[0]!.status).toBe("done");
+  });
+
+  test("advisor_failed records error code on the matching request", async () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
+    });
+    act(() => {
+      result.current.requestAdvice();
+    });
+    const requestId = (
+      ws.sent
+        .map((s) => JSON.parse(s) as { type: string; request_id?: string })
+        .find((m) => m.type === "request_advice") as { request_id: string }
+    ).request_id;
+
+    act(() => {
+      ws.simulateMessage({
+        type: "advisor_failed",
+        request_id: requestId,
+        error_code: "advisor.timeout",
+        message: "Vertex stream timed out after 15s",
+      });
+    });
+
+    const reqs = result.current.state.advisor.requests;
+    expect(reqs).toHaveLength(1);
+    expect(reqs[0]!.status).toBe("failed");
+    expect(reqs[0]!.error?.code).toBe("advisor.timeout");
+  });
+
   test("unexpected close during in_progress triggers ONE retry then enters error", async () => {
     const { result } = renderHook(() => useMeetingSession("m_a"));
     act(() => {

@@ -320,4 +320,41 @@ describe("MeetingDetail slice-06 session UI", () => {
     // so the user can't accidentally click it twice during draining.
     expect(screen.queryByRole("button", { name: /^結束會議$/ })).toBeNull();
   });
+
+  // ─── Slice-08: AdvisorPane integration into the detail page ─────────
+
+  test("AdvisorPane is mounted; placeholder string is gone; Get Advice appears once in_progress", async () => {
+    const user = userEvent.setup();
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    // Slice-7 placeholder text MUST be gone now that the real AdvisorPane mounts.
+    expect(screen.queryByText(/Tactical advisor 將在 Slice 8 上線/)).toBeNull();
+    expect(screen.queryByTestId("advisor-placeholder")).toBeNull();
+
+    // Pre-session: empty state visible, Get Advice button hidden.
+    expect(screen.getAllByTestId("advisor-pane-empty").length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("get-advice-button")).toBeNull();
+
+    // Drive the session into in_progress.
+    await user.click(screen.getByRole("button", { name: /^開始會議$/ }));
+    const ws = _MockSessionWS.instances[0]!;
+    await waitFor(() => {
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_abc" });
+      expect(screen.queryByTestId("get-advice-button")).not.toBeNull();
+    });
+  });
+
+  test("AdvisorPane shows empty state when meeting is scheduled (no Get Advice button)", async () => {
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    // The AdvisorPane is rendered in BOTH the columns and the stack
+    // viewports (responsive layout); both produce the empty state element.
+    const empties = screen.getAllByTestId("advisor-pane-empty");
+    expect(empties.length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("get-advice-button")).toBeNull();
+  });
 });

@@ -53,20 +53,52 @@ export type ErrorMessage = {
   message: string;
 };
 
+// Slice-8: TacticalAdvisor streaming frames. Each is correlated with the
+// originating `request_advice.request_id` so the UI can keep multiple
+// historical advice cards distinct.
+export type AdviceChunkMessage = {
+  type: "advice_chunk";
+  request_id: string;
+  token: string;
+};
+
+export type AdviceDoneMessage = {
+  type: "advice_done";
+  request_id: string;
+};
+
+export type AdvisorFailedMessage = {
+  type: "advisor_failed";
+  request_id: string;
+  error_code: string;
+  message: string;
+};
+
 export type SessionMessage =
   | MeetingStartedMessage
   | TranscriptChunkMessage
   | SilenceWarningMessage
   | StreamStoppedMessage
   | MeetingEndedMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | AdviceChunkMessage
+  | AdviceDoneMessage
+  | AdvisorFailedMessage;
 
 // ─── Client → server message types ─────────────────────────────────────────
 
 export type StartMeetingMessage = { type: "start_meeting"; meeting_id: string };
 export type EndMeetingMessage = { type: "end_meeting"; meeting_id: string };
+// Slice-8: button-only path leaves user_question undefined; slice-9 chatbox
+// will populate it with the user's typed prompt.
+export type RequestAdviceMessage = {
+  type: "request_advice";
+  request_id: string;
+  locale: "zh-TW" | "en";
+  user_question?: string | null;
+};
 
-export type ClientMessage = StartMeetingMessage | EndMeetingMessage;
+export type ClientMessage = StartMeetingMessage | EndMeetingMessage | RequestAdviceMessage;
 
 // ─── Wrapper ───────────────────────────────────────────────────────────────
 

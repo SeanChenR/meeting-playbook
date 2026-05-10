@@ -193,6 +193,14 @@
       "viewWeek": "週",
       "unscheduledTitle": "未排程 Meetings",
       "empty": "本月無會議"
+    },
+    "advisor": {
+      "heading": "戰術建議",
+      "getAdviceButton": "取得建議",
+      "thinking": "思考中…",
+      "retry": "重試",
+      "emptyState": "會議開始後可在此取得即時戰術建議",
+      "cardHeading": "戰術建議"
     }
   },
   "calendar": {
@@ -266,6 +274,12 @@
       "persist_failed": "逐字稿寫入失敗 — 已中止 session",
       "unknown_message": "收到無法辨識的訊息",
       "connection_lost": "WebSocket 連線中斷"
+    },
+    "advisor": {
+      "timeout": "Vertex 回應逾時，請重試",
+      "quota": "Vertex API 配額已用盡",
+      "auth": "Vertex 認證失敗，請檢查 GOOGLE_APPLICATION_CREDENTIALS",
+      "unknown": "戰術建議暫時無法使用"
     },
     "meeting": {
       "not_found": "找不到此 Meeting",

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AdvisorPane } from "../../components/advisor-pane";
 import { CaptureIndicator } from "../../components/capture-indicator";
 import { HeadphonesHint } from "../../components/headphones-hint";
 import { LayoutSwitcher } from "../../components/layout-switcher";
@@ -21,20 +22,6 @@ import {
   MeetingApiError,
   useDeleteMeetingMutation,
 } from "../../lib/meetings-api";
-
-function AdvisorPlaceholder() {
-  const { t } = useTranslation();
-  return (
-    <Card data-testid="advisor-placeholder">
-      <CardHeader>
-        <CardTitle>Advisor</CardTitle>
-      </CardHeader>
-      <CardContent className="text-sm text-(--color-muted-foreground)">
-        {t("meetings.detail.advisorPlaceholder")}
-      </CardContent>
-    </Card>
-  );
-}
 
 export function MeetingDetail() {
   const { t } = useTranslation();
@@ -120,7 +107,7 @@ export function MeetingDetail() {
       counterpartyDisplayName={meeting.counterparty_display_name}
     />
   );
-  const advisorPane = meeting && <AdvisorPlaceholder />;
+  const advisorPane = meeting && <AdvisorPane session={session} />;
 
   return (
     <ProtectedShell fullBleed>

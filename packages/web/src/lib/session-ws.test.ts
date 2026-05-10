@@ -157,6 +157,48 @@ describe("openSessionSocket", () => {
     }
   });
 
+  // ─── Slice 8: TacticalAdvisor frames ──────────────────────────────
+
+  test("parses advice_chunk / advice_done / advisor_failed into the discriminated union", () => {
+    installMock();
+    const sock = openSessionSocket("m_abc");
+    const received: SessionMessage[] = [];
+    sock.onMessage = (msg) => {
+      received.push(msg);
+    };
+    const ws = MockWebSocket.instances[0]!;
+    ws.simulateOpen();
+
+    ws.simulateMessage(
+      JSON.stringify({ type: "advice_chunk", request_id: "req_1", token: "alpha" }),
+    );
+    ws.simulateMessage(JSON.stringify({ type: "advice_done", request_id: "req_1" }));
+    ws.simulateMessage(
+      JSON.stringify({
+        type: "advisor_failed",
+        request_id: "req_2",
+        error_code: "advisor.timeout",
+        message: "Vertex stream timed out after 15s",
+      }),
+    );
+
+    expect(received).toHaveLength(3);
+    expect(received[0]!.type).toBe("advice_chunk");
+    if (received[0]!.type === "advice_chunk") {
+      expect(received[0]!.request_id).toBe("req_1");
+      expect(received[0]!.token).toBe("alpha");
+    }
+    expect(received[1]!.type).toBe("advice_done");
+    if (received[1]!.type === "advice_done") {
+      expect(received[1]!.request_id).toBe("req_1");
+    }
+    expect(received[2]!.type).toBe("advisor_failed");
+    if (received[2]!.type === "advisor_failed") {
+      expect(received[2]!.error_code).toBe("advisor.timeout");
+      expect(received[2]!.message).toContain("timed out");
+    }
+  });
+
   test("parses silence_warning frame including stream field", () => {
     installMock();
     const sock = openSessionSocket("m_abc");

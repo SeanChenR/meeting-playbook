@@ -6,7 +6,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "types": ["bun-types"],
+    "types": ["@types/bun"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,

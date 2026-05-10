@@ -176,6 +176,10 @@
       "layout": {
         "stack": "上下三層佈局",
         "columns": "三欄佈局"
+      },
+      "tabs": {
+        "workspace": "工作區",
+        "summary": "摘要"
       }
     },
     "list": {
@@ -207,6 +211,18 @@
       "userLabel": "我",
       "advisorLabel": "Advisor",
       "cmdEnterHint": "⌘+Enter 送出"
+    },
+    "summary": {
+      "heading": "摘要",
+      "disabledHint": "會議結束後可看摘要",
+      "generating": "生成中…",
+      "generatingHint": "（約 30-60 秒）",
+      "generatedAt": "生成於 {{at}}",
+      "regenerate": "重新生成",
+      "exportMd": "匯出 .md",
+      "staleAlert": "內容已更新，建議重新生成",
+      "emptyState": "尚無摘要",
+      "generate": "生成摘要"
     }
   },
   "calendar": {
@@ -286,6 +302,12 @@
       "quota": "Vertex API 配額已用盡",
       "auth": "Vertex 認證失敗，請檢查 GOOGLE_APPLICATION_CREDENTIALS",
       "unknown": "戰術建議暫時無法使用"
+    },
+    "summary": {
+      "busy": "上一個生成尚未完成",
+      "not_found": "尚未生成摘要",
+      "generation_failed": "摘要生成失敗，請重試",
+      "generation_timeout": "摘要生成逾時，請重試"
     },
     "meeting": {
       "not_found": "找不到此 Meeting",

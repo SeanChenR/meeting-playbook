@@ -492,4 +492,98 @@ describe("MeetingDetail slice-06 session UI", () => {
       expect(chatGetCount).toBeGreaterThan(initialCount);
     });
   });
+
+  // ─── Slice-10: Workspace / Summary tabs ─────────────────────────────
+
+  test("workspace tab is active by default; summary tab is disabled when meeting not completed", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/playbook")) {
+        return new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+
+    // Workspace tab content is visible (3-column structure or stack present).
+    expect(
+      screen.queryByTestId("detail-columns") ?? screen.queryByTestId("detail-stack"),
+    ).not.toBeNull();
+    // Summary tab trigger is disabled (meeting status = "scheduled").
+    const summaryTab = screen.getByTestId("detail-tab-summary") as HTMLButtonElement;
+    expect(summaryTab.disabled).toBe(true);
+    // SummaryPane is NOT mounted.
+    expect(screen.queryByTestId("summary-pane")).toBeNull();
+  });
+
+  test("summary tab enabled and clickable when meeting status is completed", async () => {
+    const user = userEvent.setup();
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/playbook")) {
+        return new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.endsWith("/summary")) {
+        // 404 → SummaryPane renders the empty state.
+        return new Response(JSON.stringify({ error_code: "summary.not_found", message: "no" }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/transcript_chunks")) {
+        // detail.tsx loads transcript history for completed meetings via
+        // rowToMessage(); without an array stub the helper crashes on
+        // `{}.map`.
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ ...SAMPLE_MEETING, status: "completed" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+
+    const summaryTab = screen.getByTestId("detail-tab-summary") as HTMLButtonElement;
+    expect(summaryTab.disabled).toBe(false);
+
+    await user.click(summaryTab);
+
+    // SummaryPane mounts; the empty state appears (404 from /summary).
+    await waitFor(() => {
+      expect(screen.getByTestId("summary-pane")).toBeDefined();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("summary-empty")).toBeDefined();
+    });
+  });
 });

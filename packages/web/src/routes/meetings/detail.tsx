@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AdvisorPane } from "../../components/advisor-pane";
+import { SummaryPane } from "../../components/summary-pane";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { useDetailTab } from "../../hooks/use-detail-tab";
 import { chatMessagesQueryOptions } from "../../lib/chat-api";
 import { CaptureIndicator } from "../../components/capture-indicator";
 import { HeadphonesHint } from "../../components/headphones-hint";
@@ -57,6 +60,17 @@ export function MeetingDetail() {
       session.onAdviceDone = null;
     };
   }, [session, queryClient, meetingId]);
+
+  // Slice-10: when the WS session reaches `ended` phase (meeting_ended
+  // received OR client-side cleanup), invalidate the meeting cache so
+  // the route re-fetches and sees `status = "completed"`. Without this
+  // the user has to manually refresh before the Summary tab unlocks
+  // and the "開始會議" button hides itself.
+  useEffect(() => {
+    if (session.state.phase === "ended") {
+      queryClient.invalidateQueries({ queryKey: ["meetings", meetingId] });
+    }
+  }, [session.state.phase, queryClient, meetingId]);
 
   // Slice-7: derive per-stream pill state for the indicator. Outside an
   // active session (idle / connecting / ended / error) the indicator is
@@ -199,38 +213,15 @@ export function MeetingDetail() {
         </Card>
       )}
 
-      {meeting && layout === "columns" ? (
-        <div
-          data-testid="detail-columns"
-          className="grid grid-cols-1 gap-4 lg:grid-cols-[30%_40%_30%] lg:h-[calc(100vh-260px)]"
-        >
-          <div
-            data-testid="detail-pane-playbook"
-            className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
-          >
-            {playbookPane}
-          </div>
-          <div
-            data-testid="detail-pane-transcript"
-            className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
-          >
-            {transcriptPane}
-          </div>
-          <div
-            data-testid="detail-pane-advisor"
-            className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
-          >
-            {advisorPane}
-          </div>
-        </div>
-      ) : (
-        meeting && (
-          <div data-testid="detail-stack" className="space-y-4">
-            <div data-testid="detail-pane-playbook">{playbookPane}</div>
-            <div data-testid="detail-pane-transcript">{transcriptPane}</div>
-            <div data-testid="detail-pane-advisor">{advisorPane}</div>
-          </div>
-        )
+      {meeting && (
+        <DetailTabsView
+          meeting={meeting}
+          meetingId={meetingId}
+          layout={layout}
+          playbookPane={playbookPane}
+          transcriptPane={transcriptPane}
+          advisorPane={advisorPane}
+        />
       )}
 
       <AlertDialog
@@ -244,5 +235,89 @@ export function MeetingDetail() {
         destructive
       />
     </ProtectedShell>
+  );
+}
+
+interface DetailTabsViewProps {
+  meeting: { title: string; created_at: string; status: string };
+  meetingId: string;
+  layout: "columns" | "stack";
+  playbookPane: React.ReactNode;
+  transcriptPane: React.ReactNode;
+  advisorPane: React.ReactNode;
+}
+
+/**
+ * Slice-10: wraps the existing 3-column workspace AND the new SummaryPane
+ * inside a Tabs primitive. Workspace tab is always enabled; Summary tab
+ * is disabled until the meeting reaches `completed` status. Persistence
+ * is handled by `useDetailTab(meetingId, meeting)`.
+ */
+function DetailTabsView({
+  meeting,
+  meetingId,
+  layout,
+  playbookPane,
+  transcriptPane,
+  advisorPane,
+}: DetailTabsViewProps) {
+  const { t } = useTranslation();
+  const [tab, setTab] = useDetailTab(meetingId, meeting);
+  const summaryEnabled = meeting.status === "completed";
+
+  return (
+    <Tabs value={tab} onValueChange={(v) => setTab(v as "workspace" | "summary")}>
+      <TabsList>
+        <TabsTrigger value="workspace" data-testid="detail-tab-workspace">
+          {t("meetings.detail.tabs.workspace")}
+        </TabsTrigger>
+        <TabsTrigger
+          value="summary"
+          disabled={!summaryEnabled}
+          title={!summaryEnabled ? t("meetings.summary.disabledHint") : undefined}
+          data-testid="detail-tab-summary"
+        >
+          {t("meetings.detail.tabs.summary")}
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="workspace">
+        {layout === "columns" ? (
+          <div
+            data-testid="detail-columns"
+            className="grid grid-cols-1 gap-4 lg:grid-cols-[30%_40%_30%] lg:h-[calc(100vh-300px)]"
+          >
+            <div
+              data-testid="detail-pane-playbook"
+              className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
+            >
+              {playbookPane}
+            </div>
+            <div
+              data-testid="detail-pane-transcript"
+              className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
+            >
+              {transcriptPane}
+            </div>
+            <div
+              data-testid="detail-pane-advisor"
+              className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
+            >
+              {advisorPane}
+            </div>
+          </div>
+        ) : (
+          <div data-testid="detail-stack" className="space-y-4">
+            <div data-testid="detail-pane-playbook">{playbookPane}</div>
+            <div data-testid="detail-pane-transcript">{transcriptPane}</div>
+            <div data-testid="detail-pane-advisor">{advisorPane}</div>
+          </div>
+        )}
+      </TabsContent>
+      <TabsContent value="summary">
+        {summaryEnabled && tab === "summary" ? (
+          <SummaryPane meetingId={meetingId} meeting={meeting} />
+        ) : null}
+      </TabsContent>
+    </Tabs>
   );
 }

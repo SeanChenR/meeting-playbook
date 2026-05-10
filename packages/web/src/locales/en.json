@@ -176,6 +176,10 @@
       "layout": {
         "stack": "Stack layout",
         "columns": "Columns layout"
+      },
+      "tabs": {
+        "workspace": "Workspace",
+        "summary": "Summary"
       }
     },
     "list": {
@@ -207,6 +211,18 @@
       "userLabel": "Me",
       "advisorLabel": "Advisor",
       "cmdEnterHint": "⌘+Enter to send"
+    },
+    "summary": {
+      "heading": "Summary",
+      "disabledHint": "Summary becomes available after the meeting ends",
+      "generating": "Generating…",
+      "generatingHint": "(about 30-60 seconds)",
+      "generatedAt": "Generated {{at}}",
+      "regenerate": "Regenerate",
+      "exportMd": "Export .md",
+      "staleAlert": "Content has been updated; consider regenerating",
+      "emptyState": "No summary yet",
+      "generate": "Generate summary"
     }
   },
   "calendar": {
@@ -286,6 +302,12 @@
       "quota": "Vertex API quota exhausted",
       "auth": "Vertex authentication failed; check GOOGLE_APPLICATION_CREDENTIALS",
       "unknown": "Tactical advice temporarily unavailable"
+    },
+    "summary": {
+      "busy": "Previous generation still running",
+      "not_found": "Summary has not been generated",
+      "generation_failed": "Summary generation failed, please retry",
+      "generation_timeout": "Summary generation timed out, please retry"
     },
     "meeting": {
       "not_found": "Meeting not found",

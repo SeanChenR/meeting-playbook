@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     backend_internal_auth_secret: str = ""
     backend_internal_auth_url: str = "http://localhost:3001"
 
+    # Slice 8 — Vertex Flash model id used by TacticalAdvisor (in-meeting advisor).
+    # MUST be a Vertex AI publisher model id (e.g. `gemini-2.5-flash`,
+    # `gemini-2.0-flash-001`), NOT a Gemini API (ai.google.dev) name like
+    # `gemini-3.1-flash-lite` — those are not deployed to Vertex AI in
+    # us-central1 and will 404 with `Publisher Model ... was not found`.
+    # See https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions
+    vertex_flash_model_id: str = "gemini-2.5-flash"
+
     # Slice 6 — audio capture + ASR
     recordings_dir: str = "~/MeetingPlaybook/recordings"
     whisper_model_size: str = "large-v3-turbo"

@@ -107,21 +107,119 @@ The integration test
 runs concurrent capture + advice for ~5 seconds and asserts no
 `InvalidRequestError` surfaces.
 
-## Slice 9 upgrade path (chatbox)
+## Chat history (Slice 9)
 
-The WS frame `request_advice.user_question` is **already wired through**
-the entire stack:
+Slice 9 added per-meeting persistence + a chatbox follow-up path on top
+of the Slice 8 foundation. Persisted history is the byproduct of every
+successful advice stream; failed/cancelled streams write nothing.
 
-- `RequestAdviceMessage` Pydantic model accepts an optional `user_question`.
-- The router passes it straight through to `tactical_advisor.advise(...)`.
-- `prompts.build_user_message` switches between the default question line
-  ("請給出戰術建議。" / "Please give tactical advice.") and a
-  custom-question line ("Sean 想問：…" / "Sean asks: …").
+### Schema
 
-Slice 9 only needs to:
+```sql
+CREATE TABLE chat_message (
+  id          TEXT PRIMARY KEY,            -- cm_<token_urlsafe(16)>
+  meeting_id  TEXT NOT NULL REFERENCES meeting(id) ON DELETE CASCADE,
+  role        TEXT NOT NULL,               -- 'user' | 'advisor'
+  content     TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (role IN ('user','advisor'))
+);
+CREATE INDEX chat_message_meeting_created_idx ON chat_message (meeting_id, created_at);
+```
 
-1. Add a chatbox UI inside `AdvisorPane` that sets `user_question` in the
-   outbound `requestAdvice(...)` call (instead of leaving it `null`).
-2. (Optional) widen the locale union if a third language is needed.
+5 columns only — no `status` / `error_code` / `interrupted` because failed
+advice doesn't write rows (Decision 2 in the slice-9 design.md).
 
-No backend / spec changes are expected.
+### WS protocol additions
+
+| Direction       | Frame             | Fields                                           |
+| --------------- | ----------------- | ------------------------------------------------ |
+| client → server | `chat_message`    | `request_id`, `content` (non-empty), `locale`    |
+
+Response frames sticky from Slice 8: `advice_chunk` / `advice_done` /
+`advisor_failed`. The chatbox path and the legacy `request_advice` button
+path share the same response stream (just spawn `_run_advice` differently).
+
+### Write strategy: INSERT-pair-on-success
+
+`_run_advice` accumulates yielded tokens into `advisor_content`; on
+successful stream completion (just before `advice_done` is sent), the
+router calls `ChatMessageRepository.insert_pair_after_advice(meeting_id,
+user_content, advisor_content)` in a fresh AsyncSession (separate from
+the context-fetch session, separate from the request-scoped capture
+session). Both rows commit atomically. The user row's `created_at` is
+offset 1 microsecond earlier than the advisor row's so chronological
+ordering stays deterministic.
+
+Failed paths (`TimeoutError`, `ResourceExhausted`, `Unauthenticated`,
+generic `Exception`, `CancelledError`) skip the INSERT entirely — the UI
+shows a retry affordance from in-flight reducer state but no DB row
+records the failure.
+
+### Multi-turn context
+
+`prompts._format_chat_history(messages, me_display_name, locale)` renders
+prior chat_message rows as a `## 對話紀錄` (zh-TW) / `## Chat history`
+(en) section between the 60s transcript and the final question line.
+User rows render as `{me_display_name}: {content}`; advisor rows as
+literal `Advisor: {content}` (NOT the counterparty display name —
+conflating advisor with counterparty confuses the model). Empty history
+omits the heading entirely.
+
+### Frontend hydration + cache invalidation
+
+`useMeetingSession` exposes `loadHistory(messages)` and
+`onAdviceDone: ((requestId) => void) | null`. The route mounts both
+React Query for `GET /api/meetings/{id}/chat_messages` and a session
+callback registration:
+
+```typescript
+useEffect(() => {
+  if (Array.isArray(chatMessagesQuery.data)) {
+    session.loadHistory(chatMessagesQuery.data);
+  }
+}, [chatMessagesQuery.data, session]);
+
+useEffect(() => {
+  session.onAdviceDone = () => {
+    queryClient.invalidateQueries({ queryKey: ["chat_messages", meetingId] });
+  };
+  return () => { session.onAdviceDone = null; };
+}, [session, queryClient, meetingId]);
+```
+
+`HISTORY_LOADED` reducer case has an equality guard
+(`if (state.advisor.messages === action.messages) return state;`) to
+break the React render loop that would otherwise fire when the route's
+`session` ref changes every render.
+
+### In-flight UI state
+
+Reducer keeps `advisor: { messages: ChatMessage[]; inFlight: ... | null }`.
+The in-flight slice is local UI only — it carries `requestId`,
+`userContent` (so the failed-state retry can resend it via the right
+source path), `advisorTokens` (accumulated), `status`, and `source`
+("button" | "chatbox"). Cleared on `advice_done`; the React Query refetch
+then brings the persisted pair into `messages`.
+
+### AdvisorPane layout (Decision 8)
+
+```
+┌─ Tactical advisor ────────┐
+│ ChatMessageList (scrolls) │ ← persisted bubbles + virtual in-flight pair
+│                            │
+│ [ Get Advice ]              │ ← only in_progress
+│ ───────────────────────── │
+│ [ textarea ]    [ Send ]    │ ← only in_progress
+└────────────────────────────┘
+```
+
+History stays visible across phases (so the user can review post-meeting);
+input controls hide whenever `phase !== "in_progress"`.
+
+### Cancel-previous policy
+
+A new `chat_message` (or `request_advice`) frame while a prior advice is
+in-flight cancels the prior task via `asyncio.Task.cancel()` (silent
+re-raise of `CancelledError`, no `advisor_failed` sent). Since cancelled
+streams don't write rows, the cancelled exchange leaves no DB trace.

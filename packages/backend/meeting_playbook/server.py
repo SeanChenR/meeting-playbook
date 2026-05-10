@@ -26,6 +26,7 @@ from meeting_playbook.chat.router import router as chat_router
 from meeting_playbook.meetings.router import router as meetings_router
 from meeting_playbook.playbooks.router import router as playbooks_router
 from meeting_playbook.sessions.router import router as sessions_router
+from meeting_playbook.summarization.router import router as summary_router
 
 
 def _envelope(status_code: int, error_code: str, message: str) -> JSONResponse:
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
     app.include_router(calendar_router)
     app.include_router(sessions_router)
     app.include_router(chat_router)
+    app.include_router(summary_router)
     return app
 
 

@@ -494,3 +494,19 @@ async def meeting_session_endpoint(
     with contextlib.suppress(Exception):
         await _send(MeetingEndedMessage(meeting_id=meeting_id))
         await websocket.close()
+
+    # Slice-10: fire-and-forget spawn the post-meeting summary task. We
+    # don't await — the user's UI already saw `meeting_ended` and we
+    # don't want to delay the WS close handshake by 30-60s. Failures
+    # surface only via GET /summary + backend log (per design.md
+    # Decision 2). `spawn_summary_task` returns False when a prior
+    # session's task is still in-flight; we log and move on.
+    with contextlib.suppress(Exception):
+        from meeting_playbook.summarization import runtime as _summary_runtime
+
+        spawned = await _summary_runtime.spawn_summary_task(meeting_id)
+        if not spawned:
+            logger.info(
+                "summary spawn skipped meeting=%s (already in-flight)",
+                meeting_id,
+            )

@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     # See https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions
     vertex_flash_model_id: str = "gemini-2.5-flash"
 
+    # Slice 10 — Vertex Pro model id used by MeetingSummarizer (post-meeting).
+    # Same naming rules as `vertex_flash_model_id`: must be a Vertex AI
+    # publisher model id, not a Gemini API name. Default `gemini-2.5-pro`
+    # is the highest-quality SKU available on Vertex in us-central1.
+    vertex_pro_model_id: str = "gemini-2.5-pro"
+
     # Slice 6 — audio capture + ASR
     recordings_dir: str = "~/MeetingPlaybook/recordings"
     whisper_model_size: str = "large-v3-turbo"

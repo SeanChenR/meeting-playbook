@@ -163,3 +163,59 @@ async def test_dual_recordings_persisted(db_session):
     rows = await repo.list_recordings_for_meeting("m_dual_rec")
     streams = {r.stream for r in rows}
     assert streams == {"me", "counterparty"}, f"expected both streams, got {streams}"
+
+
+@pytest.mark.asyncio
+async def test_list_chunks_last_60s_window(db_session):
+    """Slice-08: rolling 60-second window — only chunks with started_at >= now() - 60s."""
+    await _seed_meeting(db_session, mid="m_window")
+    repo = SessionRepository(db_session)
+    now = datetime.now(UTC)
+    # Seed 5 chunks at -30s, -50s, -70s, -90s, -120s
+    for offset_s, text_body in [
+        (30, "in-A"),
+        (50, "in-B"),
+        (70, "out-C"),
+        (90, "out-D"),
+        (120, "out-E"),
+    ]:
+        started = now - timedelta(seconds=offset_s)
+        await repo.insert_chunk(
+            meeting_id="m_window",
+            speaker="me",
+            text_content=text_body,
+            started_at=started,
+            ended_at=started + timedelta(seconds=10),
+            asr_provider_used="whisper",
+            confidence=0.9,
+        )
+    await db_session.commit()
+
+    rows = await repo.list_chunks_last_60s("m_window")
+    texts = [r.text for r in rows]
+    # Only chunks within 60s; ordered ascending by started_at (oldest first
+    # within the window, so -50s before -30s).
+    assert texts == ["in-B", "in-A"], f"expected only -50s + -30s in window, got {texts}"
+
+
+@pytest.mark.asyncio
+async def test_list_chunks_last_60s_empty(db_session):
+    """Slice-08: empty result when no chunks fall in the window."""
+    await _seed_meeting(db_session, mid="m_empty")
+    repo = SessionRepository(db_session)
+    now = datetime.now(UTC)
+    # Only a chunk older than 60s.
+    started = now - timedelta(seconds=120)
+    await repo.insert_chunk(
+        meeting_id="m_empty",
+        speaker="me",
+        text_content="too-old",
+        started_at=started,
+        ended_at=started + timedelta(seconds=10),
+        asr_provider_used="whisper",
+        confidence=0.9,
+    )
+    await db_session.commit()
+
+    rows = await repo.list_chunks_last_60s("m_empty")
+    assert rows == []

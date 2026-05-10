@@ -162,3 +162,72 @@ def test_silence_warning_includes_stream():
     )
     with pytest.raises(Exception):  # ValidationError
         parse_server_message(legacy)
+
+
+# ─── Slice 8: TacticalAdvisor frames ──────────────────────────────────────
+
+
+def test_request_advice_serialization():
+    """Slice-08: client → server `request_advice` round-trips through the
+    discriminated union; `user_question` defaults to None (button path)."""
+    from meeting_playbook.sessions.messages import RequestAdviceMessage
+
+    msg = RequestAdviceMessage(request_id="req_abc", locale="zh-TW")
+    assert msg.user_question is None  # default
+    raw = msg.model_dump_json()
+    reparsed = parse_client_message(raw)
+    assert reparsed.type == "request_advice"
+    assert isinstance(reparsed, RequestAdviceMessage)
+    assert reparsed.request_id == "req_abc"
+    assert reparsed.locale == "zh-TW"
+    assert reparsed.user_question is None
+
+    # With explicit user_question (slice-9 chatbox path).
+    msg2 = RequestAdviceMessage(
+        request_id="req_xyz", locale="en", user_question="What should I say next?"
+    )
+    raw2 = msg2.model_dump_json()
+    reparsed2 = parse_client_message(raw2)
+    assert isinstance(reparsed2, RequestAdviceMessage)
+    assert reparsed2.user_question == "What should I say next?"
+
+
+def test_request_advice_rejects_invalid_locale():
+    """Slice-08: locale is Literal['zh-TW','en']; anything else is a 400."""
+    from meeting_playbook.sessions.messages import RequestAdviceMessage
+
+    with pytest.raises(Exception):  # ValidationError
+        RequestAdviceMessage(request_id="req_a", locale="ja-JP")
+
+
+def test_advice_chunk_done_failed_serialization():
+    """Slice-08: server → client `advice_chunk` / `advice_done` /
+    `advisor_failed` all round-trip through the server discriminated union."""
+    from meeting_playbook.sessions.messages import (
+        AdviceChunkMessage,
+        AdviceDoneMessage,
+        AdvisorFailedMessage,
+    )
+
+    chunk = AdviceChunkMessage(request_id="req_a", token="hello")
+    raw = chunk.model_dump_json()
+    reparsed = parse_server_message(raw)
+    assert reparsed.type == "advice_chunk"
+    assert isinstance(reparsed, AdviceChunkMessage)
+    assert reparsed.request_id == "req_a"
+    assert reparsed.token == "hello"
+
+    done = AdviceDoneMessage(request_id="req_a")
+    reparsed_done = parse_server_message(done.model_dump_json())
+    assert reparsed_done.type == "advice_done"
+    assert isinstance(reparsed_done, AdviceDoneMessage)
+
+    failed = AdvisorFailedMessage(
+        request_id="req_a",
+        error_code="advisor.timeout",
+        message="Vertex stream timed out after 15s",
+    )
+    reparsed_failed = parse_server_message(failed.model_dump_json())
+    assert reparsed_failed.type == "advisor_failed"
+    assert isinstance(reparsed_failed, AdvisorFailedMessage)
+    assert reparsed_failed.error_code == "advisor.timeout"

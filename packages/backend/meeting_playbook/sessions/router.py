@@ -21,18 +21,22 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic import ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from meeting_playbook.advisor.base import TacticalAdvisor
+from meeting_playbook.advisor.dependencies import get_tactical_advisor_dependency
 from meeting_playbook.asr.base import ASRProvider
 from meeting_playbook.audio.devices import MicDeviceNotFound, NoBlackholeDevice
 from meeting_playbook.meetings.dependencies import (
     get_session_dependency,
+    get_session_factory_dependency,
     get_user_id_dependency,
 )
 from meeting_playbook.meetings.repository import (
     MeetingRepository,
     MeetingStatusConflict,
 )
+from meeting_playbook.playbooks.repository import PlaybookRepository
 from meeting_playbook.sessions.dependencies import (
     CaptureFactory,
     Stream,
@@ -40,10 +44,14 @@ from meeting_playbook.sessions.dependencies import (
     get_capture_factory_dependency,
 )
 from meeting_playbook.sessions.messages import (
+    AdviceChunkMessage,
+    AdviceDoneMessage,
+    AdvisorFailedMessage,
     EndMeetingMessage,
     ErrorMessage,
     MeetingEndedMessage,
     MeetingStartedMessage,
+    RequestAdviceMessage,
     StartMeetingMessage,
     parse_client_message,
 )
@@ -55,6 +63,28 @@ router = APIRouter(tags=["sessions"])
 
 _CLOSE_AUTH_BYPASS = 4401
 _CLOSE_NOT_FOUND = 4404
+# Display value used in advisor timeout log lines. Mirrors VertexFlashAdvisor's
+# _STREAM_TIMEOUT_S; kept as a separate display constant so the log line
+# doesn't have to import the advisor module just to print a number.
+_STREAM_TIMEOUT_S_DISPLAY = 15
+
+
+def _classify_advisor_error(exc: BaseException) -> str:
+    """Map a Vertex / google-genai exception to one of `advisor.{quota,auth,unknown}`.
+
+    Slice-08: avoids importing google.api_core at module top so tests don't
+    need GCP libs to load the router. Detection is duck-typed on the
+    exception class name + message because google-genai re-raises
+    `google.api_core.exceptions.{ResourceExhausted, Unauthenticated, ...}`
+    and the test suite uses lightweight stand-ins of the same names.
+    """
+    name = type(exc).__name__
+    msg = str(exc).lower()
+    if name == "ResourceExhausted" or "quota" in msg or "429" in msg:
+        return "advisor.quota"
+    if name in {"Unauthenticated", "PermissionDenied"} or "401" in msg or "403" in msg:
+        return "advisor.auth"
+    return "advisor.unknown"
 
 
 @router.get("/api/meetings/{meeting_id}/transcript_chunks")
@@ -95,6 +125,10 @@ async def meeting_session_endpoint(
     providers: Annotated[dict[Stream, ASRProvider], Depends(get_asr_providers_dependency)],
     capture_factory: Annotated[CaptureFactory, Depends(get_capture_factory_dependency)],
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
+    tactical_advisor: Annotated[TacticalAdvisor, Depends(get_tactical_advisor_dependency)],
+    session_factory: Annotated[
+        async_sessionmaker[AsyncSession], Depends(get_session_factory_dependency)
+    ],
 ) -> None:
     user_id = websocket.headers.get("x-user-id")
     if not user_id:
@@ -201,8 +235,105 @@ async def meeting_session_endpoint(
         send=_send,
     )
 
+    # Slice-08: at most one advice request streams at a time. A new
+    # `request_advice` while one is already in-flight cancels the prior
+    # task (server-side defensive — the UI also disables the button).
+    advice_task: asyncio.Task[None] | None = None
+
+    async def _run_advice(request_id: str, user_question: str | None, locale: str) -> None:
+        """Open a fresh AsyncSession, gather context, stream Vertex Flash tokens.
+
+        Slice-08 + ADR-0018: context = (last 60s of transcript chunks across
+        both speakers) + (full playbook). Runs in its own session because
+        the request-scoped `session` is being mutated concurrently by the
+        capture / transcribe write path (SQLAlchemy AsyncSession is NOT
+        safe for concurrent use).
+        """
+        logger.info(
+            "advice request_id=%s meeting=%s locale=%s user_question=%s",
+            request_id,
+            meeting_id,
+            locale,
+            "yes" if user_question else "no",
+        )
+        token_count = 0
+        try:
+            async with session_factory() as advice_session:
+                advice_session_repo = SessionRepository(advice_session)
+                playbook_repo = PlaybookRepository(advice_session)
+                chunks = await advice_session_repo.list_chunks_last_60s(meeting_id)
+                playbook = await playbook_repo.get_or_create_for_meeting(meeting_id)
+            logger.info(
+                "advice request_id=%s context chunks=%d playbook=%s",
+                request_id,
+                len(chunks),
+                "present" if playbook else "missing",
+            )
+
+            # AsyncIterator is returned from a Protocol method. Some tests
+            # inject mocks whose `advise(...)` is itself an async generator
+            # function; calling it returns the generator directly. Don't
+            # await — iterate.
+            async for token in tactical_advisor.advise(
+                meeting_id=meeting_id,
+                recent_chunks=chunks,
+                playbook=playbook,
+                me_display_name=meeting.me_display_name,
+                counterparty_display_name=meeting.counterparty_display_name,
+                user_question=user_question,
+                locale=locale,  # type: ignore[arg-type]
+            ):
+                token_count += 1
+                await _send(AdviceChunkMessage(request_id=request_id, token=token))
+            logger.info("advice request_id=%s done tokens=%d", request_id, token_count)
+            await _send(AdviceDoneMessage(request_id=request_id))
+        except asyncio.CancelledError:
+            # End-of-meeting / superseding request cancelled us. Re-raise
+            # without sending a frame so the client doesn't see a phantom
+            # error after they pressed End.
+            logger.info(
+                "advice request_id=%s cancelled after tokens=%d",
+                request_id,
+                token_count,
+            )
+            raise
+        except TimeoutError:
+            logger.warning(
+                "advice request_id=%s timed out after %ss (tokens received=%d)",
+                request_id,
+                _STREAM_TIMEOUT_S_DISPLAY,
+                token_count,
+            )
+            await _send(
+                AdvisorFailedMessage(
+                    request_id=request_id,
+                    error_code="advisor.timeout",
+                    message="Vertex stream timed out after 15s",
+                )
+            )
+        except Exception as exc:
+            error_code = _classify_advisor_error(exc)
+            # Log the FULL traceback so Sean can debug Vertex auth / quota /
+            # SDK issues from the backend log instead of staring at a generic
+            # `advisor.unknown` UI message.
+            logger.exception(
+                "advice request_id=%s FAILED code=%s exc_type=%s tokens=%d",
+                request_id,
+                error_code,
+                type(exc).__name__,
+                token_count,
+            )
+            await _send(
+                AdvisorFailedMessage(
+                    request_id=request_id,
+                    error_code=error_code,
+                    message=f"{type(exc).__name__}: {exc}" if str(exc) else error_code,
+                )
+            )
+
     async def _client_listener() -> None:
         """Listen for end_meeting (or disconnect); request graceful capture stop."""
+        nonlocal advice_task
         try:
             while True:
                 raw = await websocket.receive_text()
@@ -216,6 +347,20 @@ async def meeting_session_endpoint(
                     return
                 if isinstance(msg, EndMeetingMessage):
                     return
+                if isinstance(msg, RequestAdviceMessage):
+                    # Defensive: cancel any in-flight prior advice before
+                    # spawning a new one. The UI disables the button, but
+                    # a misbehaving / duplicated client must not pile up
+                    # concurrent Vertex streams.
+                    if advice_task is not None and not advice_task.done():
+                        advice_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError, Exception):
+                            await advice_task
+                    advice_task = asyncio.create_task(
+                        _run_advice(msg.request_id, msg.user_question, msg.locale),
+                        name=f"advice-{msg.request_id}",
+                    )
+                    continue
         finally:
             # Gracefully stop both captures so service.run drains queued
             # chunks (including each capture's final partial buffer) before
@@ -251,6 +396,14 @@ async def meeting_session_endpoint(
         listener_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await listener_task
+
+    # Slice-08: if an advice stream is mid-flight at end-of-meeting, cancel
+    # it BEFORE we send `meeting_ended` so no stray `advice_chunk` lands
+    # after the WS close handshake. CancelledError is the expected path.
+    if advice_task is not None and not advice_task.done():
+        advice_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await advice_task
 
     # ─── Finalize: persist per-stream recording rows, status → completed ──
     try:

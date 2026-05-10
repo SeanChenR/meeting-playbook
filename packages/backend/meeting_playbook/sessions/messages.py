@@ -61,13 +61,51 @@ class ErrorMessage(BaseModel):
     message: str
 
 
+# ─── Slice 8: TacticalAdvisor server frames ──────────────────────────────
+
+
+class AdviceChunkMessage(BaseModel):
+    """Slice-08: one Vertex Flash streaming token.
+
+    Per ADR-0017 + ADR-0018; correlated with `RequestAdviceMessage.request_id`
+    so multiple in-flight advice requests stay disambiguated on the wire.
+    """
+
+    type: Literal["advice_chunk"] = "advice_chunk"
+    request_id: str
+    token: str
+
+
+class AdviceDoneMessage(BaseModel):
+    """Slice-08: terminal frame for a successful advice stream."""
+
+    type: Literal["advice_done"] = "advice_done"
+    request_id: str
+
+
+class AdvisorFailedMessage(BaseModel):
+    """Slice-08: terminal frame for a failed advice stream.
+
+    `error_code` is one of `advisor.{timeout,quota,auth,unknown}`; the UI
+    looks the message up via `localizedErrorMessage(error_code, t)`.
+    """
+
+    type: Literal["advisor_failed"] = "advisor_failed"
+    request_id: str
+    error_code: str
+    message: str
+
+
 ServerMessage = Annotated[
     MeetingStartedMessage
     | TranscriptChunkMessage
     | SilenceWarningMessage
     | StreamStoppedMessage
     | MeetingEndedMessage
-    | ErrorMessage,
+    | ErrorMessage
+    | AdviceChunkMessage
+    | AdviceDoneMessage
+    | AdvisorFailedMessage,
     Field(discriminator="type"),
 ]
 _ServerAdapter = TypeAdapter(ServerMessage)
@@ -90,8 +128,27 @@ class EndMeetingMessage(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+# ─── Slice 8: TacticalAdvisor client frames ──────────────────────────────
+
+
+class RequestAdviceMessage(BaseModel):
+    """Slice-08: client → server request for tactical advice.
+
+    Slice 8 ships a button-only path so `user_question` defaults to None.
+    Slice 9 (chatbox) populates `user_question` with the user's typed prompt;
+    the backend already reads it via `tactical_advisor.advise(...)`.
+    """
+
+    type: Literal["request_advice"] = "request_advice"
+    request_id: str
+    locale: Literal["zh-TW", "en"]
+    user_question: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+
 ClientMessage = Annotated[
-    StartMeetingMessage | EndMeetingMessage,
+    StartMeetingMessage | EndMeetingMessage | RequestAdviceMessage,
     Field(discriminator="type"),
 ]
 _ClientAdapter = TypeAdapter(ClientMessage)
@@ -110,11 +167,15 @@ def parse_client_message(raw: str | bytes) -> ClientMessage:
 
 
 __all__ = [
+    "AdviceChunkMessage",
+    "AdviceDoneMessage",
+    "AdvisorFailedMessage",
     "ClientMessage",
     "EndMeetingMessage",
     "ErrorMessage",
     "MeetingEndedMessage",
     "MeetingStartedMessage",
+    "RequestAdviceMessage",
     "ServerMessage",
     "SilenceWarningMessage",
     "StartMeetingMessage",

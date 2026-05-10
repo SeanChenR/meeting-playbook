@@ -31,6 +31,23 @@ class SessionRepository:
         )
         return list(result.scalars().all())
 
+    async def list_chunks_last_60s(self, meeting_id: str) -> list[TranscriptChunk]:
+        """Slice-08: rows from the last 60 seconds, ordered ascending.
+
+        Used by the TacticalAdvisor's context assembly per ADR-0018. Window is
+        a rolling SQL `now() - INTERVAL '60 seconds'`. Returns an empty list
+        when the meeting has no chunks within the window (silent / just started).
+        """
+        from sqlalchemy import text as _text
+
+        result = await self._session.execute(
+            select(TranscriptChunk)
+            .where(TranscriptChunk.meeting_id == meeting_id)
+            .where(TranscriptChunk.started_at >= _text("now() - INTERVAL '60 seconds'"))
+            .order_by(TranscriptChunk.started_at.asc())
+        )
+        return list(result.scalars().all())
+
     async def list_recordings_for_meeting(self, meeting_id: str) -> list[Recording]:
         """All recording rows for a meeting (slice-7: up to two — me + counterparty)."""
         result = await self._session.execute(

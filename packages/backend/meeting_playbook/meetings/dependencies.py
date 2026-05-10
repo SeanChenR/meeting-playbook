@@ -44,6 +44,18 @@ async def get_session_dependency() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+def get_session_factory_dependency() -> async_sessionmaker[AsyncSession]:
+    """Return the application-wide session factory.
+
+    Slice-08: handlers that spawn parallel sub-tasks (e.g. the tactical
+    advisor running concurrent with the capture/transcribe loop) MUST NOT
+    share the request-scoped AsyncSession across coroutines — SQLAlchemy
+    AsyncSession is not safe for concurrent use. Inject this dependency
+    instead and open a fresh `async with session_factory() as ...` per task.
+    """
+    return _sessionmaker()
+
+
 def get_user_id_dependency(
     x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
 ) -> str:

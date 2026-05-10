@@ -96,6 +96,18 @@ class MeetingRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_id(self, meeting_id: str) -> Meeting | None:
+        """Bypasses ownership check — for trusted background callers only.
+
+        Slice-10 added this for `MeetingSummarizer`, which runs in a
+        background task spawned AFTER the WS handler / POST endpoint has
+        already validated ownership. Do NOT use this from request-path
+        endpoints; use `get_for_user` so a user cannot read another
+        user's meeting.
+        """
+        result = await self._session.execute(select(Meeting).where(Meeting.id == meeting_id))
+        return result.scalar_one_or_none()
+
     async def delete_for_user(self, *, user_id: str, meeting_id: str) -> bool:
         result = await self._session.execute(
             delete(Meeting).where(

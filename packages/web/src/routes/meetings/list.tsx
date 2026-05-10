@@ -22,7 +22,14 @@ export function MeetingsList() {
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{t("meetings.list.heading")}</h1>
         <div className="flex gap-2">
-          <Link to="/calendar" className={buttonVariants({ variant: "outline" })}>
+          <Link
+            to="/meetings/calendar"
+            className={buttonVariants({ variant: "outline" })}
+            data-testid="meetings-toggle-calendar"
+          >
+            {t("meetings.list.toggleCalendar")}
+          </Link>
+          <Link to="/calendar/import" className={buttonVariants({ variant: "outline" })}>
             {t("meetings.list.fromCalendarButton")}
           </Link>
           <Link to="/meetings/new" className={buttonVariants()}>

@@ -16,6 +16,7 @@ import {
   openSessionSocket,
   type SessionMessage,
   type SessionSocket,
+  type Stream,
   type TranscriptChunkMessage,
 } from "../lib/session-ws";
 
@@ -23,20 +24,36 @@ import {
 
 export type SessionPhase = "idle" | "connecting" | "in_progress" | "ending" | "ended" | "error";
 
+export type StreamStatus = "active" | "silence" | "stopped";
+
+export type SilenceSinceByStream = Record<Stream, string | null>;
+export type StreamStatusByStream = Record<Stream, StreamStatus>;
+
+const initialStreamStatus: StreamStatusByStream = {
+  me: "active",
+  counterparty: "active",
+};
+
+const initialSilenceSince: SilenceSinceByStream = {
+  me: null,
+  counterparty: null,
+};
+
 export type SessionState =
   | { phase: "idle" }
   | { phase: "connecting" }
   | {
       phase: "in_progress";
       chunks: TranscriptChunkMessage[];
-      silenceSince: string | null;
+      silenceSinceByStream: SilenceSinceByStream;
+      streamStatus: StreamStatusByStream;
     }
   | {
       // After the user clicks End: server is still draining the queued
-      // audio chunks (each ~5s of transcription on a 10s buffer). Late
-      // transcript_chunk frames continue to arrive in this phase.
+      // audio chunks. Late transcript_chunk frames continue to arrive.
       phase: "ending";
       chunks: TranscriptChunkMessage[];
+      streamStatus: StreamStatusByStream;
     }
   | { phase: "ended"; chunks: TranscriptChunkMessage[] }
   | {
@@ -61,19 +78,12 @@ function reducer(state: SessionState, action: Action): SessionState {
     case "START":
       return { phase: "connecting" };
     case "END_REQUESTED":
-      // User clicked End. Server is still draining queued chunks; show
-      // "ending" so the UI can label the button "結束中…" + indicator
-      // says "處理最後音訊…". Late transcript_chunk frames continue to
-      // arrive and append in this phase.
       if (state.phase === "in_progress") {
-        return { phase: "ending", chunks: state.chunks };
+        return { phase: "ending", chunks: state.chunks, streamStatus: state.streamStatus };
       }
       return state;
     case "WS_MESSAGE": {
       const msg = action.payload;
-      // Errors transition unconditionally — they MUST surface even if they
-      // arrive before meeting_started (e.g. session.bad_status when a
-      // completed meeting is restarted).
       if (msg.type === "error") {
         const chunks =
           state.phase === "in_progress" ||
@@ -90,36 +100,76 @@ function reducer(state: SessionState, action: Action): SessionState {
         };
       }
       if (msg.type === "meeting_started") {
-        return { phase: "in_progress", chunks: [], silenceSince: null };
+        return {
+          phase: "in_progress",
+          chunks: [],
+          silenceSinceByStream: { ...initialSilenceSince },
+          streamStatus: { ...initialStreamStatus },
+        };
       }
-      // Late transcript_chunks arriving during "ending" are still real audio
-      // the server flushed — append them.
       if (msg.type === "transcript_chunk") {
         if (state.phase === "in_progress") {
-          return { ...state, chunks: [...state.chunks, msg] };
+          // Receiving chunks for a stream means it is no longer silent.
+          return {
+            ...state,
+            chunks: [...state.chunks, msg],
+            silenceSinceByStream: { ...state.silenceSinceByStream, [msg.speaker]: null },
+            streamStatus:
+              state.streamStatus[msg.speaker] === "stopped"
+                ? state.streamStatus
+                : { ...state.streamStatus, [msg.speaker]: "active" },
+          };
         }
         if (state.phase === "ending") {
           return { ...state, chunks: [...state.chunks, msg] };
         }
         return state;
       }
-      if (state.phase !== "in_progress" && state.phase !== "ending") return state;
       if (msg.type === "silence_warning") {
-        // Suppress silence warnings during "ending" — too late to act on.
         if (state.phase !== "in_progress") return state;
-        return { ...state, silenceSince: msg.since };
+        return {
+          ...state,
+          silenceSinceByStream: { ...state.silenceSinceByStream, [msg.stream]: msg.since },
+          streamStatus:
+            state.streamStatus[msg.stream] === "stopped"
+              ? state.streamStatus
+              : { ...state.streamStatus, [msg.stream]: "silence" },
+        };
+      }
+      if (msg.type === "stream_stopped") {
+        // A stream crashed mid-session. Mark it stopped; do NOT end the
+        // session — the other stream keeps producing chunks. silence_warning
+        // for the stopped stream is no longer meaningful, clear it.
+        if (state.phase !== "in_progress" && state.phase !== "ending") return state;
+        const next = {
+          ...state,
+          streamStatus: { ...state.streamStatus, [msg.stream]: "stopped" as StreamStatus },
+        };
+        if (state.phase === "in_progress") {
+          return {
+            ...next,
+            silenceSinceByStream: {
+              ...state.silenceSinceByStream,
+              [msg.stream]: null,
+            },
+          };
+        }
+        return next;
       }
       if (msg.type === "meeting_ended") {
+        if (state.phase !== "in_progress" && state.phase !== "ending") return state;
         return { phase: "ended", chunks: state.chunks };
       }
       return state;
     }
     case "UNEXPECTED_CLOSE":
-      return state; // Reconnect handled imperatively in the hook
+      return state;
     case "RETRY_FAILED": {
-      // Preserve any chunks accumulated during the prior in_progress phase.
       const chunks =
-        state.phase === "in_progress" || state.phase === "ended" || state.phase === "error"
+        state.phase === "in_progress" ||
+        state.phase === "ending" ||
+        state.phase === "ended" ||
+        state.phase === "error"
           ? state.chunks
           : [];
       return {

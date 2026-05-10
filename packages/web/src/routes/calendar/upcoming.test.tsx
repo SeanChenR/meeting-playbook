@@ -30,7 +30,7 @@ async function renderInRouter() {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const calendarRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/calendar",
+    path: "/calendar/import",
     component: () => <UpcomingEvents />,
   });
   const detailRoute = createRoute({
@@ -39,7 +39,7 @@ async function renderInRouter() {
     component: () => <div data-testid="redirected-detail">on detail</div>,
   });
   const routeTree = rootRoute.addChildren([calendarRoute, detailRoute]);
-  const history = createMemoryHistory({ initialEntries: ["/calendar"] });
+  const history = createMemoryHistory({ initialEntries: ["/calendar/import"] });
   const router = createRouter({ routeTree, history });
   await router.load();
   const queryClient = new QueryClient({
@@ -195,6 +195,6 @@ describe("UpcomingEvents page", () => {
     await waitFor(() => {
       expect(screen.getByText(/Playbook 生成逾時/)).toBeDefined();
     });
-    expect(router.state.location.pathname).toBe("/calendar");
+    expect(router.state.location.pathname).toBe("/calendar/import");
   });
 });

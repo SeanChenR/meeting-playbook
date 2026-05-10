@@ -18,11 +18,16 @@ import { cn } from "../lib/utils";
 interface TranscriptPaneProps {
   chunks: TranscriptChunkMessage[];
   meDisplayName: string;
+  counterpartyDisplayName: string;
 }
 
-function _speakerLabel(chunk: TranscriptChunkMessage, meDisplayName: string): string {
+function _speakerLabel(
+  chunk: TranscriptChunkMessage,
+  meDisplayName: string,
+  counterpartyDisplayName: string,
+): string {
   if (chunk.speaker === "me") return meDisplayName;
-  if (chunk.speaker === "counterparty") return "對方";
+  if (chunk.speaker === "counterparty") return counterpartyDisplayName;
   return chunk.speaker;
 }
 
@@ -34,7 +39,11 @@ function _formatTime(iso: string): string {
   }
 }
 
-export function TranscriptPane({ chunks, meDisplayName }: TranscriptPaneProps) {
+export function TranscriptPane({
+  chunks,
+  meDisplayName,
+  counterpartyDisplayName,
+}: TranscriptPaneProps) {
   const { t } = useTranslation();
 
   return (
@@ -58,17 +67,23 @@ export function TranscriptPane({ chunks, meDisplayName }: TranscriptPaneProps) {
                 data-testid="transcript-chunk"
                 data-speaker={chunk.speaker}
                 className={cn(
-                  "rounded-md border p-3 text-sm",
-                  chunk.speaker === "me"
-                    ? "border-(--color-input) bg-(--color-card)"
-                    : "border-(--color-border) bg-(--color-muted)",
+                  // Slice-7 visual: each chunk gets a 4px left accent
+                  // border (counterparty primary, me secondary/muted) and
+                  // body text in default text-foreground (NOT colored).
+                  "rounded-md border-l-4 bg-(--color-card) p-3 text-sm",
+                  chunk.speaker === "counterparty"
+                    ? "border-l-(--color-primary)"
+                    : "border-l-(--color-muted-foreground)",
                 )}
               >
-                <div className="mb-1 flex items-center justify-between text-xs text-(--color-muted-foreground)">
-                  <span className="font-medium">{_speakerLabel(chunk, meDisplayName)}</span>
+                <div className="mb-1 flex items-center gap-2 text-xs text-(--color-muted-foreground)">
+                  <span className="font-medium">
+                    {_speakerLabel(chunk, meDisplayName, counterpartyDisplayName)}
+                  </span>
+                  <span aria-hidden>·</span>
                   <span>{_formatTime(chunk.started_at)}</span>
                 </div>
-                <p className="whitespace-pre-wrap">{chunk.text}</p>
+                <p className="whitespace-pre-wrap text-(--color-foreground)">{chunk.text}</p>
               </li>
             ))}
           </ol>

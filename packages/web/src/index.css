@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* ---------------------------------------------------------------------------
  * Design tokens — Linear/Stripe-style minimalist (zinc base + emerald accent).

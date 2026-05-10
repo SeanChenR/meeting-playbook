@@ -71,7 +71,7 @@ export function UpcomingEvents() {
                 authClient.linkSocial({
                   provider: "google",
                   scopes: [CALENDAR_SCOPE],
-                  callbackURL: "/calendar",
+                  callbackURL: "/calendar/import",
                 });
               }}
             >

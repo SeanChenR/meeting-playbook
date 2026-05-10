@@ -10,6 +10,7 @@ import { createRootRoute, createRoute, Outlet, redirect } from "@tanstack/react-
 import { Home } from "./routes/home";
 import { Login } from "./routes/login";
 import { MeetingDetail } from "./routes/meetings/detail";
+import { MeetingsCalendar } from "./routes/meetings/calendar";
 import { MeetingsList } from "./routes/meetings/list";
 import { NewMeeting } from "./routes/meetings/new";
 import { UpcomingEvents } from "./routes/calendar/upcoming";
@@ -71,15 +72,24 @@ const meetingsNewRoute = createRoute({
   component: NewMeeting,
 });
 
+const meetingsCalendarRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/meetings/calendar",
+  component: MeetingsCalendar,
+});
+
 const meetingDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/meetings/$id",
   component: MeetingDetail,
 });
 
-const calendarUpcomingRoute = createRoute({
+// Slice-7: rename `/calendar` → `/calendar/import` to disambiguate from
+// `/meetings/calendar` (the new calendar VIEW). The component + file name
+// stays as `routes/calendar/upcoming.tsx` — only the URL path changes.
+const calendarImportRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/calendar",
+  path: "/calendar/import",
   component: UpcomingEvents,
 });
 
@@ -92,6 +102,7 @@ export const routeTree = rootRoute.addChildren([
   homeRoute,
   meetingsListRoute,
   meetingsNewRoute,
+  meetingsCalendarRoute,
   meetingDetailRoute,
-  calendarUpcomingRoute,
+  calendarImportRoute,
 ]);

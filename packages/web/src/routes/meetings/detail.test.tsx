@@ -262,7 +262,12 @@ describe("MeetingDetail slice-06 session UI", () => {
     const ws = _MockSessionWS.instances[0]!;
     await waitFor(() => {
       ws.simulateMessage({ type: "meeting_started", meeting_id: "m_abc" });
-      expect(screen.getByTestId("capture-indicator").dataset.state).toBe("active");
+      // Slice-7: two pills (me + counterparty); both should be in `active` state.
+      const pills = screen.getAllByTestId("capture-indicator");
+      expect(pills).toHaveLength(2);
+      for (const pill of pills) {
+        expect(pill.dataset.state).toBe("active");
+      }
     });
 
     // Transcript chunk arrives → renders in TranscriptPane.
@@ -292,7 +297,12 @@ describe("MeetingDetail slice-06 session UI", () => {
     const ws = _MockSessionWS.instances[0]!;
     await waitFor(() => {
       ws.simulateMessage({ type: "meeting_started", meeting_id: "m_abc" });
-      expect(screen.getByTestId("capture-indicator").dataset.state).toBe("active");
+      // Slice-7: two pills (me + counterparty); both should be in `active` state.
+      const pills = screen.getAllByTestId("capture-indicator");
+      expect(pills).toHaveLength(2);
+      for (const pill of pills) {
+        expect(pill.dataset.state).toBe("active");
+      }
     });
 
     await user.click(screen.getByRole("button", { name: /^結束會議$/ }));
@@ -300,12 +310,14 @@ describe("MeetingDetail slice-06 session UI", () => {
     expect(JSON.parse(lastSent)).toEqual({ type: "end_meeting", meeting_id: "m_abc" });
   });
 
-  test("End button is disabled until session is in_progress", async () => {
+  test("End button is hidden until session is in_progress (slice-7 round 3)", async () => {
     await renderInRouter();
     await waitFor(() => {
       expect(screen.getByText("Q3 review")).toBeDefined();
     });
-    const endBtn = screen.getByRole("button", { name: /^結束會議$/ }) as HTMLButtonElement;
-    expect(endBtn.disabled).toBe(true);
+    // Slice-7 round 3: instead of a disabled End button, the button is
+    // hidden entirely while phase is idle/connecting/ending/ended/error,
+    // so the user can't accidentally click it twice during draining.
+    expect(screen.queryByRole("button", { name: /^結束會議$/ })).toBeNull();
   });
 });

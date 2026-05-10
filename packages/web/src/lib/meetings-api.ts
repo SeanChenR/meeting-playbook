@@ -25,12 +25,18 @@ export interface Meeting {
   created_at: string;
   started_at: string | null;
   ended_at: string | null;
+  // Slice-7: optional planned timestamps for the calendar view.
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
 }
 
 export interface MeetingCreatePayload {
   title: string;
   counterparty_display_name: string;
   me_display_name: string;
+  // Slice-7: optional ISO 8601 timestamps for the planned meeting time.
+  scheduled_start_at?: string | null;
+  scheduled_end_at?: string | null;
 }
 
 export class MeetingApiError extends Error {

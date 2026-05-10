@@ -128,4 +128,57 @@ describe("openSessionSocket", () => {
     sock.close();
     expect(ws.closed).toBe(true);
   });
+
+  // ─── Slice 7 ─────────────────────────────────────────────────────
+
+  test("parses stream_stopped frame into the discriminated union", () => {
+    installMock();
+    const sock = openSessionSocket("m_abc");
+    let received: SessionMessage | null = null;
+    sock.onMessage = (msg) => {
+      received = msg;
+    };
+    const ws = MockWebSocket.instances[0]!;
+    ws.simulateOpen();
+    ws.simulateMessage(
+      JSON.stringify({
+        type: "stream_stopped",
+        meeting_id: "m_abc",
+        stream: "counterparty",
+        reason: "BlackHole driver crashed",
+      }),
+    );
+
+    expect(received).not.toBeNull();
+    expect(received!.type).toBe("stream_stopped");
+    if (received!.type === "stream_stopped") {
+      expect(received!.stream).toBe("counterparty");
+      expect(received!.reason).toBe("BlackHole driver crashed");
+    }
+  });
+
+  test("parses silence_warning frame including stream field", () => {
+    installMock();
+    const sock = openSessionSocket("m_abc");
+    let received: SessionMessage | null = null;
+    sock.onMessage = (msg) => {
+      received = msg;
+    };
+    const ws = MockWebSocket.instances[0]!;
+    ws.simulateOpen();
+    ws.simulateMessage(
+      JSON.stringify({
+        type: "silence_warning",
+        meeting_id: "m_abc",
+        stream: "me",
+        since: "2026-05-10T10:00:00+00:00",
+      }),
+    );
+
+    expect(received).not.toBeNull();
+    expect(received!.type).toBe("silence_warning");
+    if (received!.type === "silence_warning") {
+      expect(received!.stream).toBe("me");
+    }
+  });
 });

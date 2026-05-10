@@ -31,7 +31,7 @@ const _chunk = (
 
 describe("TranscriptPane", () => {
   test("empty chunks renders a placeholder, not an empty list", () => {
-    render(<TranscriptPane chunks={[]} meDisplayName="Sean" />);
+    render(<TranscriptPane chunks={[]} meDisplayName="Sean" counterpartyDisplayName="林經理" />);
     expect(screen.getByTestId("transcript-empty")).toBeDefined();
   });
 
@@ -41,23 +41,54 @@ describe("TranscriptPane", () => {
       _chunk("second", "me", "2026-05-09T10:00:10Z"),
       _chunk("third", "me", "2026-05-09T10:00:20Z"),
     ];
-    render(<TranscriptPane chunks={chunks} meDisplayName="Sean Chen" />);
+    render(
+      <TranscriptPane chunks={chunks} meDisplayName="Sean Chen" counterpartyDisplayName="林經理" />,
+    );
 
     const items = screen.getAllByTestId("transcript-chunk");
     expect(items).toHaveLength(3);
     expect(items[0]?.textContent).toContain("first");
     expect(items[1]?.textContent).toContain("second");
     expect(items[2]?.textContent).toContain("third");
-    // Every me-chunk shows the meeting's me_display_name as speaker.
     for (const item of items) {
       expect(item.textContent).toContain("Sean Chen");
     }
   });
 
-  test("counterparty-speaker chunk gets a different visual style than me", () => {
+  // ─── Slice 7 ─────────────────────────────────────────────────────
+
+  test("counterparty chunk applies primary accent border", () => {
     const chunks = [_chunk("from-other-side", "counterparty")];
-    render(<TranscriptPane chunks={chunks} meDisplayName="Sean" />);
+    render(
+      <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
+    );
     const item = screen.getByTestId("transcript-chunk");
     expect(item.dataset.speaker).toBe("counterparty");
+    // border-l-4 token sits on the chunk wrapper; counterparty gets primary.
+    expect(item.className).toContain("border-l-(--color-primary)");
+    expect(item.className).not.toContain("border-l-(--color-muted-foreground)");
+  });
+
+  test("me chunk applies muted-foreground accent border", () => {
+    const chunks = [_chunk("from-me", "me")];
+    render(
+      <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
+    );
+    const item = screen.getByTestId("transcript-chunk");
+    expect(item.dataset.speaker).toBe("me");
+    expect(item.className).toContain("border-l-(--color-muted-foreground)");
+    expect(item.className).not.toContain("border-l-(--color-primary)");
+  });
+
+  test("uses counterpartyDisplayName for counterparty chunks", () => {
+    const chunks = [_chunk("hi from me", "me"), _chunk("hi from them", "counterparty")];
+    render(
+      <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
+    );
+    const items = screen.getAllByTestId("transcript-chunk");
+    expect(items[0]?.textContent).toContain("Sean");
+    expect(items[0]?.textContent).not.toContain("林經理");
+    expect(items[1]?.textContent).toContain("林經理");
+    expect(items[1]?.textContent).not.toContain("Sean");
   });
 });

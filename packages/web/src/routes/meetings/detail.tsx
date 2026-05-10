@@ -2,10 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CaptureIndicator, type CaptureState } from "../../components/capture-indicator";
+import { CaptureIndicator } from "../../components/capture-indicator";
+import { HeadphonesHint } from "../../components/headphones-hint";
+import { LayoutSwitcher } from "../../components/layout-switcher";
 import { PlaybookPane } from "../../components/playbook-pane";
 import { ProtectedShell } from "../../components/protected-shell";
 import { TranscriptPane } from "../../components/transcript-pane";
+import { useDetailLayout } from "../../hooks/use-detail-layout";
 import { useMeetingSession } from "../../hooks/use-meeting-session";
 import { rowToMessage, transcriptChunksQueryOptions } from "../../lib/transcripts-api";
 import { AlertDialog } from "../../components/ui/alert-dialog";
@@ -19,6 +22,20 @@ import {
   useDeleteMeetingMutation,
 } from "../../lib/meetings-api";
 
+function AdvisorPlaceholder() {
+  const { t } = useTranslation();
+  return (
+    <Card data-testid="advisor-placeholder">
+      <CardHeader>
+        <CardTitle>Advisor</CardTitle>
+      </CardHeader>
+      <CardContent className="text-sm text-(--color-muted-foreground)">
+        {t("meetings.detail.advisorPlaceholder")}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function MeetingDetail() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -29,18 +46,18 @@ export function MeetingDetail() {
   const deleteMutation = useDeleteMeetingMutation();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [layout, setLayout] = useDetailLayout();
 
   const meeting = query.data ?? null;
   const session = useMeetingSession(meetingId);
 
-  const captureState: CaptureState =
-    session.state.phase === "in_progress"
-      ? session.state.silenceSince !== null
-        ? "silence_warning"
-        : "active"
-      : session.state.phase === "ending"
-        ? "ending"
-        : "idle";
+  // Slice-7: derive per-stream pill state for the indicator. Outside an
+  // active session (idle / connecting / ended / error) the indicator is
+  // hidden by passing `streamStatus={null}`.
+  const indicatorStreamStatus =
+    session.state.phase === "in_progress" || session.state.phase === "ending"
+      ? session.state.streamStatus
+      : null;
   const liveChunks =
     session.state.phase === "in_progress" ||
     session.state.phase === "ending" ||
@@ -48,11 +65,6 @@ export function MeetingDetail() {
     session.state.phase === "error"
       ? session.state.chunks
       : [];
-  // Fetch historical transcript chunks for completed / in_progress meetings
-  // (skip while still scheduled — nothing to show). Live chunks from the
-  // current WS session take precedence; outside in_progress we display the
-  // historical query result so a refreshed page on a completed meeting
-  // still shows the transcript.
   const historyQuery = useQuery(
     transcriptChunksQueryOptions(
       meetingId,
@@ -63,22 +75,18 @@ export function MeetingDetail() {
     liveChunks.length > 0 ? liveChunks : (historyQuery.data ?? []).map(rowToMessage);
   const sessionError =
     session.state.phase === "error" ? localizedErrorMessage(session.state.errorCode, t) : null;
-  // Start is allowed only when (a) the meeting is still scheduled and
-  // (b) we haven't already opened a session in this view. Once status
-  // advances to in_progress / completed, Start stays disabled — meeting
-  // session is one-shot per spec (transcripts + recording overwrite would
-  // otherwise be ambiguous).
   const startDisabled =
     !meeting ||
     meeting.status !== "scheduled" ||
     session.state.phase === "connecting" ||
     session.state.phase === "in_progress" ||
     session.state.phase === "ending";
-  // End is enabled only while a session is actively in progress; once
-  // "ending" we lock it (server is draining). Show a "結束中…" label too.
-  const endDisabled = session.state.phase !== "in_progress";
-  const endLabel =
-    session.state.phase === "ending" ? t("meetings.session.ending") : t("meetings.session.end");
+  // Slice-7 round 3: End button is hidden entirely once the user clicks End.
+  // Server is draining queued audio; the "ending" state lives on the
+  // CaptureIndicator pulse + the muted "結束中…" indicator. No second click
+  // possible → no need to keep a disabled-but-visible button competing for
+  // attention.
+  const showEndButton = session.state.phase === "in_progress";
   const fetchError =
     query.isError && query.error instanceof MeetingApiError && query.error.errorCode
       ? localizedErrorMessage(query.error.errorCode, t)
@@ -102,11 +110,26 @@ export function MeetingDetail() {
     }
   }
 
+  // Three workspace panes — rendered identically in both layouts; the
+  // wrapper element decides the geometry (3-col grid vs vertical stack).
+  const playbookPane = meeting && <PlaybookPane meetingId={meetingId} />;
+  const transcriptPane = meeting && (
+    <TranscriptPane
+      chunks={sessionChunks}
+      meDisplayName={meeting.me_display_name}
+      counterpartyDisplayName={meeting.counterparty_display_name}
+    />
+  );
+  const advisorPane = meeting && <AdvisorPlaceholder />;
+
   return (
-    <ProtectedShell>
-      <Link to="/meetings" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-        {t("meetings.detail.back")}
-      </Link>
+    <ProtectedShell fullBleed>
+      <div className="flex items-center justify-between">
+        <Link to="/meetings" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+          {t("meetings.detail.back")}
+        </Link>
+        <LayoutSwitcher layout={layout} onChange={setLayout} />
+      </div>
 
       {error && <Alert variant="destructive">{error}</Alert>}
 
@@ -138,14 +161,22 @@ export function MeetingDetail() {
               <span className="font-medium">{t("meetings.detail.createdAtLabel")}：</span>
               <span>{new Date(meeting.created_at).toLocaleString()}</span>
             </div>
+            <HeadphonesHint visible={meeting.status === "scheduled"} />
             <div className="flex flex-wrap items-center gap-3 pt-4">
               <Button onClick={session.start} disabled={startDisabled}>
                 {t("meetings.session.start")}
               </Button>
-              <Button variant="outline" onClick={session.end} disabled={endDisabled}>
-                {endLabel}
-              </Button>
-              <CaptureIndicator state={captureState} />
+              {showEndButton && (
+                <Button variant="outline" onClick={session.end}>
+                  {t("meetings.session.end")}
+                </Button>
+              )}
+              <CaptureIndicator
+                streamStatus={indicatorStreamStatus}
+                meDisplayName={meeting.me_display_name}
+                counterpartyDisplayName={meeting.counterparty_display_name}
+                ending={session.state.phase === "ending"}
+              />
               <Button
                 variant="destructive"
                 onClick={() => setConfirmOpen(true)}
@@ -159,8 +190,39 @@ export function MeetingDetail() {
         </Card>
       )}
 
-      {meeting && <PlaybookPane meetingId={meetingId} />}
-      {meeting && <TranscriptPane chunks={sessionChunks} meDisplayName={meeting.me_display_name} />}
+      {meeting && layout === "columns" ? (
+        <div
+          data-testid="detail-columns"
+          className="grid grid-cols-1 gap-4 lg:grid-cols-[30%_40%_30%] lg:h-[calc(100vh-260px)]"
+        >
+          <div
+            data-testid="detail-pane-playbook"
+            className="lg:h-full lg:overflow-y-auto lg:[&>*]:h-full"
+          >
+            {playbookPane}
+          </div>
+          <div
+            data-testid="detail-pane-transcript"
+            className="lg:h-full lg:overflow-y-auto lg:[&>*]:h-full"
+          >
+            {transcriptPane}
+          </div>
+          <div
+            data-testid="detail-pane-advisor"
+            className="lg:h-full lg:overflow-y-auto lg:[&>*]:h-full"
+          >
+            {advisorPane}
+          </div>
+        </div>
+      ) : (
+        meeting && (
+          <div data-testid="detail-stack" className="space-y-4">
+            <div data-testid="detail-pane-playbook">{playbookPane}</div>
+            <div data-testid="detail-pane-transcript">{transcriptPane}</div>
+            <div data-testid="detail-pane-advisor">{advisorPane}</div>
+          </div>
+        )
+      )}
 
       <AlertDialog
         open={confirmOpen}

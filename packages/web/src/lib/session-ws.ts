@@ -13,10 +13,12 @@ export type MeetingStartedMessage = {
   meeting_id: string;
 };
 
+export type Stream = "me" | "counterparty";
+
 export type TranscriptChunkMessage = {
   type: "transcript_chunk";
   meeting_id: string;
-  speaker: "me" | "counterparty" | "system";
+  speaker: Stream;
   text: string;
   started_at: string;
   ended_at: string;
@@ -27,7 +29,17 @@ export type TranscriptChunkMessage = {
 export type SilenceWarningMessage = {
   type: "silence_warning";
   meeting_id: string;
+  stream: Stream;
   since: string;
+};
+
+// Slice-7: emitted when one capture stream fails mid-session.
+// The other stream continues; the WebSocket stays open until both stop.
+export type StreamStoppedMessage = {
+  type: "stream_stopped";
+  meeting_id: string;
+  stream: Stream;
+  reason: string;
 };
 
 export type MeetingEndedMessage = {
@@ -45,6 +57,7 @@ export type SessionMessage =
   | MeetingStartedMessage
   | TranscriptChunkMessage
   | SilenceWarningMessage
+  | StreamStoppedMessage
   | MeetingEndedMessage
   | ErrorMessage;
 

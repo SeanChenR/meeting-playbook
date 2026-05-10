@@ -8,7 +8,19 @@ import { Avatar } from "./ui/avatar";
 import { Button } from "./ui/button";
 import { LocaleToggle } from "./locale-toggle";
 
-export function ProtectedShell({ children }: { children: ReactNode }) {
+export interface ProtectedShellProps {
+  children: ReactNode;
+  /**
+   * Slice-07: when true, the main content area drops its centered max-width
+   * container so the page can use the full viewport width. Default false
+   * preserves the existing centered layout for list / new / login / etc.
+   * The detail page passes `fullBleed` so its 3-column / stack workspace
+   * isn't squashed into a 1200px column.
+   */
+  fullBleed?: boolean;
+}
+
+export function ProtectedShell({ children, fullBleed = false }: ProtectedShellProps) {
   const { t } = useTranslation();
   const { data: session, isPending } = authClient.useSession();
   const navigate = useNavigate();
@@ -58,7 +70,14 @@ export function ProtectedShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1200px] space-y-6 px-5 py-10">{children}</main>
+      <main
+        data-testid="protected-shell-main"
+        className={
+          fullBleed ? "space-y-6 px-5 py-6" : "mx-auto max-w-[1200px] space-y-6 px-5 py-10"
+        }
+      >
+        {children}
+      </main>
     </div>
   );
 }

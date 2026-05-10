@@ -94,7 +94,14 @@ describe("useMeetingSession", () => {
     expect(result.current.state.phase).toBe("in_progress");
     if (result.current.state.phase === "in_progress") {
       expect(result.current.state.chunks).toEqual([]);
-      expect(result.current.state.silenceSince).toBeNull();
+      expect(result.current.state.silenceSinceByStream).toEqual({
+        me: null,
+        counterparty: null,
+      });
+      expect(result.current.state.streamStatus).toEqual({
+        me: "active",
+        counterparty: "active",
+      });
     }
   });
 
@@ -137,7 +144,7 @@ describe("useMeetingSession", () => {
     }
   });
 
-  test("silence_warning sets silenceSince", async () => {
+  test("silence_warning per stream populates only that stream's silenceSince", async () => {
     const { result } = renderHook(() => useMeetingSession("m_a"));
     act(() => {
       result.current.start();
@@ -149,13 +156,49 @@ describe("useMeetingSession", () => {
       ws.simulateMessage({
         type: "silence_warning",
         meeting_id: "m_a",
+        stream: "counterparty",
         since: "2026-05-09T10:00:00Z",
       });
     });
     if (result.current.state.phase === "in_progress") {
-      expect(result.current.state.silenceSince).toBe("2026-05-09T10:00:00Z");
+      expect(result.current.state.silenceSinceByStream).toEqual({
+        me: null,
+        counterparty: "2026-05-09T10:00:00Z",
+      });
+      expect(result.current.state.streamStatus).toEqual({
+        me: "active",
+        counterparty: "silence",
+      });
     } else {
       throw new Error("expected in_progress");
+    }
+  });
+
+  test("stream_stopped marks one stream stopped without ending the session", async () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
+      ws.simulateMessage({
+        type: "stream_stopped",
+        meeting_id: "m_a",
+        stream: "counterparty",
+        reason: "BlackHole driver crashed",
+      });
+    });
+    if (result.current.state.phase === "in_progress") {
+      expect(result.current.state.streamStatus).toEqual({
+        me: "active",
+        counterparty: "stopped",
+      });
+    } else {
+      throw new Error(
+        `expected in_progress (other stream still alive), got ${result.current.state.phase}`,
+      );
     }
   });
 

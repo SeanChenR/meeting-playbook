@@ -116,6 +116,8 @@
       "counterpartyPlaceholder": "e.g., Manager Lin",
       "meLabel": "Me display name",
       "mePlaceholder": "e.g., Sean",
+      "scheduledDateLabel": "Scheduled date (optional)",
+      "scheduledTimeLabel": "Time",
       "submit": "Create",
       "submitting": "Creating…",
       "cancel": "Cancel",
@@ -147,9 +149,50 @@
       "ending": "Ending…",
       "endingHint": "Processing final audio…",
       "capturing": "Capturing",
+      "capturingNamed": "Capturing {{name}}",
       "silenceWarning": "No audio detected",
+      "silenceWarningMe": "{{name}} silent for 30s",
+      "silenceWarningCounterparty": "{{name}} silent for 30s (check Multi-Output Device)",
+      "streamStopped": "{{name}} stopped",
+      "headphonesHint": "Headphones recommended — otherwise the mic will pick up speaker output, causing both streams to contain overlapping audio",
       "transcriptHeading": "Live transcript",
       "transcriptEmpty": "Waiting for the first transcript chunk… (the first run needs 10–25s to load the model)"
+    },
+    "detail": {
+      "back": "← Back to list",
+      "heading": "Meeting detail",
+      "counterpartyLabel": "Counterparty",
+      "meLabel": "Me",
+      "statusLabel": "Status",
+      "asrProviderLabel": "ASR provider",
+      "createdAtLabel": "Created at",
+      "deleteButton": "Delete meeting",
+      "deleteDialogTitle": "Delete this meeting?",
+      "deleteDialogDescription": "This cannot be undone. The associated transcripts, playbook, and recordings will also be removed.",
+      "deleteConfirm": "Delete",
+      "deleteCancel": "Cancel",
+      "errorFallback": "Action failed",
+      "advisorPlaceholder": "Tactical advisor lands in Slice 8",
+      "layout": {
+        "stack": "Stack layout",
+        "columns": "Columns layout"
+      }
+    },
+    "list": {
+      "heading": "My Meetings",
+      "newButton": "+ New meeting",
+      "fromCalendarButton": "Import from Calendar",
+      "toggleCalendar": "Calendar view",
+      "empty": "No meetings yet",
+      "emptyHint": "Tap “+ New meeting” to create one by hand, or “Import from Calendar” to auto-generate a playbook draft"
+    },
+    "calendar": {
+      "heading": "Meeting calendar",
+      "toggleList": "List view",
+      "viewMonth": "Month",
+      "viewWeek": "Week",
+      "unscheduledTitle": "Unscheduled meetings",
+      "empty": "No meetings in this period"
     }
   },
   "calendar": {
@@ -176,7 +219,9 @@
     },
     "freeform": {
       "label": "Free-form markdown",
-      "placeholder": "Anything that helps you prepare (Markdown supported)"
+      "placeholder": "Anything that helps you prepare (Markdown supported)",
+      "editTab": "Edit",
+      "previewTab": "Preview"
     },
     "fields": {
       "objective": "Objective",

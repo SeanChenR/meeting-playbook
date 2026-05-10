@@ -116,6 +116,8 @@
       "counterpartyPlaceholder": "例：林經理",
       "meLabel": "我方顯示名稱",
       "mePlaceholder": "例：Sean",
+      "scheduledDateLabel": "預定日期（選填）",
+      "scheduledTimeLabel": "預定時間",
       "submit": "建立",
       "submitting": "建立中…",
       "cancel": "取消",
@@ -147,9 +149,50 @@
       "ending": "結束中…",
       "endingHint": "處理最後音訊中…",
       "capturing": "擷取中",
+      "capturingNamed": "{{name}} 擷取中",
       "silenceWarning": "未偵測到聲音",
+      "silenceWarningMe": "{{name}} 30s 無聲",
+      "silenceWarningCounterparty": "{{name}} 30s 無聲（檢查 Multi-Output Device）",
+      "streamStopped": "{{name}} 已停止",
+      "headphonesHint": "建議戴耳機 — 否則麥克風會收到喇叭播放的對方聲音，導致兩條 stream 內容重疊",
       "transcriptHeading": "即時逐字稿",
       "transcriptEmpty": "等待第一段逐字稿…（首次啟動約需 10–25 秒載入模型）"
+    },
+    "detail": {
+      "back": "← 返回列表",
+      "heading": "Meeting 詳細",
+      "counterpartyLabel": "對方",
+      "meLabel": "我方",
+      "statusLabel": "狀態",
+      "asrProviderLabel": "ASR 引擎",
+      "createdAtLabel": "建立時間",
+      "deleteButton": "刪除 Meeting",
+      "deleteDialogTitle": "確定要刪除這個 Meeting？",
+      "deleteDialogDescription": "刪除後無法復原。所屬的逐字稿、playbook 與錄音也會一併移除。",
+      "deleteConfirm": "確定刪除",
+      "deleteCancel": "取消",
+      "errorFallback": "操作失敗",
+      "advisorPlaceholder": "Tactical advisor 將在 Slice 8 上線",
+      "layout": {
+        "stack": "上下三層佈局",
+        "columns": "三欄佈局"
+      }
+    },
+    "list": {
+      "heading": "我的 Meeting",
+      "newButton": "+ 新會議",
+      "fromCalendarButton": "從 Calendar 匯入",
+      "toggleCalendar": "切換 Calendar 視圖",
+      "empty": "尚無 meeting",
+      "emptyHint": "按右上角「+ 新會議」手動建立，或「從 Calendar 匯入」自動生成 playbook 草稿"
+    },
+    "calendar": {
+      "heading": "我的會議行事曆",
+      "toggleList": "切換列表視圖",
+      "viewMonth": "月",
+      "viewWeek": "週",
+      "unscheduledTitle": "未排程 Meetings",
+      "empty": "本月無會議"
     }
   },
   "calendar": {
@@ -176,7 +219,9 @@
     },
     "freeform": {
       "label": "自由格式 Markdown",
-      "placeholder": "在這裡寫下會議準備的任何內容（支援 Markdown）"
+      "placeholder": "在這裡寫下會議準備的任何內容（支援 Markdown）",
+      "editTab": "編輯",
+      "previewTab": "預覽"
     },
     "fields": {
       "objective": "目標",

@@ -61,48 +61,12 @@ describe("PlaybookPane", () => {
   test("renders the free-form textarea by default", async () => {
     await renderPane();
     expect(screen.getByLabelText(/自由格式 Markdown/)).toBeDefined();
-    // Structured field labels are NOT visible in default view.
+    // Slice-7 round 3: structured tab removed entirely.
     expect(screen.queryByLabelText("目標")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^結構化$/ })).toBeNull();
   });
 
-  test("toggle reveals six labeled structured fields", async () => {
-    const user = userEvent.setup();
-    await renderPane();
-    await user.click(screen.getByRole("button", { name: /^結構化$/ }));
-
-    expect(screen.getByLabelText("目標")).toBeDefined();
-    expect(screen.getByLabelText("對方輪廓")).toBeDefined();
-    expect(screen.getByLabelText("預期主題")).toBeDefined();
-    expect(screen.getByLabelText("預期反對")).toBeDefined();
-    expect(screen.getByLabelText("談話要點")).toBeDefined();
-    expect(screen.getByLabelText("紅線")).toBeDefined();
-  });
-
-  test("switching view does not discard unsaved edits in either side", async () => {
-    const user = userEvent.setup();
-    await renderPane();
-
-    // Type in free-form view.
-    const freeform = screen.getByLabelText(/自由格式 Markdown/);
-    await user.type(freeform, "free-form draft");
-
-    // Toggle to structured, type into objective.
-    await user.click(screen.getByRole("button", { name: /^結構化$/ }));
-    const objective = screen.getByLabelText("目標");
-    await user.type(objective, "structured draft");
-
-    // Toggle back to free-form, the previous text is still there.
-    await user.click(screen.getByRole("button", { name: /^自由格式$/ }));
-    expect((screen.getByLabelText(/自由格式 Markdown/) as HTMLTextAreaElement).value).toBe(
-      "free-form draft",
-    );
-
-    // Toggle to structured again, the previous typed objective is preserved.
-    await user.click(screen.getByRole("button", { name: /^結構化$/ }));
-    expect((screen.getByLabelText("目標") as HTMLTextAreaElement).value).toBe("structured draft");
-  });
-
-  test("save button issues exactly one PUT carrying all seven fields", async () => {
+  test("save button posts free_form_markdown plus empty placeholders for the other six fields", async () => {
     const user = userEvent.setup();
     let putBody: Record<string, unknown> | null = null;
     let putCount = 0;
@@ -123,29 +87,45 @@ describe("PlaybookPane", () => {
 
     await renderPane();
     await user.type(screen.getByLabelText(/自由格式 Markdown/), "# brief");
-
-    await user.click(screen.getByRole("button", { name: /^結構化$/ }));
-    await user.type(screen.getByLabelText("目標"), "Close Q3");
-    await user.type(screen.getByLabelText("紅線"), "no discount below 30%");
-
     await user.click(screen.getByRole("button", { name: /^儲存$/ }));
 
     await waitFor(() => {
       expect(putCount).toBe(1);
     });
-    expect(putBody).toEqual({
-      free_form_markdown: "# brief",
-      objective: "Close Q3",
-      counterparty_profile: "",
-      anticipated_topics: "",
-      anticipated_objections: "",
-      talking_points: "",
-      red_lines: "no discount below 30%",
-    });
+    expect(putBody?.free_form_markdown).toBe("# brief");
+    // Backend schema still requires all 7 fields — non-freeform fields are
+    // sent as the GET-loaded values (or empty strings when absent).
+    expect(putBody).toHaveProperty("objective");
+    expect(putBody).toHaveProperty("counterparty_profile");
+    expect(putBody).toHaveProperty("anticipated_topics");
+    expect(putBody).toHaveProperty("anticipated_objections");
+    expect(putBody).toHaveProperty("talking_points");
+    expect(putBody).toHaveProperty("red_lines");
 
-    // Saved indicator surfaces.
     await waitFor(() => {
       expect(screen.getByText(/已儲存/)).toBeDefined();
     });
+  });
+
+  // ─── Slice 7 round 2 ─────────────────────────────────────────────
+
+  test("freeform tab exposes Edit/Preview sub-toggle and renders markdown in preview", async () => {
+    const user = userEvent.setup();
+    await renderPane();
+
+    expect(screen.getByTestId("freeform-edit-tab")).toBeDefined();
+    expect(screen.getByTestId("freeform-preview-tab")).toBeDefined();
+
+    const freeform = screen.getByLabelText(/自由格式 Markdown/);
+    await user.type(freeform, "# Goals");
+
+    await user.click(screen.getByTestId("freeform-preview-tab"));
+    const preview = screen.getByTestId("markdown-preview");
+    expect(preview.querySelector("h1")?.textContent).toBe("Goals");
+
+    await user.click(screen.getByTestId("freeform-edit-tab"));
+    expect((screen.getByLabelText(/自由格式 Markdown/) as HTMLTextAreaElement).value).toBe(
+      "# Goals",
+    );
   });
 });

@@ -7,6 +7,7 @@ import {
   playbookQueryOptions,
   useUpsertPlaybookMutation,
 } from "../lib/playbook-api";
+import { MarkdownPreview } from "../lib/markdown-preview";
 import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -16,36 +17,6 @@ import { cn } from "../lib/utils";
 interface PlaybookPaneProps {
   meetingId: string;
 }
-
-type ViewMode = "freeform" | "structured";
-
-const STRUCTURED_FIELDS = [
-  { key: "objective", labelKey: "playbook.fields.objective" },
-  { key: "counterparty_profile", labelKey: "playbook.fields.counterpartyProfile" },
-  { key: "anticipated_topics", labelKey: "playbook.fields.anticipatedTopics" },
-  { key: "anticipated_objections", labelKey: "playbook.fields.anticipatedObjections" },
-  { key: "talking_points", labelKey: "playbook.fields.talkingPoints" },
-  { key: "red_lines", labelKey: "playbook.fields.redLines" },
-] as const;
-
-type ContentField =
-  | "free_form_markdown"
-  | "objective"
-  | "counterparty_profile"
-  | "anticipated_topics"
-  | "anticipated_objections"
-  | "talking_points"
-  | "red_lines";
-
-const EMPTY_DRAFT: Record<ContentField, string> = {
-  free_form_markdown: "",
-  objective: "",
-  counterparty_profile: "",
-  anticipated_topics: "",
-  anticipated_objections: "",
-  talking_points: "",
-  red_lines: "",
-};
 
 const TEXTAREA_CLASSNAME = cn(
   "flex w-full min-h-[160px] rounded-md border border-(--color-input) bg-(--color-card) px-3 py-2 text-sm",
@@ -59,35 +30,34 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
   const query = useQuery(playbookQueryOptions(meetingId));
   const mutation = useUpsertPlaybookMutation(meetingId);
 
-  const [view, setView] = useState<ViewMode>("freeform");
-  const [draft, setDraft] = useState<Record<ContentField, string>>(EMPTY_DRAFT);
+  // Slice-7 round 3: structured tab removed per Sean's call — only freeform
+  // markdown remains. Sub-toggle still switches Edit / Preview within freeform.
+  const [freeformMode, setFreeformMode] = useState<"edit" | "preview">("edit");
+  const [draft, setDraft] = useState<string>("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  // Initialize draft once when the query settles. Subsequent server changes
-  // do not silently overwrite the user's local edits.
+  // Initialize draft from server once.
   useEffect(() => {
     if (!query.data) return;
-    setDraft({
-      free_form_markdown: query.data.free_form_markdown,
-      objective: query.data.objective,
-      counterparty_profile: query.data.counterparty_profile,
-      anticipated_topics: query.data.anticipated_topics,
-      anticipated_objections: query.data.anticipated_objections,
-      talking_points: query.data.talking_points,
-      red_lines: query.data.red_lines,
-    });
-    // Only re-sync on first successful load (data identity); deliberate.
+    setDraft(query.data.free_form_markdown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.data?.id]);
 
-  const updateField = (field: ContentField) => (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setDraft((prev) => ({ ...prev, [field]: e.target.value }));
-    setSavedAt(null);
-  };
-
   async function handleSave() {
     try {
-      await mutation.mutateAsync(draft);
+      // Backend playbook PUT still accepts the full 7-field shape. Send the
+      // textarea value as `free_form_markdown` and pass empty strings for the
+      // other fields so the schema stays satisfied without dropping data the
+      // user might have set via the LLM-generated draft.
+      await mutation.mutateAsync({
+        free_form_markdown: draft,
+        objective: query.data?.objective ?? "",
+        counterparty_profile: query.data?.counterparty_profile ?? "",
+        anticipated_topics: query.data?.anticipated_topics ?? "",
+        anticipated_objections: query.data?.anticipated_objections ?? "",
+        talking_points: query.data?.talking_points ?? "",
+        red_lines: query.data?.red_lines ?? "",
+      });
       setSavedAt(Date.now());
     } catch {
       // mutation.error surfaced below; nothing else to do here.
@@ -116,24 +86,27 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <CardTitle>{t("playbook.heading")}</CardTitle>
-        <div role="group" aria-label="playbook view" className="flex gap-1">
+        {/* Slice-7 round 3: Edit / Preview sub-toggle promoted to header. */}
+        <div role="group" aria-label="freeform sub-mode" className="flex gap-1">
           <Button
             type="button"
             size="sm"
-            variant={view === "freeform" ? "primary" : "outline"}
-            aria-pressed={view === "freeform"}
-            onClick={() => setView("freeform")}
+            variant={freeformMode === "edit" ? "primary" : "outline"}
+            aria-pressed={freeformMode === "edit"}
+            data-testid="freeform-edit-tab"
+            onClick={() => setFreeformMode("edit")}
           >
-            {t("playbook.toggle.freeform")}
+            {t("playbook.freeform.editTab")}
           </Button>
           <Button
             type="button"
             size="sm"
-            variant={view === "structured" ? "primary" : "outline"}
-            aria-pressed={view === "structured"}
-            onClick={() => setView("structured")}
+            variant={freeformMode === "preview" ? "primary" : "outline"}
+            aria-pressed={freeformMode === "preview"}
+            data-testid="freeform-preview-tab"
+            onClick={() => setFreeformMode("preview")}
           >
-            {t("playbook.toggle.structured")}
+            {t("playbook.freeform.previewTab")}
           </Button>
         </div>
       </CardHeader>
@@ -141,36 +114,24 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
         {query.isLoading && <div>{t("playbook.loading")}</div>}
         {error && <Alert variant="destructive">{error}</Alert>}
 
-        {view === "freeform" && (
-          <div className="space-y-1">
-            <Label htmlFor="playbook-freeform">{t("playbook.freeform.label")}</Label>
+        <div className="space-y-2">
+          <Label htmlFor="playbook-freeform">{t("playbook.freeform.label")}</Label>
+          {freeformMode === "edit" ? (
             <textarea
               id="playbook-freeform"
               className={TEXTAREA_CLASSNAME}
               placeholder={t("playbook.freeform.placeholder")}
-              value={draft.free_form_markdown}
-              onChange={updateField("free_form_markdown")}
+              value={draft}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                setSavedAt(null);
+              }}
               rows={12}
             />
-          </div>
-        )}
-
-        {view === "structured" && (
-          <div className="space-y-4">
-            {STRUCTURED_FIELDS.map(({ key, labelKey }) => (
-              <div key={key} className="space-y-1">
-                <Label htmlFor={`playbook-${key}`}>{t(labelKey)}</Label>
-                <textarea
-                  id={`playbook-${key}`}
-                  className={TEXTAREA_CLASSNAME}
-                  value={draft[key]}
-                  onChange={updateField(key)}
-                  rows={4}
-                />
-              </div>
-            ))}
-          </div>
-        )}
+          ) : (
+            <MarkdownPreview source={draft} />
+          )}
+        </div>
 
         <div className="flex items-center gap-3">
           <Button type="button" onClick={handleSave} disabled={mutation.isPending}>

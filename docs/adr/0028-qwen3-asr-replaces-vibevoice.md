@@ -43,28 +43,70 @@ a spike at all.
 
 ## Decision
 
-Adopt **Qwen3-ASR-1.7B (MLX-8bit by default)** as the second `ASRProvider`
-implementation, replacing the VibeVoice plan. The runtime path is the
-`mlx-lm` / `mlx-whisper` style toolchain on macOS (the only target per
-ADR-0003); model is downloaded from HuggingFace on first use.
+Adopt **Qwen3-ASR-1.7B** as the second `ASRProvider` implementation,
+replacing the VibeVoice plan. The runtime path is the upstream
+`Qwen/Qwen3-ASR-1.7B` (FP16) loaded via the official `qwen-asr` PyPI
+package on Apple Silicon MPS; model is downloaded from HuggingFace on
+first use.
 
 The existing `meeting.asr_provider` column (Slice 3) keeps its shape; allowed
 values become `"whisper" | "qwen3"` going forward. The per-meeting selector UI
 arrives with the integration slice (former Issue #13).
 
+### Loader spike result (Slice 11, 2026-05-11)
+
+The original plan above ("MLX-8bit by default via `mlx-lm` / `mlx-whisper`")
+did not survive contact with reality. Slice 11 ran five spike rounds against
+`doggy8088/Qwen3-ASR-1.7B-MLX-8bit`:
+
+1. `mlx-lm` — `ModuleNotFoundError: mlx_lm.models.qwen3_asr`
+2. `mlx-whisper` — `TypeError: ModelDimensions.__init__() got an unexpected keyword argument 'architectures'`
+3. `transformers` (with `trust_remote_code=True`) — `KeyError: 'qwen3_asr'`
+4. `mlx-vlm` + sys.modules-injected custom helper — processor falls back to
+   `Qwen2Tokenizer` (no audio support); manual `Qwen3ASRProcessor`
+   instantiation works but mlx-vlm's `chat_template`, `stopping_criteria`,
+   and `make_streaming_detokenizer` plumbing all reject the custom path.
+
+The MLX 8-bit conversion ships a custom `qwen3_asr_mlx.py` helper that
+defines `Model` + `Qwen3ASRProcessor` but no usage example, no glue to
+existing MLX loaders, and no end-to-end transcribe entry point.
+
+The spike pivoted to upstream `Qwen/Qwen3-ASR-1.7B` + `qwen-asr` PyPI package
+(version 0.0.6) with `device_map="mps"`. This worked first attempt —
+`Qwen3ASRModel.from_pretrained(...).transcribe(audio=...)` returns a
+structured result with `.text` and `.language` ready to consume.
+
+### Revised runtime plan
+
+- **Loader**: `qwen-asr>=0.0.6` (transitively pulls `transformers==4.57.6`,
+  `torch>=2.11`).
+- **Model**: `Qwen/Qwen3-ASR-1.7B` (FP16/BF16, ~5 GB per instance).
+- **Device**: MPS on Apple Silicon. `qwen-asr` does not document MPS
+  support but does not assume CUDA internally.
+- **Memory budget**: 5 GB × 2 streams = 10 GB on M3 Pro 18 GB — comfortable.
+- **Speed**: MPS is slower than the (unreached) MLX 8-bit path, but
+  acceptable: chunks are 10s, inference fits in budget.
+
+If a future MLX loader gains native `qwen3_asr` support — or doggy8088
+publishes a working entry point — the swap stays inside `Qwen3ASRProvider`
+and `pyproject.toml` (the `ASRProvider` Protocol does not change).
+
 ## Consequences
 
 - **Issue #3** (VibeVoice runtime spike on M3 Pro): closed without delivery.
-  The MLX 8bit model is ~2.5 GB on disk; two parallel instances ≈ 5 GB which
-  fits comfortably on the M3 Pro 18 GB target machine.
 - **Issue #13** (originally "VibeVoice ASR provider + per-meeting selector"):
   retitled to "Qwen3-ASR provider + per-meeting ASR selector". The work shape
   is the same — implement an `ASRProvider`, wire a per-meeting toggle, default
   remains Whisper for backward compatibility on existing meetings.
-- New runtime dependency on the MLX toolchain (`mlx`, `mlx-lm` or
-  `mlx-whisper`, depending on the loader script that ships in the
-  `doggy8088/Qwen3-ASR-1.7B-MLX-8bit` repo). Backend `pyproject.toml` adds
-  these when Issue #13 lands.
+- New runtime dependency: `qwen-asr` on the backend. Backend `pyproject.toml`
+  drops any earlier MLX experiment deps (`mlx-lm`, `mlx-whisper`, `mlx-vlm`,
+  standalone `transformers`) — `qwen-asr` brings the right pinned
+  `transformers==4.57.6` itself.
+- The `doggy8088/Qwen3-ASR-1.7B-MLX-8bit` HF cache (~2.5 GB) downloaded
+  during the spike can be deleted; production uses `Qwen/Qwen3-ASR-1.7B`.
+- Memory budget shifts from ~5 GB (MLX 8-bit ×2) to ~10 GB (FP16 ×2). Still
+  fits on the M3 Pro 18 GB target machine; revisit if a third concurrent
+  consumer is ever added.
 - Documentation: this ADR supersedes the VibeVoice mentions in PRD comments
   and Issue #1 (PRD). Update Issue #1's "ASR providers" section in a
   follow-up edit.
@@ -80,3 +122,8 @@ arrives with the integration slice (former Issue #13).
 - **Stay on Whisper as the only provider**: rejected — Sean already flagged
   that zh-TW accuracy is the weak link, and the 3.2× WER gap on the meeting
   benchmark is decisive.
+- **MLX 8-bit conversion via `mlx-lm` / `mlx-whisper` / `mlx-vlm`**:
+  rejected after Slice-11 spike — see the loader spike result section above.
+  No installable MLX loader recognises the `qwen3_asr` `model_type` and the
+  custom helper shipped with `doggy8088/Qwen3-ASR-1.7B-MLX-8bit` has no
+  working entry point. Revisit if the upstream MLX ecosystem catches up.

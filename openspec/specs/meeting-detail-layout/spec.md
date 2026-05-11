@@ -870,3 +870,206 @@ tests:
   - packages/backend/tests/summarization/test_router.py
   - packages/backend/tests/summarization/__init__.py
 -->
+
+---
+### Requirement: Detail page metadata card exposes ASR provider selector, recording badge, and re-run action
+
+The meeting detail page's metadata card (the existing area showing 對方 / 我方 / 狀態 / ASR 引擎 / 建立時間) SHALL gain three new UI elements integrated INLINE with the existing rows (NOT in a separate card):
+
+(1) **AsrProviderSelector** — replaces the existing read-only "ASR 引擎" label with a dropdown (`<select>` or shadcn equivalent) of two options: "Whisper" and "Qwen3", driven by `meeting.asr_provider`. Switching the dropdown SHALL fire a PUT mutation to `/api/meetings/{id}` with `{asr_provider: <new value>}` and SHALL display a localised hint underneath: "切換下一場會議生效" / "Takes effect on the next meeting" so the user understands the change is not retroactive to in-flight work.
+
+(2) **RecordingBadge** — a new row labelled "錄音" / "Recording" with a coloured-dot indicator and text: green dot + "錄音可用" / "Recording available" when `meeting.recordings_available === true`; grey dot + "錄音已過期" / "Recording expired" when `false`. NO emoji per project UI standards (`feedback_ui_standards_no_emoji_magicui`); use a Tailwind background-colour `<span>` for the dot.
+
+(3) **RerunButton** — a new action row (visually separated by a thin divider from the metadata) containing a button labelled "重新轉錄" / "Re-run transcription". The button SHALL be rendered ONLY when `meeting.status === "completed"` AND `meeting.recordings_available === true` AND `meeting.rerun_asr_pending === false`. Clicking SHALL call POST `/api/meetings/{id}/rerun_asr`; on 202 the button enters a loading state until the next React Query GET sees `rerun_asr_pending === true`, after which it disappears (replaced by the in-flight overlay in the transcript pane).
+
+#### Scenario: AsrProviderSelector renders dropdown reflecting current meeting.asr_provider
+
+- **GIVEN** a meeting with `asr_provider = "qwen3"`
+- **WHEN** the detail page renders
+- **THEN** the dropdown SHALL show "Qwen3" as the selected option AND the "切換下一場會議生效" hint SHALL be visible below
+
+#### Scenario: Switching the dropdown PUTs the new value and shows confirmation hint
+
+- **GIVEN** a dropdown currently showing "Qwen3"
+- **WHEN** the user selects "Whisper" from the dropdown
+- **THEN** a PUT request SHALL fire to `/api/meetings/{id}` with body containing `asr_provider: "whisper"`; on 200 the dropdown SHALL reflect the new selection AND the hint text SHALL remain visible
+
+#### Scenario: RecordingBadge shows available state with green dot
+
+- **GIVEN** a meeting with `recordings_available = true`
+- **WHEN** the detail page renders
+- **THEN** the recording row SHALL render an element with `data-testid="recording-badge"` AND `data-state="available"` AND text containing the localised "錄音可用" / "Recording available"
+
+#### Scenario: RecordingBadge shows expired state with grey dot
+
+- **GIVEN** a meeting with `recordings_available = false`
+- **WHEN** the detail page renders
+- **THEN** `data-testid="recording-badge"` SHALL be present with `data-state="expired"` AND localised text "錄音已過期" / "Recording expired"
+
+#### Scenario: RerunButton hidden when meeting is in_progress
+
+- **GIVEN** a meeting with `status = "in_progress"`
+- **WHEN** the detail page renders
+- **THEN** `data-testid="rerun-button"` SHALL NOT be in the DOM
+
+#### Scenario: RerunButton hidden when recordings expired
+
+- **GIVEN** a meeting with `status = "completed"` AND `recordings_available = false`
+- **WHEN** the detail page renders
+- **THEN** `data-testid="rerun-button"` SHALL NOT be in the DOM
+
+#### Scenario: RerunButton click POSTs and enters loading state
+
+- **GIVEN** a completed meeting with available recordings and a visible RerunButton
+- **WHEN** the user clicks the button
+- **THEN** a POST `/api/meetings/{id}/rerun_asr` SHALL fire; on 202 response the button SHALL show a transient loading state until the next meeting GET refetch indicates `rerun_asr_pending === true`, at which point the button SHALL disappear
+
+
+<!-- @trace
+source: slice-11-asr-and-retention
+updated: 2026-05-12
+code:
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/alembic/versions/0007_add_recording_deleted_at.py
+  - packages/backend/meeting_playbook/sessions/models.py
+  - .env.example
+  - packages/backend/meeting_playbook/sessions/dependencies.py
+  - packages/web/src/components/asr-provider-selector.tsx
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/backend/alembic/versions/0008_asr_default_qwen3.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/web/src/components/recording-badge.tsx
+  - packages/backend/meeting_playbook/asr/qwen3_provider.py
+  - packages/backend/meeting_playbook/rerun/runtime.py
+  - packages/backend/uv.lock
+  - packages/backend/meeting_playbook/rerun/__init__.py
+  - packages/backend/meeting_playbook/config.py
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/backend/meeting_playbook/asr/factory.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/web/src/locales/zh-TW.json
+  - docs/adr/0028-qwen3-asr-replaces-vibevoice.md
+  - packages/backend/pyproject.toml
+  - packages/web/src/components/rerun-button.tsx
+  - packages/backend/meeting_playbook/asr/transliteration.py
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/lib/rerun-api.ts
+  - scripts/spike_qwen3_asr.py
+  - packages/backend/meeting_playbook/retention/__init__.py
+  - packages/backend/meeting_playbook/retention/runtime.py
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/retention/job.py
+tests:
+  - packages/web/src/components/transcript-pane.test.tsx
+  - packages/backend/tests/rerun/__init__.py
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/backend/tests/asr/test_qwen3_provider.py
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/backend/tests/sessions/test_router_summary_spawn.py
+  - packages/web/src/components/rerun-button.test.tsx
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/retention/test_job.py
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/asr/test_transliteration.py
+  - packages/backend/tests/retention/__init__.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/backend/tests/retention/test_runtime.py
+  - packages/backend/tests/asr/test_factory.py
+  - packages/backend/tests/sessions/test_router_advice.py
+  - packages/web/src/components/transcript-pane-rerun.test.tsx
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/sessions/test_router.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/backend/tests/test_alembic_meeting_asr_default_qwen3.py
+  - packages/backend/tests/test_alembic_recording_deleted_at.py
+  - packages/backend/tests/test_config.py
+  - packages/web/src/components/recording-badge.test.tsx
+-->
+
+---
+### Requirement: TranscriptPane shows progress overlay while re-run is pending
+
+The web UI's existing TranscriptPane SHALL render a skeleton + progress overlay when EITHER `meeting.rerun_asr_pending === true` (per the meeting GET response) OR the React Query `useRerunStatus(meetingId)` hook reports `status: "pending"`. The overlay SHALL display a localised "重新轉錄中..." / "Re-running transcription..." line plus a chunk counter "({chunks_processed}/{chunks_total} chunks)" pulled from the polled status response. The chunk counter SHALL display "(...)" while `chunks_total === 0` (initial moment before the task estimates the total).
+
+When the polling sees `status: "idle"` after a transition from `"pending"`, the hook SHALL invalidate the React Query cache key `["transcripts", meetingId]` so the TranscriptPane fetches fresh chunks; the overlay SHALL disappear; the existing transcript rendering SHALL show the new content.
+
+#### Scenario: Overlay visible during pending re-run with progress text
+
+- **GIVEN** a completed meeting with `rerun_asr_pending = true` AND a polled status of `{status: "pending", chunks_processed: 12, chunks_total: 45}`
+- **WHEN** TranscriptPane renders
+- **THEN** an element with `data-testid="transcript-rerun-overlay"` SHALL be visible containing the localised "重新轉錄中" text AND the substring "(12/45 chunks)"
+
+#### Scenario: Overlay hidden when re-run completes; new content rendered
+
+- **GIVEN** TranscriptPane previously showed the overlay
+- **WHEN** the polled status transitions from `pending` to `idle`
+- **THEN** the React Query cache key `["transcripts", meetingId]` SHALL be invalidated; TranscriptPane SHALL re-render with `data-testid="transcript-rerun-overlay"` absent AND new transcript chunks visible (assuming the GET returned the new rows)
+
+<!-- @trace
+source: slice-11-asr-and-retention
+updated: 2026-05-12
+code:
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/alembic/versions/0007_add_recording_deleted_at.py
+  - packages/backend/meeting_playbook/sessions/models.py
+  - .env.example
+  - packages/backend/meeting_playbook/sessions/dependencies.py
+  - packages/web/src/components/asr-provider-selector.tsx
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/backend/alembic/versions/0008_asr_default_qwen3.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/web/src/components/recording-badge.tsx
+  - packages/backend/meeting_playbook/asr/qwen3_provider.py
+  - packages/backend/meeting_playbook/rerun/runtime.py
+  - packages/backend/uv.lock
+  - packages/backend/meeting_playbook/rerun/__init__.py
+  - packages/backend/meeting_playbook/config.py
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/backend/meeting_playbook/asr/factory.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/web/src/locales/zh-TW.json
+  - docs/adr/0028-qwen3-asr-replaces-vibevoice.md
+  - packages/backend/pyproject.toml
+  - packages/web/src/components/rerun-button.tsx
+  - packages/backend/meeting_playbook/asr/transliteration.py
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/lib/rerun-api.ts
+  - scripts/spike_qwen3_asr.py
+  - packages/backend/meeting_playbook/retention/__init__.py
+  - packages/backend/meeting_playbook/retention/runtime.py
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/retention/job.py
+tests:
+  - packages/web/src/components/transcript-pane.test.tsx
+  - packages/backend/tests/rerun/__init__.py
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/backend/tests/asr/test_qwen3_provider.py
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/backend/tests/sessions/test_router_summary_spawn.py
+  - packages/web/src/components/rerun-button.test.tsx
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/retention/test_job.py
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/asr/test_transliteration.py
+  - packages/backend/tests/retention/__init__.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/backend/tests/retention/test_runtime.py
+  - packages/backend/tests/asr/test_factory.py
+  - packages/backend/tests/sessions/test_router_advice.py
+  - packages/web/src/components/transcript-pane-rerun.test.tsx
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/sessions/test_router.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/backend/tests/test_alembic_meeting_asr_default_qwen3.py
+  - packages/backend/tests/test_alembic_recording_deleted_at.py
+  - packages/backend/tests/test_config.py
+  - packages/web/src/components/recording-badge.test.tsx
+-->

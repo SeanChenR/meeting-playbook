@@ -25,6 +25,12 @@ bun.lockb
 
 # Claude Code local overrides (machine-specific)
 .claude/settings.local.json
+# Skill plugins installed via shadcn-style local registries
+.claude/skills/framer-motion-animator/
+.claude/skills/frontend-design/
+.claude/skills/shadcn/
+.agents/
+skills-lock.json
 
 # Project artifacts
 recordings/

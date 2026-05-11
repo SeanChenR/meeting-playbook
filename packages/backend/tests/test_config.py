@@ -67,3 +67,33 @@ def test_async_database_url_passthrough_when_already_asyncpg(monkeypatch):
     settings = Settings(_env_file=None)
 
     assert settings.async_database_url == "postgresql+asyncpg://localhost:5432/test_db"
+
+
+# ─── Slice 11: recording retention ──────────────────────────────────
+
+
+def test_recording_retention_days_default(monkeypatch):
+    """Without an env override, retention defaults to 30 days."""
+    _set_required(monkeypatch)
+    monkeypatch.delenv("RECORDING_RETENTION_DAYS", raising=False)
+
+    settings = Settings(_env_file=None)
+    assert settings.recording_retention_days == 30
+
+
+def test_recording_retention_days_env_override(monkeypatch):
+    """Env var overrides the default."""
+    _set_required(monkeypatch)
+    monkeypatch.setenv("RECORDING_RETENTION_DAYS", "7")
+
+    settings = Settings(_env_file=None)
+    assert settings.recording_retention_days == 7
+
+
+def test_recording_retention_days_zero_is_valid(monkeypatch):
+    """`0` is valid: cleanup will delete everything older than `now()`."""
+    _set_required(monkeypatch)
+    monkeypatch.setenv("RECORDING_RETENTION_DAYS", "0")
+
+    settings = Settings(_env_file=None)
+    assert settings.recording_retention_days == 0

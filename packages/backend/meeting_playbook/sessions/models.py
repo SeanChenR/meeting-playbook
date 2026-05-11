@@ -42,3 +42,8 @@ class Recording(Base):
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
     bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    # Slice-11: NULL → recording wav still on disk; NOT NULL → cleanup job
+    # has unlinked the wav at this timestamp. Row itself is never deleted.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True, default=None
+    )

@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     whisper_device: str = "auto"
     whisper_compute_type: str = "auto"
 
+    # Slice 11 — recording retention. After this many days the cleanup
+    # background job unlinks the wav file and stamps `recording.deleted_at`.
+    # `0` is valid: cleanup deletes everything older than `now()`. The row
+    # itself is never removed (preserves the historical fact that audio
+    # was captured for this meeting + stream). See ADR-0028 + the slice-11
+    # design Decision 5/6.
+    recording_retention_days: int = 30
+
     # Slice 7 — dual-stream device discovery overrides (both optional)
     blackhole_device_name: str | None = None
     mic_device_name: str | None = None

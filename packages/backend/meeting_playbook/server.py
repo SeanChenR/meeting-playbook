@@ -14,19 +14,63 @@ Slice 2 adds an error-envelope contract: every error response is shaped
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
 from fastapi import FastAPI, Header, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from meeting_playbook.calendar.router import router as calendar_router
 from meeting_playbook.chat.router import router as chat_router
+from meeting_playbook.config import get_settings
 from meeting_playbook.meetings.router import router as meetings_router
 from meeting_playbook.playbooks.router import router as playbooks_router
+from meeting_playbook.retention import runtime as retention_runtime
 from meeting_playbook.sessions.router import router as sessions_router
 from meeting_playbook.summarization.router import router as summary_router
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Spawn the retention background loop on startup; cancel on shutdown.
+
+    The loop calls `retention.job.cleanup` once immediately and then every
+    24h. Any per-iteration failure is logged + swallowed by the runtime so
+    the loop survives across days.
+    """
+    settings = get_settings()
+    engine = create_async_engine(settings.async_database_url, future=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    task = asyncio.create_task(
+        retention_runtime.run_forever(
+            settings=settings,
+            session_factory=session_factory,
+        ),
+        name="retention-loop",
+    )
+    logger.info(
+        "retention background loop started (RECORDING_RETENTION_DAYS=%d)",
+        settings.recording_retention_days,
+    )
+
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+        await engine.dispose()
+        logger.info("retention background loop stopped")
 
 
 def _envelope(status_code: int, error_code: str, message: str) -> JSONResponse:
@@ -39,7 +83,7 @@ def _envelope(status_code: int, error_code: str, message: str) -> JSONResponse:
 
 def create_app() -> FastAPI:
     """Construct and return the FastAPI app."""
-    app = FastAPI(title="meeting-playbook backend", version="0.0.1")
+    app = FastAPI(title="meeting-playbook backend", version="0.0.1", lifespan=_lifespan)
 
     # ─── Error envelope handlers ────────────────────────────────────────
     @app.exception_handler(StarletteHTTPException)
@@ -123,13 +167,11 @@ def create_app() -> FastAPI:
     return app
 
 
-import logging as _logging
-
 # Configure root logger so app-side `logger.info(...)` actually reaches the
 # uvicorn console. Without this, only WARNING+ from app loggers would surface
 # (Python's root default), making slow Whisper calls look hung.
-_logging.basicConfig(
-    level=_logging.INFO,
+logging.basicConfig(
+    level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 

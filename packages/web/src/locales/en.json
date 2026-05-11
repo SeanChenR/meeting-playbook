@@ -156,7 +156,10 @@
       "streamStopped": "{{name}} stopped",
       "headphonesHint": "Headphones recommended — otherwise the mic will pick up speaker output, causing both streams to contain overlapping audio",
       "transcriptHeading": "Live transcript",
-      "transcriptEmpty": "Waiting for the first transcript chunk… (the first run needs 10–25s to load the model)"
+      "transcriptEmpty": "Waiting for the first transcript chunk… (the first run needs 10–25s to load the model)",
+      "rerunOverlay": "Re-running transcription…",
+      "rerunOverlayProgress": "({{processed}}/{{total}} chunks)",
+      "rerunOverlayEstimating": "(...)"
     },
     "detail": {
       "back": "← Back to list",
@@ -173,6 +176,12 @@
       "deleteCancel": "Cancel",
       "errorFallback": "Action failed",
       "advisorPlaceholder": "Tactical advisor lands in Slice 8",
+      "asrProviderSwitchHint": "Takes effect on the next meeting",
+      "recordingLabel": "Recording",
+      "recordingAvailable": "Recording available",
+      "recordingExpired": "Recording expired",
+      "rerunButton": "Re-run transcription",
+      "rerunPending": "Re-running transcription…",
       "layout": {
         "stack": "Stack layout",
         "columns": "Columns layout"
@@ -308,6 +317,11 @@
       "not_found": "Summary has not been generated",
       "generation_failed": "Summary generation failed, please retry",
       "generation_timeout": "Summary generation timed out, please retry"
+    },
+    "rerun": {
+      "busy": "A re-run for this meeting is already in progress",
+      "recording_expired": "Recording has expired; cannot re-run transcription",
+      "not_completed": "Meeting has not finished; cannot re-run transcription"
     },
     "meeting": {
       "not_found": "Meeting not found",

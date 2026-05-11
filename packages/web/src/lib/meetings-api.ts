@@ -30,6 +30,19 @@ export interface Meeting {
   scheduled_end_at: string | null;
 }
 
+/**
+ * Slice-11: GET /api/meetings/{id} returns this superset (mirrors backend
+ * `MeetingDetailRead`). The list endpoint still returns plain `Meeting`.
+ */
+export interface MeetingDetail extends Meeting {
+  recordings_available: boolean;
+  rerun_asr_pending: boolean;
+}
+
+export interface MeetingPatchPayload {
+  asr_provider?: string;
+}
+
 export interface MeetingCreatePayload {
   title: string;
   counterparty_display_name: string;
@@ -66,10 +79,23 @@ export async function listMeetings(): Promise<Meeting[]> {
   return (await resp.json()) as Meeting[];
 }
 
-export async function getMeeting(id: string): Promise<Meeting> {
+export async function getMeeting(id: string): Promise<MeetingDetail> {
   const resp = await fetch(`/api/meetings/${encodeURIComponent(id)}`);
   if (!resp.ok) throw await _envelopeError(resp);
-  return (await resp.json()) as Meeting;
+  return (await resp.json()) as MeetingDetail;
+}
+
+export async function patchMeeting(
+  id: string,
+  payload: MeetingPatchPayload,
+): Promise<MeetingDetail> {
+  const resp = await fetch(`/api/meetings/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) throw await _envelopeError(resp);
+  return (await resp.json()) as MeetingDetail;
 }
 
 export async function createMeeting(payload: MeetingCreatePayload): Promise<Meeting> {
@@ -133,6 +159,22 @@ export function useDeleteMeetingMutation() {
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ["meetings"] });
       queryClient.invalidateQueries({ queryKey: ["meetings", id] });
+    },
+  });
+}
+
+/**
+ * Slice-11: PATCH `/api/meetings/{id}` — used by the AsrProviderSelector.
+ * Updates the cached single-meeting query in place from the response so the
+ * UI doesn't need to refetch.
+ */
+export function usePatchMeetingMutation(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: MeetingPatchPayload) => patchMeeting(id, payload),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["meetings", id], updated);
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
     },
   });
 }

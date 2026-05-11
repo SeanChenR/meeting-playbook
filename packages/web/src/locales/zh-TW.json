@@ -156,7 +156,10 @@
       "streamStopped": "{{name}} 已停止",
       "headphonesHint": "建議戴耳機 — 否則麥克風會收到喇叭播放的對方聲音，導致兩條 stream 內容重疊",
       "transcriptHeading": "即時逐字稿",
-      "transcriptEmpty": "等待第一段逐字稿…（首次啟動約需 10–25 秒載入模型）"
+      "transcriptEmpty": "等待第一段逐字稿…（首次啟動約需 10–25 秒載入模型）",
+      "rerunOverlay": "重新轉錄中…",
+      "rerunOverlayProgress": "({{processed}}/{{total}} chunks)",
+      "rerunOverlayEstimating": "(...)"
     },
     "detail": {
       "back": "← 返回列表",
@@ -173,6 +176,12 @@
       "deleteCancel": "取消",
       "errorFallback": "操作失敗",
       "advisorPlaceholder": "Tactical advisor 將在 Slice 8 上線",
+      "asrProviderSwitchHint": "切換下一場會議生效",
+      "recordingLabel": "錄音",
+      "recordingAvailable": "錄音可用",
+      "recordingExpired": "錄音已過期",
+      "rerunButton": "重新轉錄",
+      "rerunPending": "重新轉錄中…",
       "layout": {
         "stack": "上下三層佈局",
         "columns": "三欄佈局"
@@ -308,6 +317,11 @@
       "not_found": "尚未生成摘要",
       "generation_failed": "摘要生成失敗，請重試",
       "generation_timeout": "摘要生成逾時，請重試"
+    },
+    "rerun": {
+      "busy": "已有重新轉錄任務進行中",
+      "recording_expired": "錄音檔已過期，無法重新轉錄",
+      "not_completed": "會議尚未結束，無法重新轉錄"
     },
     "meeting": {
       "not_found": "找不到此 Meeting",

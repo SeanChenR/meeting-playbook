@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AdvisorPane } from "../../components/advisor-pane";
+import { AsrProviderSelector } from "../../components/asr-provider-selector";
+import { RecordingBadge } from "../../components/recording-badge";
+import { RerunButton } from "../../components/rerun-button";
 import { SummaryPane } from "../../components/summary-pane";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useDetailTab } from "../../hooks/use-detail-tab";
@@ -139,6 +142,8 @@ export function MeetingDetail() {
       chunks={sessionChunks}
       meDisplayName={meeting.me_display_name}
       counterpartyDisplayName={meeting.counterparty_display_name}
+      meetingId={meetingId}
+      rerunPending={Boolean(meeting.rerun_asr_pending)}
     />
   );
   const advisorPane = meeting && (
@@ -176,15 +181,14 @@ export function MeetingDetail() {
               <span className="font-medium">{t("meetings.detail.statusLabel")}：</span>
               <span>{t(`meetings.status.${meeting.status}`)}</span>
             </div>
-            <div>
-              <span className="font-medium">{t("meetings.detail.asrProviderLabel")}：</span>
-              <span>{meeting.asr_provider}</span>
-            </div>
+            <RecordingBadge available={Boolean(meeting.recordings_available)} />
+            <AsrProviderSelector meeting={meeting} />
             <div>
               <span className="font-medium">{t("meetings.detail.createdAtLabel")}：</span>
               <span>{new Date(meeting.created_at).toLocaleString()}</span>
             </div>
             <HeadphonesHint visible={meeting.status === "scheduled"} />
+            <RerunButton meeting={meeting} />
             <div className="flex flex-wrap items-center gap-3 pt-4">
               <Button onClick={session.start} disabled={startDisabled}>
                 {t("meetings.session.start")}

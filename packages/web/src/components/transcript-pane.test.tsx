@@ -7,12 +7,28 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 
 import { TranscriptPane } from "./transcript-pane";
 import type { TranscriptChunkMessage } from "../lib/session-ws";
 
 afterEach(cleanup);
+
+// Slice-11: TranscriptPane now always calls useQuery (driven by the
+// rerun-status polling). Tests need a QueryClient even when they don't
+// exercise the polling path.
+function _Wrapper({ children }: { children: ReactNode }) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+function _render(ui: ReactNode) {
+  return render(<_Wrapper>{ui}</_Wrapper>);
+}
 
 const _chunk = (
   text: string,
@@ -31,7 +47,7 @@ const _chunk = (
 
 describe("TranscriptPane", () => {
   test("empty chunks renders a placeholder, not an empty list", () => {
-    render(<TranscriptPane chunks={[]} meDisplayName="Sean" counterpartyDisplayName="林經理" />);
+    _render(<TranscriptPane chunks={[]} meDisplayName="Sean" counterpartyDisplayName="林經理" />);
     expect(screen.getByTestId("transcript-empty")).toBeDefined();
   });
 
@@ -41,7 +57,7 @@ describe("TranscriptPane", () => {
       _chunk("second", "me", "2026-05-09T10:00:10Z"),
       _chunk("third", "me", "2026-05-09T10:00:20Z"),
     ];
-    render(
+    _render(
       <TranscriptPane chunks={chunks} meDisplayName="Sean Chen" counterpartyDisplayName="林經理" />,
     );
 
@@ -59,7 +75,7 @@ describe("TranscriptPane", () => {
 
   test("counterparty chunk applies primary accent border", () => {
     const chunks = [_chunk("from-other-side", "counterparty")];
-    render(
+    _render(
       <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
     );
     const item = screen.getByTestId("transcript-chunk");
@@ -71,7 +87,7 @@ describe("TranscriptPane", () => {
 
   test("me chunk applies muted-foreground accent border", () => {
     const chunks = [_chunk("from-me", "me")];
-    render(
+    _render(
       <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
     );
     const item = screen.getByTestId("transcript-chunk");
@@ -82,7 +98,7 @@ describe("TranscriptPane", () => {
 
   test("uses counterpartyDisplayName for counterparty chunks", () => {
     const chunks = [_chunk("hi from me", "me"), _chunk("hi from them", "counterparty")];
-    render(
+    _render(
       <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
     );
     const items = screen.getAllByTestId("transcript-chunk");

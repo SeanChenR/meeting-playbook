@@ -25,10 +25,7 @@ from meeting_playbook.asr.base import TranscriptChunk
 from meeting_playbook.audio.capture import AudioChunk
 from meeting_playbook.meetings.dependencies import get_session_dependency
 from meeting_playbook.server import create_app
-from meeting_playbook.sessions.dependencies import (
-    get_asr_providers_dependency,
-    get_capture_factory_dependency,
-)
+from meeting_playbook.sessions.dependencies import get_capture_factory_dependency
 from meeting_playbook.summarization import runtime
 
 # ─── Mocks (mirror slice-7 / slice-8 / slice-9 patterns) ───────────────────
@@ -145,7 +142,9 @@ async def _truncate(db_url: str):
     await engine.dispose()
 
 
-def _build_client(db_url_sync: str, *, capture_factory_override) -> TestClient:
+def _build_client(
+    db_url_sync: str, monkeypatch: pytest.MonkeyPatch, *, capture_factory_override
+) -> TestClient:
     db_url_async = _async_url(db_url_sync)
     engine = create_async_engine(db_url_async, future=True)
     Session = async_sessionmaker(engine, expire_on_commit=False)
@@ -157,10 +156,13 @@ def _build_client(db_url_sync: str, *, capture_factory_override) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_session_dependency] = _override_session
     app.dependency_overrides[get_capture_factory_dependency] = lambda: capture_factory_override
-    app.dependency_overrides[get_asr_providers_dependency] = lambda: {
-        "me": _StubASRProvider(),
-        "counterparty": _StubASRProvider(),
-    }
+
+    # Slice-11: ASR provider selection moved out of FastAPI Depends into the
+    # WS handler; tests patch the router's imported factory function.
+    monkeypatch.setattr(
+        "meeting_playbook.sessions.router.get_asr_providers_for_meeting",
+        lambda _name: (_StubASRProvider(), _StubASRProvider()),
+    )
     return TestClient(app)
 
 
@@ -194,7 +196,9 @@ def _reset_inflight():
 # ─── Tests ───────────────────────────────────────────────────────────────
 
 
-def test_end_meeting_spawns_summary_task(_migrated_db_url, tmp_path, monkeypatch):
+def test_end_meeting_spawns_summary_task(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """Slice-10 5.1: end_meeting → spawn_summary_task called once with meeting_id."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_s", meeting_id="m_spawn"))
@@ -209,6 +213,7 @@ def test_end_meeting_spawns_summary_task(_migrated_db_url, tmp_path, monkeypatch
 
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=2),
     )
     with client.websocket_connect(
@@ -248,6 +253,7 @@ def test_end_meeting_does_not_block_websocket_close_on_long_summary(
 
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=2),
     )
     started = time.monotonic()
@@ -291,6 +297,7 @@ def test_end_meeting_when_summary_already_pending_logs_and_does_not_double_spawn
 
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=2),
     )
     saw_meeting_ended = False

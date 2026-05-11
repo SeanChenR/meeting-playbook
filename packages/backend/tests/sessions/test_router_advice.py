@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -29,10 +30,7 @@ from meeting_playbook.meetings.dependencies import (
     get_session_factory_dependency,
 )
 from meeting_playbook.server import create_app
-from meeting_playbook.sessions.dependencies import (
-    get_asr_providers_dependency,
-    get_capture_factory_dependency,
-)
+from meeting_playbook.sessions.dependencies import get_capture_factory_dependency
 
 # ─── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -254,6 +252,7 @@ async def _seed_chat_messages(
 
 def _build_client(
     db_url_sync: str,
+    monkeypatch: pytest.MonkeyPatch,
     *,
     capture_factory_override,
     advisor_override,
@@ -270,13 +269,24 @@ def _build_client(
     app = create_app()
     app.dependency_overrides[get_session_dependency] = _override_session
     app.dependency_overrides[get_capture_factory_dependency] = lambda: capture_factory_override
-    app.dependency_overrides[get_asr_providers_dependency] = lambda: (
-        providers_override or {"me": _StubASRProvider(), "counterparty": _StubASRProvider()}
-    )
     app.dependency_overrides[get_tactical_advisor_dependency] = lambda: advisor_override
     # Slice-08: the advisor opens its own AsyncSession via session_factory.
     # Point it at the test DB engine, NOT the cached application engine.
     app.dependency_overrides[get_session_factory_dependency] = lambda: Session
+
+    # Slice-11: ASR provider selection moved out of FastAPI Depends; tests
+    # patch the router's imported factory function instead.
+    if providers_override is None:
+        me_p, cp_p = _StubASRProvider(), _StubASRProvider()
+    elif isinstance(providers_override, dict):
+        me_p = providers_override["me"]
+        cp_p = providers_override["counterparty"]
+    else:
+        me_p, cp_p = providers_override
+    monkeypatch.setattr(
+        "meeting_playbook.sessions.router.get_asr_providers_for_meeting",
+        lambda _name: (me_p, cp_p),
+    )
     return TestClient(app)
 
 
@@ -305,7 +315,9 @@ def _make_capture_factory(tmp_path: Path, n_chunks: int = 2, chunk_delay_s: floa
 # ─── Tests ─────────────────────────────────────────────────────────────────
 
 
-def test_request_advice_streams_chunks_then_done(_migrated_db_url, tmp_path):
+def test_request_advice_streams_chunks_then_done(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """Slice-08: client `request_advice` → 3 `advice_chunk` frames + 1 `advice_done`."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_ad", meeting_id="m_ad"))
@@ -316,6 +328,7 @@ def test_request_advice_streams_chunks_then_done(_migrated_db_url, tmp_path):
     # the session naturally finalizes.
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=10, chunk_delay_s=0.05),
         advisor_override=advisor,
     )
@@ -362,7 +375,9 @@ def test_request_advice_streams_chunks_then_done(_migrated_db_url, tmp_path):
     assert advice_done_seen
 
 
-def test_vertex_quota_error_emits_advisor_failed_and_keeps_ws_open(_migrated_db_url, tmp_path):
+def test_vertex_quota_error_emits_advisor_failed_and_keeps_ws_open(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """Slice-08: ResourceExhausted from advisor → `advisor_failed` `advisor.quota`;
     WS stays open and continues to deliver transcript_chunk frames."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
@@ -371,6 +386,7 @@ def test_vertex_quota_error_emits_advisor_failed_and_keeps_ws_open(_migrated_db_
     advisor = _RaisingAdvisor(ResourceExhausted("429 quota exceeded"))
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=10, chunk_delay_s=0.05),
         advisor_override=advisor,
     )
@@ -408,7 +424,9 @@ def test_vertex_quota_error_emits_advisor_failed_and_keeps_ws_open(_migrated_db_
     assert seen_transcript_after_failure, "WS must stay open after advisor_failed"
 
 
-def test_end_meeting_cancels_in_flight_advice(_migrated_db_url, tmp_path):
+def test_end_meeting_cancels_in_flight_advice(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """Slice-08: a slow advice stream cancelled by end_meeting MUST NOT
     leak any further `advice_chunk` frames. `meeting_ended` arrives
     normally."""
@@ -418,6 +436,7 @@ def test_end_meeting_cancels_in_flight_advice(_migrated_db_url, tmp_path):
     advisor = _SlowAdvisor()
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=2),
         advisor_override=advisor,
     )
@@ -455,7 +474,9 @@ def test_end_meeting_cancels_in_flight_advice(_migrated_db_url, tmp_path):
     assert saw_meeting_ended
 
 
-def test_advice_during_active_capture_uses_separate_session(_migrated_db_url, tmp_path):
+def test_advice_during_active_capture_uses_separate_session(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """Slice-08: advice runs concurrent with capture+transcribe writes.
     SQLAlchemy raises InvalidRequestError if two coroutines share a session;
     the router opens a fresh session for each advice request to avoid this.
@@ -469,6 +490,7 @@ def test_advice_during_active_capture_uses_separate_session(_migrated_db_url, tm
     # and the advice read overlap in time.
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=20, chunk_delay_s=0.02),
         advisor_override=advisor,
     )
@@ -545,7 +567,9 @@ class _ChatHistoryRecordingAdvisor:
             yield tok
 
 
-def test_chat_message_frame_streams_advice_and_inserts_pair_on_done(_migrated_db_url, tmp_path):
+def test_chat_message_frame_streams_advice_and_inserts_pair_on_done(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """Slice-09 4.3: chatbox `chat_message` frame → 3 advice_chunk → advice_done →
     DB has user row + advisor row with the right contents."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
@@ -554,6 +578,7 @@ def test_chat_message_frame_streams_advice_and_inserts_pair_on_done(_migrated_db
     advisor = _ScriptedAdvisor(["alpha ", "beta ", "gamma"])
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=10, chunk_delay_s=0.05),
         advisor_override=advisor,
     )
@@ -598,7 +623,7 @@ def test_chat_message_frame_streams_advice_and_inserts_pair_on_done(_migrated_db
 
 
 def test_request_advice_button_path_inserts_pair_with_default_user_content(
-    _migrated_db_url, tmp_path
+    _migrated_db_url, tmp_path, monkeypatch
 ):
     """Slice-09 4.4: button path's user row uses the locale-default prompt string."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
@@ -607,6 +632,7 @@ def test_request_advice_button_path_inserts_pair_with_default_user_content(
     advisor = _ScriptedAdvisor(["建議內容"])
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=10, chunk_delay_s=0.05),
         advisor_override=advisor,
     )
@@ -642,7 +668,9 @@ def test_request_advice_button_path_inserts_pair_with_default_user_content(
     assert rows == [("user", "請給出戰術建議。"), ("advisor", "建議內容")]
 
 
-def test_failed_advice_writes_no_chat_message_rows(_migrated_db_url, tmp_path):
+def test_failed_advice_writes_no_chat_message_rows(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """Slice-09 4.5: ResourceExhausted from advisor → no DB rows written."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_fl", meeting_id="m_fl"))
@@ -650,6 +678,7 @@ def test_failed_advice_writes_no_chat_message_rows(_migrated_db_url, tmp_path):
     advisor = _RaisingAdvisor(ResourceExhausted("429 quota exceeded"))
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=10, chunk_delay_s=0.05),
         advisor_override=advisor,
     )
@@ -688,7 +717,7 @@ def test_failed_advice_writes_no_chat_message_rows(_migrated_db_url, tmp_path):
 
 
 def test_chat_message_cancels_prior_in_flight_advice_no_pair_written_for_cancelled(
-    _migrated_db_url, tmp_path
+    _migrated_db_url, tmp_path, monkeypatch
 ):
     """Slice-09 4.6: superseding chat_message cancels prior task → only the
     second turn's pair persists; the cancelled first turn writes nothing."""
@@ -736,6 +765,7 @@ def test_chat_message_cancels_prior_in_flight_advice_no_pair_written_for_cancell
     advisor = _OncePerSecondCallAdvisor()
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=20, chunk_delay_s=0.05),
         advisor_override=advisor,
     )
@@ -801,7 +831,9 @@ def test_chat_message_cancels_prior_in_flight_advice_no_pair_written_for_cancell
     assert rows == [("user", "B"), ("advisor", "OK")]
 
 
-def test_chat_message_passes_chat_history_from_db_to_advise(_migrated_db_url, tmp_path):
+def test_chat_message_passes_chat_history_from_db_to_advise(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """Slice-09 4.7: prior chat_message rows are fetched from DB and passed
     to advisor.advise(chat_history=...) in created_at order."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
@@ -817,6 +849,7 @@ def test_chat_message_passes_chat_history_from_db_to_advise(_migrated_db_url, tm
     advisor = _ChatHistoryRecordingAdvisor(["new-tok"])
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=10, chunk_delay_s=0.05),
         advisor_override=advisor,
     )
@@ -853,7 +886,7 @@ def test_chat_message_passes_chat_history_from_db_to_advise(_migrated_db_url, tm
 
 
 def test_advice_during_active_capture_with_chat_message_no_session_collision(
-    _migrated_db_url, tmp_path
+    _migrated_db_url, tmp_path, monkeypatch
 ):
     """Slice-09 4.9: chatbox path under concurrent capture/transcribe writes
     SHALL NOT raise SQLAlchemy InvalidRequestError; both transcript_chunk
@@ -864,6 +897,7 @@ def test_advice_during_active_capture_with_chat_message_no_session_collision(
     advisor = _ScriptedAdvisor(["a", "b", "c"], per_token_delay_s=0.05)
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=20, chunk_delay_s=0.02),
         advisor_override=advisor,
     )

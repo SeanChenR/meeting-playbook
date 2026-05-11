@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from meeting_playbook.advisor.base import TacticalAdvisor
 from meeting_playbook.advisor.dependencies import get_tactical_advisor_dependency
 from meeting_playbook.asr.base import ASRProvider
+from meeting_playbook.asr.factory import get_asr_providers_for_meeting
 from meeting_playbook.audio.devices import MicDeviceNotFound, NoBlackholeDevice
 from meeting_playbook.chat.repository import ChatMessageRepository
 from meeting_playbook.meetings.dependencies import (
@@ -41,7 +42,6 @@ from meeting_playbook.playbooks.repository import PlaybookRepository
 from meeting_playbook.sessions.dependencies import (
     CaptureFactory,
     Stream,
-    get_asr_providers_dependency,
     get_capture_factory_dependency,
 )
 from meeting_playbook.sessions.messages import (
@@ -132,7 +132,6 @@ async def list_transcript_chunks(
 async def meeting_session_endpoint(
     websocket: WebSocket,
     meeting_id: str,
-    providers: Annotated[dict[Stream, ASRProvider], Depends(get_asr_providers_dependency)],
     capture_factory: Annotated[CaptureFactory, Depends(get_capture_factory_dependency)],
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
     tactical_advisor: Annotated[TacticalAdvisor, Depends(get_tactical_advisor_dependency)],
@@ -150,6 +149,16 @@ async def meeting_session_endpoint(
     if meeting is None:
         await websocket.close(code=_CLOSE_NOT_FOUND, reason="meeting.not_found")
         return
+
+    # Slice-11: pick ASR providers per-meeting at connect time. The pair is
+    # captured into a local var so any mid-session PUT to meeting.asr_provider
+    # does NOT swap the live providers (Decision 1 + spec scenario
+    # "Switching meeting.asr_provider mid-session has no effect on the live WS").
+    me_provider, counterparty_provider = get_asr_providers_for_meeting(meeting.asr_provider)
+    providers: dict[Stream, ASRProvider] = {
+        "me": me_provider,
+        "counterparty": counterparty_provider,
+    }
 
     await websocket.accept()
 

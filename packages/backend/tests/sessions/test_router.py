@@ -29,10 +29,7 @@ from meeting_playbook.asr.base import TranscriptChunk
 from meeting_playbook.audio.capture import AudioChunk
 from meeting_playbook.meetings.dependencies import get_session_dependency
 from meeting_playbook.server import create_app
-from meeting_playbook.sessions.dependencies import (
-    get_asr_providers_dependency,
-    get_capture_factory_dependency,
-)
+from meeting_playbook.sessions.dependencies import get_capture_factory_dependency
 
 # ─── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -103,7 +100,14 @@ class _ScriptedCapture:
 # ─── DB helpers (sync test calls asyncio.run) ──────────────────────────────
 
 
-async def _setup_meeting(db_url: str, *, user_id: str, meeting_id: str, status: str = "scheduled"):
+async def _setup_meeting(
+    db_url: str,
+    *,
+    user_id: str,
+    meeting_id: str,
+    status: str = "scheduled",
+    asr_provider: str = "whisper",
+):
     engine = create_async_engine(db_url, future=True)
     Session = async_sessionmaker(engine, expire_on_commit=False)
     async with Session() as s:
@@ -120,12 +124,22 @@ async def _setup_meeting(db_url: str, *, user_id: str, meeting_id: str, status: 
         await s.execute(
             text(
                 """
-                INSERT INTO meeting (id, user_id, title, counterparty_display_name, me_display_name, status)
-                VALUES (:mid, :uid, 'T', 'C', 'M', :status)
-                ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status
+                INSERT INTO meeting (
+                    id, user_id, title, counterparty_display_name,
+                    me_display_name, status, asr_provider
+                )
+                VALUES (:mid, :uid, 'T', 'C', 'M', :status, :provider)
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    asr_provider = EXCLUDED.asr_provider
                 """
             ),
-            {"mid": meeting_id, "uid": user_id, "status": status},
+            {
+                "mid": meeting_id,
+                "uid": user_id,
+                "status": status,
+                "provider": asr_provider,
+            },
         )
         await s.commit()
     await engine.dispose()
@@ -168,6 +182,7 @@ def _async_url(sync_url: str) -> str:
 
 def _build_client(
     db_url_sync: str,
+    monkeypatch: pytest.MonkeyPatch,
     *,
     capture_factory_override,
     providers_override=None,
@@ -183,8 +198,20 @@ def _build_client(
     app = create_app()
     app.dependency_overrides[get_session_dependency] = _override_session
     app.dependency_overrides[get_capture_factory_dependency] = lambda: capture_factory_override
-    app.dependency_overrides[get_asr_providers_dependency] = lambda: (
-        providers_override or {"me": _StubASRProvider(), "counterparty": _StubASRProvider()}
+
+    # Slice-11: provider selection moved out of FastAPI Depends and into the
+    # WS handler (so it can branch on meeting.asr_provider). Tests patch the
+    # router's imported factory function — accepts dict OR tuple override.
+    if providers_override is None:
+        me_p, cp_p = _StubASRProvider(), _StubASRProvider()
+    elif isinstance(providers_override, dict):
+        me_p = providers_override["me"]
+        cp_p = providers_override["counterparty"]
+    else:
+        me_p, cp_p = providers_override
+    monkeypatch.setattr(
+        "meeting_playbook.sessions.router.get_asr_providers_for_meeting",
+        lambda _name: (me_p, cp_p),
     )
     return TestClient(app)
 
@@ -215,12 +242,13 @@ def _make_capture_factory(tmp_path: Path, n_chunks: int = 2):
 # ─── Tests ─────────────────────────────────────────────────────────────────
 
 
-def test_unauthenticated_ws_is_rejected_before_upgrade(_migrated_db_url, tmp_path):
+def test_unauthenticated_ws_is_rejected_before_upgrade(_migrated_db_url, tmp_path, monkeypatch):
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_a", meeting_id="m_a"))
 
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path),
     )
     with pytest.raises(WebSocketDisconnect) as exc_info:
@@ -230,12 +258,13 @@ def test_unauthenticated_ws_is_rejected_before_upgrade(_migrated_db_url, tmp_pat
     assert "auth.gateway_bypass" in (exc_info.value.reason or "")
 
 
-def test_cross_user_ws_is_rejected_with_not_found(_migrated_db_url, tmp_path):
+def test_cross_user_ws_is_rejected_with_not_found(_migrated_db_url, tmp_path, monkeypatch):
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_owner", meeting_id="m_b"))
 
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path),
     )
     with (
@@ -247,12 +276,15 @@ def test_cross_user_ws_is_rejected_with_not_found(_migrated_db_url, tmp_path):
     assert "meeting.not_found" in (exc_info.value.reason or "")
 
 
-def test_start_meeting_id_mismatch_emits_bad_start_then_closes(_migrated_db_url, tmp_path):
+def test_start_meeting_id_mismatch_emits_bad_start_then_closes(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_c", meeting_id="m_c"))
 
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path),
     )
     with client.websocket_connect("/api/meetings/m_c/session", headers={"X-User-Id": "u_c"}) as ws:
@@ -262,7 +294,7 @@ def test_start_meeting_id_mismatch_emits_bad_start_then_closes(_migrated_db_url,
         assert msg["error_code"] == "session.bad_start"
 
 
-def test_start_when_status_is_completed_emits_bad_status(_migrated_db_url, tmp_path):
+def test_start_when_status_is_completed_emits_bad_status(_migrated_db_url, tmp_path, monkeypatch):
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(
         _setup_meeting(
@@ -275,6 +307,7 @@ def test_start_when_status_is_completed_emits_bad_status(_migrated_db_url, tmp_p
 
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path),
     )
     with client.websocket_connect("/api/meetings/m_d/session", headers={"X-User-Id": "u_d"}) as ws:
@@ -285,13 +318,14 @@ def test_start_when_status_is_completed_emits_bad_status(_migrated_db_url, tmp_p
 
 
 def test_full_session_round_trip_emits_started_chunks_ended_and_completes_status(
-    _migrated_db_url, tmp_path
+    _migrated_db_url, tmp_path, monkeypatch
 ):
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_e", meeting_id="m_e"))
 
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=2),
     )
     types_seen: list[str] = []
@@ -319,7 +353,7 @@ def test_full_session_round_trip_emits_started_chunks_ended_and_completes_status
 # ─── Slice 7: dual-stream router tests ────────────────────────────────────
 
 
-def test_no_blackhole_device_aborts_session(_migrated_db_url, tmp_path):
+def test_no_blackhole_device_aborts_session(_migrated_db_url, tmp_path, monkeypatch):
     """Pre-flight: missing BlackHole → error frame + close, status stays scheduled."""
     from meeting_playbook.audio.devices import NoBlackholeDevice
 
@@ -329,7 +363,7 @@ def test_no_blackhole_device_aborts_session(_migrated_db_url, tmp_path):
     def failing_factory(meeting_id: str):
         raise NoBlackholeDevice("BlackHole 2ch not detected — see docs/BLACKHOLE_SETUP.md")
 
-    client = _build_client(_migrated_db_url, capture_factory_override=failing_factory)
+    client = _build_client(_migrated_db_url, monkeypatch, capture_factory_override=failing_factory)
 
     with client.websocket_connect(
         "/api/meetings/m_nb/session", headers={"X-User-Id": "u_nb"}
@@ -345,13 +379,16 @@ def test_no_blackhole_device_aborts_session(_migrated_db_url, tmp_path):
     assert final_status == "scheduled"
 
 
-def test_dual_stream_session_emits_transcripts_for_both_speakers(_migrated_db_url, tmp_path):
+def test_dual_stream_session_emits_transcripts_for_both_speakers(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """Both me + counterparty transcript frames arrive over the WebSocket."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_ds", meeting_id="m_ds"))
 
     client = _build_client(
         _migrated_db_url,
+        monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path, n_chunks=3),
     )
     transcript_speakers: list[str] = []
@@ -373,7 +410,7 @@ def test_dual_stream_session_emits_transcripts_for_both_speakers(_migrated_db_ur
     assert transcript_speakers.count("counterparty") == 3
 
 
-def test_stream_failed_at_start_aborts(_migrated_db_url, tmp_path):
+def test_stream_failed_at_start_aborts(_migrated_db_url, tmp_path, monkeypatch):
     """Capture __aenter__ raising → error frame `session.stream_failed_at_start`."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_sf", meeting_id="m_sf"))
@@ -395,7 +432,7 @@ def test_stream_failed_at_start_aborts(_migrated_db_url, tmp_path):
             ),
         }
 
-    client = _build_client(_migrated_db_url, capture_factory_override=factory)
+    client = _build_client(_migrated_db_url, monkeypatch, capture_factory_override=factory)
     error_codes: list[str] = []
     with client.websocket_connect(
         "/api/meetings/m_sf/session", headers={"X-User-Id": "u_sf"}
@@ -411,3 +448,236 @@ def test_stream_failed_at_start_aborts(_migrated_db_url, tmp_path):
             pass
 
     assert "session.stream_failed_at_start" in error_codes
+
+
+# ─── Slice 11: WS connect uses factory keyed on meeting.asr_provider ───────
+
+
+def _make_factory_spy(monkeypatch):
+    """Replace the router's factory import with a spy that records the
+    provider_name it was called with AND returns stub providers (so the
+    rest of the WS round-trip still exercises real wiring)."""
+    calls: list[str] = []
+
+    def _spy(name: str):
+        calls.append(name)
+        return _StubASRProvider(), _StubASRProvider()
+
+    monkeypatch.setattr(
+        "meeting_playbook.sessions.router.get_asr_providers_for_meeting",
+        _spy,
+    )
+    return calls
+
+
+def test_qwen3_meeting_resolves_via_factory_with_qwen3(_migrated_db_url, tmp_path, monkeypatch):
+    """A meeting with `asr_provider=qwen3` triggers factory("qwen3") at WS connect."""
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(
+        _setup_meeting(
+            _async_url(_migrated_db_url),
+            user_id="u_q",
+            meeting_id="m_q",
+            asr_provider="qwen3",
+        )
+    )
+
+    db_url_async = _async_url(_migrated_db_url)
+    engine = create_async_engine(db_url_async, future=True)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _override_session():
+        async with Session() as s:
+            yield s
+
+    app = create_app()
+    app.dependency_overrides[get_session_dependency] = _override_session
+    app.dependency_overrides[get_capture_factory_dependency] = lambda: _make_capture_factory(
+        tmp_path, n_chunks=1
+    )
+    calls = _make_factory_spy(monkeypatch)
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/meetings/m_q/session", headers={"X-User-Id": "u_q"}) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_q"}))
+        try:
+            while True:
+                ws.receive_text()
+        except WebSocketDisconnect:
+            pass
+
+    assert calls == ["qwen3"], (
+        f"factory MUST be called once with the meeting's asr_provider; got {calls}"
+    )
+
+
+def test_whisper_meeting_resolves_via_factory_with_whisper(_migrated_db_url, tmp_path, monkeypatch):
+    """A meeting with `asr_provider=whisper` triggers factory("whisper") at WS connect."""
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(
+        _setup_meeting(
+            _async_url(_migrated_db_url),
+            user_id="u_w",
+            meeting_id="m_w",
+            asr_provider="whisper",
+        )
+    )
+
+    db_url_async = _async_url(_migrated_db_url)
+    engine = create_async_engine(db_url_async, future=True)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _override_session():
+        async with Session() as s:
+            yield s
+
+    app = create_app()
+    app.dependency_overrides[get_session_dependency] = _override_session
+    app.dependency_overrides[get_capture_factory_dependency] = lambda: _make_capture_factory(
+        tmp_path, n_chunks=1
+    )
+    calls = _make_factory_spy(monkeypatch)
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/meetings/m_w/session", headers={"X-User-Id": "u_w"}) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_w"}))
+        try:
+            while True:
+                ws.receive_text()
+        except WebSocketDisconnect:
+            pass
+
+    assert calls == ["whisper"], (
+        f"factory MUST be called once with the meeting's asr_provider; got {calls}"
+    )
+
+
+class _CallCountingASRProvider:
+    """Marker provider whose transcribe_chunk hits a counter, so a test
+    can assert each chunk was handled by the connect-time instance."""
+
+    def __init__(self, marker: str) -> None:
+        self.marker = marker
+        self.transcribe_calls = 0
+
+    name: str = "marker_asr"
+
+    async def warmup(self) -> None:
+        return None
+
+    async def transcribe_chunk(self, audio_bytes, sample_rate_hz, language_hint=None):
+        self.transcribe_calls += 1
+        return TranscriptChunk(
+            text=f"chunk_{self.transcribe_calls}",
+            started_at=datetime.now(UTC),
+            ended_at=datetime.now(UTC) + timedelta(milliseconds=50),
+            asr_provider_used=self.marker,
+            confidence=0.9,
+        )
+
+
+async def _update_meeting_asr_provider(db_url: str, meeting_id: str, value: str) -> None:
+    engine = create_async_engine(db_url, future=True)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as s:
+        await s.execute(
+            text("UPDATE meeting SET asr_provider = :v WHERE id = :mid"),
+            {"v": value, "mid": meeting_id},
+        )
+        await s.commit()
+    await engine.dispose()
+
+
+def test_mid_session_provider_switch_ignored(_migrated_db_url, tmp_path, monkeypatch):
+    """Slice-11 spec scenario "Mid-session provider switch is ignored by the live WS".
+
+    Connect with meeting.asr_provider="whisper" → factory returns a marker
+    provider stand-in. While the WS is open, UPDATE meeting.asr_provider to
+    "qwen3" out of band. The factory MUST NOT be called again, and the
+    same marker provider must transcribe both chunks.
+    """
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(
+        _setup_meeting(
+            _async_url(_migrated_db_url),
+            user_id="u_swap",
+            meeting_id="m_swap",
+            asr_provider="whisper",
+        )
+    )
+
+    me_provider = _CallCountingASRProvider(marker="whisper-marker-me")
+    cp_provider = _CallCountingASRProvider(marker="whisper-marker-cp")
+    factory_calls: list[str] = []
+
+    def _spy(name: str):
+        factory_calls.append(name)
+        return me_provider, cp_provider
+
+    monkeypatch.setattr(
+        "meeting_playbook.sessions.router.get_asr_providers_for_meeting",
+        _spy,
+    )
+
+    db_url_async = _async_url(_migrated_db_url)
+    engine = create_async_engine(db_url_async, future=True)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _override_session():
+        async with Session() as s:
+            yield s
+
+    app = create_app()
+    app.dependency_overrides[get_session_dependency] = _override_session
+    app.dependency_overrides[get_capture_factory_dependency] = lambda: _make_capture_factory(
+        tmp_path, n_chunks=2
+    )
+    client = TestClient(app)
+
+    transcript_markers: list[str] = []
+    saw_first = False
+    with client.websocket_connect(
+        "/api/meetings/m_swap/session", headers={"X-User-Id": "u_swap"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_swap"}))
+        try:
+            while True:
+                raw = ws.receive_text()
+                msg = json.loads(raw)
+                if msg["type"] == "transcript_chunk":
+                    transcript_markers.append(msg["asr_provider_used"])
+                    if not saw_first:
+                        # Out-of-band PUT-equivalent: flip the row to qwen3.
+                        # The live session must NOT pick this up.
+                        asyncio.run(
+                            _update_meeting_asr_provider(
+                                _async_url(_migrated_db_url), "m_swap", "qwen3"
+                            )
+                        )
+                        saw_first = True
+        except WebSocketDisconnect:
+            pass
+
+    # Factory was resolved exactly once at connect time — no re-read.
+    assert factory_calls == ["whisper"], (
+        f"factory MUST resolve once at connect; got {factory_calls}"
+    )
+    # All transcript chunks came from the connect-time providers (markers).
+    assert me_provider.transcribe_calls == 2
+    assert cp_provider.transcribe_calls == 2
+    assert all(m.startswith("whisper-marker-") for m in transcript_markers), (
+        f"every chunk must be transcribed by the connect-time provider; got {transcript_markers}"
+    )
+
+    # Sanity: the row really did flip in the database (the trigger landed).
+    async def _read_provider() -> str:
+        engine2 = create_async_engine(_async_url(_migrated_db_url), future=True)
+        Session2 = async_sessionmaker(engine2, expire_on_commit=False)
+        async with Session2() as s:
+            row = (
+                await s.execute(text("SELECT asr_provider FROM meeting WHERE id = 'm_swap'"))
+            ).first()
+        await engine2.dispose()
+        return row.asr_provider if row else ""
+
+    assert asyncio.run(_read_provider()) == "qwen3"

@@ -69,7 +69,7 @@ async def test_meeting_full_lifecycle(api_client: AsyncClient, migrated_engine: 
     created = create.json()
     mid = created["id"]
     assert created["status"] == "scheduled"
-    assert created["asr_provider"] == "whisper"
+    assert created["asr_provider"] == "qwen3"  # slice-11 migration 0008 default
     assert created["calendar_event_id"] is None
 
     # 2. List — returns the just-created meeting.

@@ -43,7 +43,10 @@ class Meeting(Base):
     counterparty_display_name: Mapped[str] = mapped_column(Text, nullable=False)
     me_display_name: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[MeetingStatus] = mapped_column(Text, nullable=False, default="scheduled")
-    asr_provider: Mapped[str] = mapped_column(Text, nullable=False, default="whisper")
+    # Slice-11: default flipped from "whisper" → "qwen3" to reflect the
+    # primary use case (中文 B2B meetings). Migration 0008 changes ONLY the
+    # column DEFAULT — pre-existing rows keep their value (no back-fill).
+    asr_provider: Mapped[str] = mapped_column(Text, nullable=False, default="qwen3")
     calendar_event_id: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(

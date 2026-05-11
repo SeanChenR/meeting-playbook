@@ -170,8 +170,8 @@ async def test_create_defaults_status_to_scheduled_and_calendar_event_id_to_none
 
 
 @pytest.mark.asyncio
-async def test_create_defaults_asr_provider_to_whisper(db_session: AsyncSession):
-    """Scenario: New meeting defaults to whisper."""
+async def test_create_defaults_asr_provider_to_qwen3(db_session: AsyncSession):
+    """Scenario: New meeting defaults to qwen3 (slice-11 migration 0008)."""
     await _seed_user(db_session, user_id="user_asr")
 
     repo = MeetingRepository(db_session)
@@ -182,7 +182,7 @@ async def test_create_defaults_asr_provider_to_whisper(db_session: AsyncSession)
         me_display_name="Me",
     )
 
-    assert meeting.asr_provider == "whisper"
+    assert meeting.asr_provider == "qwen3"
 
 
 @pytest.mark.asyncio

@@ -58,7 +58,9 @@ class MeetingRepository:
         title: str,
         counterparty_display_name: str,
         me_display_name: str,
-        asr_provider: str = "whisper",
+        # Slice-11: default flipped from "whisper" → "qwen3" (matches the
+        # ORM model default + migration 0008 column DEFAULT).
+        asr_provider: str = "qwen3",
         scheduled_start_at: datetime | None = None,
         scheduled_end_at: datetime | None = None,
         calendar_event_id: str | None = None,
@@ -95,6 +97,24 @@ class MeetingRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def update_asr_provider_for_user(
+        self, *, user_id: str, meeting_id: str, asr_provider: str
+    ) -> Meeting | None:
+        """Slice-11: allow the user to flip the meeting's stored ASR engine.
+
+        Returns the updated row (or None if the meeting doesn't exist /
+        isn't owned by `user_id`). The change takes effect for the NEXT
+        WS connect; live sessions keep the providers they resolved at
+        connect time (per slice-11 design Decision 1).
+        """
+        meeting = await self.get_for_user(user_id=user_id, meeting_id=meeting_id)
+        if meeting is None:
+            return None
+        meeting.asr_provider = asr_provider
+        await self._session.commit()
+        await self._session.refresh(meeting)
+        return meeting
 
     async def get_by_id(self, meeting_id: str) -> Meeting | None:
         """Bypasses ownership check — for trusted background callers only.

@@ -52,3 +52,25 @@ class MeetingRead(BaseModel):
     scheduled_end_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class MeetingPatch(BaseModel):
+    """Slice-11 partial-update body. Only `asr_provider` is patchable today."""
+
+    asr_provider: str | None = Field(default=None, min_length=1)
+
+
+class MeetingDetailRead(MeetingRead):
+    """Single-meeting GET response — adds slice-11 derived flags.
+
+    Per spec meeting-management ADDED requirement
+    "GET /api/meetings/{id} returns recordings_available and rerun_asr_pending
+    derived fields": both flags are required booleans, computed server-side
+    on every request (NOT persisted on the meeting row).
+
+    `recordings_available`: at least one recording row has `deleted_at IS NULL`.
+    `rerun_asr_pending`: the in-flight rerun registry reports the meeting.
+    """
+
+    recordings_available: bool
+    rerun_asr_pending: bool

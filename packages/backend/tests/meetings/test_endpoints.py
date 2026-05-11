@@ -81,7 +81,8 @@ async def test_post_meeting_returns_201_with_body(
     assert body["counterparty_display_name"] == "林經理"
     assert body["me_display_name"] == "Sean"
     assert body["status"] == "scheduled"
-    assert body["asr_provider"] == "whisper"
+    # Slice-11 (migration 0008): default flipped from "whisper" → "qwen3".
+    assert body["asr_provider"] == "qwen3"
     assert body["calendar_event_id"] is None
     assert body["user_id"] == "user_post"
     assert body["id"].startswith("m_")
@@ -255,10 +256,10 @@ async def test_create_returns_null_calendar_event_id(
 
 
 @pytest.mark.asyncio
-async def test_get_returns_persisted_asr_provider_whisper(
+async def test_get_returns_persisted_asr_provider_qwen3(
     api_client: AsyncClient, migrated_engine: AsyncEngine
 ):
-    """Scenario: GET returns the persisted ASR provider — defaults to whisper."""
+    """Scenario: GET returns the persisted ASR provider — defaults to qwen3 (slice-11)."""
     await _seed_user(migrated_engine, "user_asr")
 
     create = await api_client.post(
@@ -270,7 +271,7 @@ async def test_get_returns_persisted_asr_provider_whisper(
 
     resp = await api_client.get(f"/api/meetings/{mid}", headers={"X-User-Id": "user_asr"})
     assert resp.status_code == 200
-    assert resp.json()["asr_provider"] == "whisper"
+    assert resp.json()["asr_provider"] == "qwen3"
 
 
 @pytest.mark.asyncio

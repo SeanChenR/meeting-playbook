@@ -178,5 +178,8 @@ async def test_meeting_status_default_is_scheduled(migrated_engine: AsyncEngine)
 
     assert row is not None
     assert row.status == "scheduled"
-    assert row.asr_provider == "whisper"
+    # Slice-11 (migration 0008): default was flipped to 'qwen3'. Pre-existing
+    # rows keep 'whisper'; new INSERTs without an explicit asr_provider land
+    # on the new default.
+    assert row.asr_provider == "qwen3"
     assert row.calendar_event_id is None

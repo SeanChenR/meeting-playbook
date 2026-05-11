@@ -1,19 +1,18 @@
 /**
  * ChatMessageList — chronological chat history for the AdvisorPane.
  *
- * Per spec tactical-advisor MODIFIED requirement "AdvisorPane renders
- * chat-style cards" + design.md Decision 8: user-role messages render
- * right-aligned, advisor-role messages render left-aligned with rendered
- * markdown. The list auto-scrolls to keep the latest message visible.
+ * Phase 6 (task 6.3): per-message bubble extracted to `ChatBubble`. The
+ * list keeps auto-scroll behaviour for streaming token updates.
  *
- * NO emojis (per UI feedback memory).
+ * Existing API + data-testids preserved (`chat-message-list`,
+ * `chat-bubble`, `data-role`).
  */
 
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../lib/chat-api";
 import { MarkdownPreview } from "../lib/markdown-preview";
-import { cn } from "../lib/utils";
+import { ChatBubble } from "./chat-bubble";
 
 export interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -35,8 +34,6 @@ export function ChatMessageList({ messages, meDisplayName }: ChatMessageListProp
   const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to bottom when the list grows OR the trailing message body
-  // grows (for streaming token updates).
   const lastLen = messages.at(-1)?.content.length ?? 0;
   useEffect(() => {
     const el = listRef.current;
@@ -55,29 +52,22 @@ export function ChatMessageList({ messages, meDisplayName }: ChatMessageListProp
       {messages.map((m) => {
         const isUser = m.role === "user";
         return (
-          <div
+          <ChatBubble
             key={m.id}
-            data-testid="chat-bubble"
-            data-role={m.role}
-            className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}
-          >
-            <div
-              className={cn(
-                "max-w-[85%] rounded-lg px-3 py-2 text-sm",
-                isUser ? "bg-primary text-primary-foreground" : "border border-border bg-card",
-              )}
-            >
-              <div className="mb-1 flex items-center justify-between gap-2 text-xs opacity-70">
+            role={isUser ? "user" : "advisor"}
+            header={
+              <>
                 <span>{isUser ? meDisplayName : t("meetings.advisor.advisorLabel")}</span>
                 <span>{_formatTime(m.created_at)}</span>
-              </div>
-              {isUser ? (
-                <p className="whitespace-pre-wrap break-words">{m.content}</p>
-              ) : (
-                <MarkdownPreview source={m.content} />
-              )}
-            </div>
-          </div>
+              </>
+            }
+          >
+            {isUser ? (
+              <p className="break-words whitespace-pre-wrap">{m.content}</p>
+            ) : (
+              <MarkdownPreview source={m.content} />
+            )}
+          </ChatBubble>
         );
       })}
     </div>

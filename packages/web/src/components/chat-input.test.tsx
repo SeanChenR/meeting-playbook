@@ -36,7 +36,7 @@ describe("ChatInput", () => {
   });
 
   test("clicking Send calls onSend with trimmed content + clears textarea", () => {
-    const onSend = mock(() => {});
+    const onSend = mock<(content: string) => void>(() => {});
     render(<ChatInput onSend={onSend} disabled={false} />);
     const ta = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
     fireEvent.change(ta, { target: { value: "  hello  " } });
@@ -47,7 +47,7 @@ describe("ChatInput", () => {
   });
 
   test("Cmd+Enter (metaKey) calls onSend and clears textarea", () => {
-    const onSend = mock(() => {});
+    const onSend = mock<(content: string) => void>(() => {});
     render(<ChatInput onSend={onSend} disabled={false} />);
     const ta = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
     fireEvent.change(ta, { target: { value: "X" } });
@@ -58,7 +58,7 @@ describe("ChatInput", () => {
   });
 
   test("Ctrl+Enter (ctrlKey) also triggers send for non-macOS users", () => {
-    const onSend = mock(() => {});
+    const onSend = mock<(content: string) => void>(() => {});
     render(<ChatInput onSend={onSend} disabled={false} />);
     const ta = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
     fireEvent.change(ta, { target: { value: "X" } });
@@ -67,7 +67,7 @@ describe("ChatInput", () => {
   });
 
   test("plain Enter (no modifier) does NOT send — newline behavior", () => {
-    const onSend = mock(() => {});
+    const onSend = mock<(content: string) => void>(() => {});
     render(<ChatInput onSend={onSend} disabled={false} />);
     const ta = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
     fireEvent.change(ta, { target: { value: "X" } });

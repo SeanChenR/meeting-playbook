@@ -57,12 +57,16 @@ export function transcriptChunksQueryOptions(meetingId: string, enabled: boolean
   };
 }
 
-/** Convert a row (from REST) to the TranscriptChunkMessage shape used by TranscriptPane. */
+/** Convert a row (from REST) to the TranscriptChunkMessage shape used by TranscriptPane.
+ *  Backend may emit `speaker: "system"` for non-user audio rows; on the frontend we
+ *  collapse those to `"counterparty"` since the dual-stream UI only renders the two
+ *  user-facing speakers. */
 export function rowToMessage(row: TranscriptChunkRow): TranscriptChunkMessage {
+  const speaker = row.speaker === "system" ? "counterparty" : row.speaker;
   return {
     type: "transcript_chunk",
     meeting_id: row.meeting_id,
-    speaker: row.speaker,
+    speaker,
     text: row.text,
     started_at: row.started_at,
     ended_at: row.ended_at,

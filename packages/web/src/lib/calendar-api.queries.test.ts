@@ -76,7 +76,7 @@ describe("getUpcomingEvents error envelope handling", () => {
           message: "User has not granted Calendar scope.",
         }),
         { status: 401, headers: { "content-type": "application/json" } },
-      )) as typeof fetch;
+      )) as unknown as typeof fetch;
 
     let caught: unknown = null;
     try {
@@ -95,7 +95,7 @@ describe("getUpcomingEvents error envelope handling", () => {
       new Response(JSON.stringify({ error_code: "calendar.token_expired", message: "..." }), {
         status: 401,
         headers: { "content-type": "application/json" },
-      })) as typeof fetch;
+      })) as unknown as typeof fetch;
     let caught: unknown = null;
     try {
       await getUpcomingEvents(24);
@@ -110,7 +110,7 @@ describe("getUpcomingEvents error envelope handling", () => {
       new Response(JSON.stringify({ error_code: "calendar.network_error", message: "..." }), {
         status: 502,
         headers: { "content-type": "application/json" },
-      })) as typeof fetch;
+      })) as unknown as typeof fetch;
     let caught: unknown = null;
     try {
       await getUpcomingEvents(24);
@@ -139,7 +139,7 @@ describe("importFromCalendar", () => {
           message: "Generation exceeded 60s.",
         }),
         { status: 504, headers: { "content-type": "application/json" } },
-      )) as typeof fetch;
+      )) as unknown as typeof fetch;
     let caught: unknown = null;
     try {
       await importFromCalendar("gcal_evt_x");

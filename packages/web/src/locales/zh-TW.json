@@ -2,6 +2,18 @@
   "common": {
     "loading": "Loading…"
   },
+  "theme": {
+    "toggle": {
+      "label": "切換主題",
+      "light": "淺色",
+      "dark": "深色",
+      "system": "跟隨系統"
+    }
+  },
+  "nav": {
+    "back": "返回",
+    "backToList": "返回列表"
+  },
   "auth": {
     "shell": {
       "headline": "Meeting Playbook",
@@ -35,6 +47,7 @@
       "emailPlaceholder": "you@example.com",
       "passwordLabel": "Password",
       "passwordPlaceholder": "至少 8 個字元",
+      "passwordHint": "至少 8 字元",
       "confirmLabel": "Confirm password",
       "confirmPlaceholder": "再輸入一次",
       "submit": "Sign up",
@@ -64,7 +77,10 @@
         "verifyButton": "Verify",
         "verifySubmitting": "驗證中",
         "enableErrorFallback": "啟用失敗",
-        "codeRejectedFallback": "驗證碼錯誤"
+        "codeRejectedFallback": "驗證碼錯誤",
+        "copySecret": "複製密鑰",
+        "copiedTooltip": "已複製",
+        "downloadBackupCodes": "下載備用碼"
       },
       "verify": {
         "eyebrow": "兩階段驗證",
@@ -74,7 +90,9 @@
         "codePlaceholder": "000000",
         "submit": "Verify",
         "submitting": "驗證中",
-        "errorFallback": "驗證碼錯誤"
+        "errorFallback": "驗證碼錯誤",
+        "refreshHint": "驗證碼 30 秒後刷新",
+        "useBackupCode": "使用備用碼登入"
       }
     },
     "home": {
@@ -97,19 +115,26 @@
       "oauthNoticeTitle": "2FA 由 Google 管理",
       "oauthNoticeBody": "OAuth 帳號的兩階段驗證在身份提供者那邊設定，本應用不再額外加一層",
       "oauthSecurityLink": "前往 Google 安全性設定",
-      "sliceFooter": "這是 Slice 1 — 後續 slice 加入會議管理、playbook、即時轉錄等功能。"
+      "sliceFooter": "這是 Slice 1 — 後續 slice 加入會議管理、playbook、即時轉錄等功能。",
+      "ctaTitle": "準備好下一場 meeting 了嗎？",
+      "ctaDescription": "從 Calendar 匯入或手動新增，AI 會幫你生成 playbook、即時逐字稿與戰術建議。",
+      "ctaNewMeeting": "新會議",
+      "ctaImportCalendar": "從 Calendar 匯入",
+      "totpWarningTitle": "尚未啟用兩階段驗證",
+      "totpWarningBody": "建議啟用以保護你的會議資料。",
+      "totpWarningCta": "立即啟用 →",
+      "statMonthlyMeetings": "本月會議",
+      "statAverageDuration": "平均時長",
+      "statActiveMeetings": "進行中",
+      "recentMeetingsTitle": "最近會議",
+      "recentMeetingsViewAll": "查看全部 →",
+      "recentMeetingsEmpty": "尚無最近會議"
     }
   },
   "meetings": {
-    "list": {
-      "heading": "我的 Meeting",
-      "newButton": "+ 新會議",
-      "fromCalendarButton": "從 Calendar 匯入",
-      "empty": "尚無 meeting",
-      "emptyHint": "按右上角「+ 新會議」手動建立，或「從 Calendar 匯入」自動生成 playbook 草稿"
-    },
     "new": {
       "heading": "新增 Meeting",
+      "subhead": "建立後系統會自動生成 playbook 草稿",
       "titleLabel": "標題",
       "titlePlaceholder": "例：Q3 績效檢討",
       "counterpartyLabel": "對方顯示名稱",
@@ -117,8 +142,13 @@
       "meLabel": "我方顯示名稱",
       "mePlaceholder": "例：Sean",
       "scheduledDateLabel": "預定日期（選填）",
-      "scheduledTimeLabel": "預定時間",
+      "scheduledTimeLabel": "預定開始",
+      "scheduledEndTimeLabel": "預定結束",
+      "goalLabel": "會議目標",
+      "goalHint": "選填，AI 會用來生成 playbook",
+      "goalPlaceholder": "例：爭取 Q3 預算追加，重點放在 ROI",
       "submit": "建立",
+      "saveDraft": "儲存草稿",
       "submitting": "建立中…",
       "cancel": "取消",
       "errorFallback": "建立失敗"
@@ -150,6 +180,8 @@
       "endingHint": "處理最後音訊中…",
       "capturing": "擷取中",
       "capturingNamed": "{{name}} 擷取中",
+      "captureLabelMe": "麥克風 ({{name}})",
+      "captureLabelCounterparty": "系統音訊 ({{name}})",
       "silenceWarning": "未偵測到聲音",
       "silenceWarningMe": "{{name}} 30s 無聲",
       "silenceWarningCounterparty": "{{name}} 30s 無聲（檢查 Multi-Output Device）",
@@ -194,17 +226,36 @@
     "list": {
       "heading": "我的 Meeting",
       "newButton": "+ 新會議",
+      "newButtonShort": "新會議",
       "fromCalendarButton": "從 Calendar 匯入",
       "toggleCalendar": "切換 Calendar 視圖",
       "empty": "尚無 meeting",
-      "emptyHint": "按右上角「+ 新會議」手動建立，或「從 Calendar 匯入」自動生成 playbook 草稿"
+      "emptyHint": "按上方「新會議」手動建立，或「從 Calendar 匯入」生成 playbook 草稿",
+      "metaSummary": "{{total}} 場 · 待進行 {{upcoming}} 場",
+      "tabGrid": "卡片",
+      "tabCalendar": "日曆",
+      "minutesShort": "分鐘",
+      "status": {
+        "scheduled": "已排程",
+        "in_progress": "進行中",
+        "completed": "已結束"
+      }
     },
     "calendar": {
-      "heading": "我的會議行事曆",
+      "heading": "日曆視圖",
       "toggleList": "切換列表視圖",
       "viewMonth": "月",
       "viewWeek": "週",
-      "unscheduledTitle": "未排程 Meetings",
+      "unscheduledTitle": "未排程",
+      "unscheduledHint": "從 Calendar 匯入但尚未排定 playbook",
+      "unscheduledEmpty": "沒有未排程的 meeting",
+      "unscheduledSchedule": "排定",
+      "unscheduledHide": "隱藏",
+      "meta": "{{yearMonth}} · 第 {{week}} 週",
+      "today": "今天",
+      "prev": "上一頁",
+      "next": "下一頁",
+      "newMeeting": "新會議",
       "empty": "本月無會議"
     },
     "advisor": {
@@ -219,23 +270,40 @@
       "defaultPromptText": "請給出戰術建議。",
       "userLabel": "我",
       "advisorLabel": "Advisor",
-      "cmdEnterHint": "⌘+Enter 送出"
+      "cmdEnterHint": "⌘+Enter 送出",
+      "suggestions": {
+        "nextStep": "下一步該說什麼？",
+        "realConcern": "對方真正在意什麼？",
+        "closing": "幫我準備 closing"
+      }
     },
     "summary": {
       "heading": "摘要",
+      "aiHeading": "AI 摘要",
       "disabledHint": "會議結束後可看摘要",
       "generating": "生成中…",
       "generatingHint": "（約 30-60 秒）",
       "generatedAt": "生成於 {{at}}",
       "regenerate": "重新生成",
+      "copy": "複製",
+      "copied": "已複製",
       "exportMd": "匯出 .md",
       "staleAlert": "內容已更新，建議重新生成",
       "emptyState": "尚無摘要",
-      "generate": "生成摘要"
+      "generate": "生成摘要",
+      "sidebarMeta": "會議資料",
+      "metaCreatedAt": "建立時間",
+      "metaStatus": "狀態",
+      "metaGeneratedAt": "摘要生成",
+      "sidebarKeywords": "關鍵字",
+      "keywordsEmpty": "尚無關鍵字",
+      "sidebarInfo": "下次會議前，AI 會自動準備 follow-up playbook。"
     }
   },
   "calendar": {
-    "heading": "即將到來的會議",
+    "heading": "從 Calendar 匯入",
+    "subhead": "來自 Google Calendar · 接下來 24 小時",
+    "refresh": "重新整理",
     "loading": "載入中…",
     "empty": "未來 24 小時內沒有 Google Calendar 事件",
     "emptyHint": "下次有會議時會自動列在這裡。也可以從會議列表頁手動建立 meeting。",
@@ -245,12 +313,16 @@
     },
     "row": {
       "attendees": "{{count}} 人",
+      "suggested": "建議",
+      "imported": "已匯入",
+      "monthLabel": "月",
       "import": "匯入並生成",
       "importing": "生成中…可能需 30~60 秒"
     }
   },
   "playbook": {
     "heading": "Playbook",
+    "aiDraftBadge": "AI 草稿",
     "loading": "載入中…",
     "toggle": {
       "freeform": "自由格式",

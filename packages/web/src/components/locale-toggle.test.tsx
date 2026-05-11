@@ -1,12 +1,12 @@
 /**
- * AC-5 LocaleToggle component tests.
+ * LocaleToggle component tests — extended for slice ui-overhaul-claude-design
+ * task 2.3 (shadcn DropdownMenu rewrite).
  *
  * Verifies:
- *  - Two language buttons render (繁中 / EN)
- *  - The button matching current i18n.language has aria-pressed="true"
- *  - Clicking the inactive button calls changeLanguage with the right code
- *  - The selection persists to localStorage under the namespaced key
- *  - No page reload happens on switch (DOM stays mounted, localStorage updated)
+ *  - Trigger renders the current locale code (zh-TW by default)
+ *  - Opening the menu reveals both zh-TW + EN options
+ *  - Selecting EN calls i18n.changeLanguage and persists to localStorage
+ *  - Selecting the active locale is a no-op
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -28,26 +28,30 @@ describe("LocaleToggle", () => {
     await i18n.changeLanguage("zh-TW");
   });
 
-  test("renders both language buttons (zh-TW + en)", () => {
+  test("trigger renders the current locale code (zh-TW)", () => {
     render(<LocaleToggle />);
-    expect(screen.getByRole("button", { name: /繁中/ })).toBeDefined();
-    expect(screen.getByRole("button", { name: /^EN$/ })).toBeDefined();
+    const trigger = screen.getByTestId("locale-toggle");
+    expect(trigger.textContent).toContain("zh-TW");
   });
 
-  test("the current language button has aria-pressed='true'", async () => {
+  test("opening the dropdown reveals both zh-TW and EN options", async () => {
+    const user = userEvent.setup();
     render(<LocaleToggle />);
-    const zhBtn = screen.getByRole("button", { name: /繁中/ });
-    expect(zhBtn.getAttribute("aria-pressed")).toBe("true");
+    await user.click(screen.getByTestId("locale-toggle"));
 
-    const enBtn = screen.getByRole("button", { name: /^EN$/ });
-    expect(enBtn.getAttribute("aria-pressed")).toBe("false");
+    await waitFor(() => {
+      expect(screen.getByTestId("locale-option-zh-TW")).toBeDefined();
+      expect(screen.getByTestId("locale-option-en")).toBeDefined();
+    });
   });
 
-  test("clicking EN switches the language and persists to localStorage", async () => {
+  test("selecting EN switches the language and persists to localStorage", async () => {
     const user = userEvent.setup();
     render(<LocaleToggle />);
 
-    await user.click(screen.getByRole("button", { name: /^EN$/ }));
+    await user.click(screen.getByTestId("locale-toggle"));
+    const enOption = await screen.findByTestId("locale-option-en");
+    await user.click(enOption);
 
     await waitFor(() => {
       expect(i18n.language).toBe("en");
@@ -55,15 +59,15 @@ describe("LocaleToggle", () => {
     expect(localStorage.getItem(LS_KEY)).toBe("en");
   });
 
-  test("clicking the active button is a no-op (still pressed, no reload)", async () => {
+  test("selecting the active locale is a no-op", async () => {
     const user = userEvent.setup();
     render(<LocaleToggle />);
 
-    await user.click(screen.getByRole("button", { name: /繁中/ }));
+    await user.click(screen.getByTestId("locale-toggle"));
+    const zhOption = await screen.findByTestId("locale-option-zh-TW");
+    await user.click(zhOption);
 
     expect(i18n.language).toBe("zh-TW");
     expect(localStorage.getItem(LS_KEY)).toBe("zh-TW");
-    // DOM still mounted — getBy* would throw if unmounted/reloaded
-    expect(screen.getByRole("button", { name: /繁中/ }).getAttribute("aria-pressed")).toBe("true");
   });
 });

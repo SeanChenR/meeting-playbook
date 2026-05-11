@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithRouter } from "../../test/fixtures/router";
 
-const verifyTotpMock = mock(async () => ({ data: { verified: true } }));
+const verifyTotpMock = mock(async (_arg: { code: string }) => ({ data: { verified: true } }));
 
 mock.module("../../lib/auth-client", () => ({
   authClient: {
@@ -46,7 +46,7 @@ describe("TotpVerify route", () => {
     await waitFor(() => {
       expect(verifyTotpMock).toHaveBeenCalledTimes(1);
     });
-    const arg = verifyTotpMock.mock.calls[0]?.[0] as { code: string };
+    const arg = verifyTotpMock.mock.calls[0]?.[0] as unknown as { code: string };
     expect(arg.code).toBe("654321");
   });
 });

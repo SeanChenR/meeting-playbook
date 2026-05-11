@@ -2,6 +2,18 @@
   "common": {
     "loading": "Loading…"
   },
+  "theme": {
+    "toggle": {
+      "label": "Toggle theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    }
+  },
+  "nav": {
+    "back": "Back",
+    "backToList": "Back to list"
+  },
   "auth": {
     "shell": {
       "headline": "Meeting Playbook",
@@ -35,6 +47,7 @@
       "emailPlaceholder": "you@example.com",
       "passwordLabel": "Password",
       "passwordPlaceholder": "At least 8 characters",
+      "passwordHint": "Min 8 characters",
       "confirmLabel": "Confirm password",
       "confirmPlaceholder": "Type it again",
       "submit": "Sign up",
@@ -64,7 +77,10 @@
         "verifyButton": "Verify",
         "verifySubmitting": "Verifying",
         "enableErrorFallback": "Enable failed",
-        "codeRejectedFallback": "Code rejected"
+        "codeRejectedFallback": "Code rejected",
+        "copySecret": "Copy secret",
+        "copiedTooltip": "Copied",
+        "downloadBackupCodes": "Download backup codes"
       },
       "verify": {
         "eyebrow": "Two-factor verification",
@@ -74,7 +90,9 @@
         "codePlaceholder": "000000",
         "submit": "Verify",
         "submitting": "Verifying",
-        "errorFallback": "Code rejected"
+        "errorFallback": "Code rejected",
+        "refreshHint": "Code refreshes every 30 seconds",
+        "useBackupCode": "Use a backup code"
       }
     },
     "home": {
@@ -97,19 +115,26 @@
       "oauthNoticeTitle": "2FA is managed by Google",
       "oauthNoticeBody": "Two-factor for OAuth accounts lives at the identity provider; this app does not add another layer",
       "oauthSecurityLink": "Open Google security settings",
-      "sliceFooter": "This is Slice 1 — meeting management, playbook, and live transcription land in later slices."
+      "sliceFooter": "This is Slice 1 — meeting management, playbook, and live transcription land in later slices.",
+      "ctaTitle": "Ready for your next meeting?",
+      "ctaDescription": "Import from Calendar or add manually — AI generates the playbook, live transcript, and tactical advice.",
+      "ctaNewMeeting": "New meeting",
+      "ctaImportCalendar": "Import from Calendar",
+      "totpWarningTitle": "Two-factor authentication is off",
+      "totpWarningBody": "Enabling it protects your meeting data.",
+      "totpWarningCta": "Enable now →",
+      "statMonthlyMeetings": "Meetings this month",
+      "statAverageDuration": "Avg. duration",
+      "statActiveMeetings": "Active",
+      "recentMeetingsTitle": "Recent meetings",
+      "recentMeetingsViewAll": "View all →",
+      "recentMeetingsEmpty": "No recent meetings yet"
     }
   },
   "meetings": {
-    "list": {
-      "heading": "My Meetings",
-      "newButton": "+ New meeting",
-      "fromCalendarButton": "Import from Calendar",
-      "empty": "No meetings yet",
-      "emptyHint": "Tap “+ New meeting” to create one by hand, or “Import from Calendar” to auto-generate a playbook draft"
-    },
     "new": {
       "heading": "New meeting",
+      "subhead": "We'll auto-draft a playbook from these details",
       "titleLabel": "Title",
       "titlePlaceholder": "e.g., Q3 Performance Review",
       "counterpartyLabel": "Counterparty display name",
@@ -117,8 +142,13 @@
       "meLabel": "Me display name",
       "mePlaceholder": "e.g., Sean",
       "scheduledDateLabel": "Scheduled date (optional)",
-      "scheduledTimeLabel": "Time",
+      "scheduledTimeLabel": "Start time",
+      "scheduledEndTimeLabel": "End time",
+      "goalLabel": "Meeting goal",
+      "goalHint": "Optional — feeds the playbook prompt",
+      "goalPlaceholder": "e.g., Get Q3 budget bumped by 12%, anchor on platform ROI",
       "submit": "Create",
+      "saveDraft": "Save draft",
       "submitting": "Creating…",
       "cancel": "Cancel",
       "errorFallback": "Create failed"
@@ -150,6 +180,8 @@
       "endingHint": "Processing final audio…",
       "capturing": "Capturing",
       "capturingNamed": "Capturing {{name}}",
+      "captureLabelMe": "Mic ({{name}})",
+      "captureLabelCounterparty": "System ({{name}})",
       "silenceWarning": "No audio detected",
       "silenceWarningMe": "{{name}} silent for 30s",
       "silenceWarningCounterparty": "{{name}} silent for 30s (check Multi-Output Device)",
@@ -194,17 +226,36 @@
     "list": {
       "heading": "My Meetings",
       "newButton": "+ New meeting",
+      "newButtonShort": "New meeting",
       "fromCalendarButton": "Import from Calendar",
       "toggleCalendar": "Calendar view",
       "empty": "No meetings yet",
-      "emptyHint": "Tap “+ New meeting” to create one by hand, or “Import from Calendar” to auto-generate a playbook draft"
+      "emptyHint": "Use “New meeting” above to create one by hand, or “Import from Calendar” to draft a playbook",
+      "metaSummary": "{{total}} total · {{upcoming}} upcoming",
+      "tabGrid": "Cards",
+      "tabCalendar": "Calendar",
+      "minutesShort": "min",
+      "status": {
+        "scheduled": "Scheduled",
+        "in_progress": "Live",
+        "completed": "Completed"
+      }
     },
     "calendar": {
-      "heading": "Meeting calendar",
+      "heading": "Calendar",
       "toggleList": "List view",
       "viewMonth": "Month",
       "viewWeek": "Week",
-      "unscheduledTitle": "Unscheduled meetings",
+      "unscheduledTitle": "Unscheduled",
+      "unscheduledHint": "Imported from Calendar but no playbook scheduled yet",
+      "unscheduledEmpty": "No unscheduled meetings",
+      "unscheduledSchedule": "Schedule",
+      "unscheduledHide": "Hide",
+      "meta": "{{yearMonth}} · Week {{week}}",
+      "today": "Today",
+      "prev": "Previous",
+      "next": "Next",
+      "newMeeting": "New meeting",
       "empty": "No meetings in this period"
     },
     "advisor": {
@@ -219,23 +270,40 @@
       "defaultPromptText": "Please give tactical advice.",
       "userLabel": "Me",
       "advisorLabel": "Advisor",
-      "cmdEnterHint": "⌘+Enter to send"
+      "cmdEnterHint": "⌘+Enter to send",
+      "suggestions": {
+        "nextStep": "What should I say next?",
+        "realConcern": "What do they actually care about?",
+        "closing": "Help me prepare a closing"
+      }
     },
     "summary": {
       "heading": "Summary",
+      "aiHeading": "AI summary",
       "disabledHint": "Summary becomes available after the meeting ends",
       "generating": "Generating…",
       "generatingHint": "(about 30-60 seconds)",
       "generatedAt": "Generated {{at}}",
       "regenerate": "Regenerate",
+      "copy": "Copy",
+      "copied": "Copied",
       "exportMd": "Export .md",
       "staleAlert": "Content has been updated; consider regenerating",
       "emptyState": "No summary yet",
-      "generate": "Generate summary"
+      "generate": "Generate summary",
+      "sidebarMeta": "Meeting info",
+      "metaCreatedAt": "Created",
+      "metaStatus": "Status",
+      "metaGeneratedAt": "Summary generated",
+      "sidebarKeywords": "Keywords",
+      "keywordsEmpty": "No keywords yet",
+      "sidebarInfo": "Before your next meeting, AI will draft a follow-up playbook."
     }
   },
   "calendar": {
-    "heading": "Upcoming meetings",
+    "heading": "Import from Calendar",
+    "subhead": "From Google Calendar · next 24 hours",
+    "refresh": "Refresh",
     "loading": "Loading…",
     "empty": "No Google Calendar events in the next 24 hours",
     "emptyHint": "When a meeting is on your calendar it will show up here. You can still create a meeting by hand from the meetings list.",
@@ -245,12 +313,16 @@
     },
     "row": {
       "attendees": "{{count}} attendees",
+      "suggested": "Suggested",
+      "imported": "Imported",
+      "monthLabel": "",
       "import": "Import + generate",
       "importing": "Generating… may take 30~60 seconds"
     }
   },
   "playbook": {
     "heading": "Playbook",
+    "aiDraftBadge": "AI draft",
     "loading": "Loading…",
     "toggle": {
       "freeform": "Free form",

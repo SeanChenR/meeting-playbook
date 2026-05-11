@@ -1,9 +1,28 @@
+/**
+ * LocaleToggle — slice ui-overhaul-claude-design task 2.3.
+ *
+ * shadcn `DropdownMenu` trigger that shows the current locale code (`zh-TW`
+ * / `EN`) and exposes the two options on click. Selecting an option calls
+ * `i18n.changeLanguage(...)`. Active option marks with the `Check` icon to
+ * mirror the ThemeToggle visual language.
+ *
+ * Persistence to localStorage is handled by the `i18next-browser-languagedetector`
+ * cache — no manual writes here.
+ */
+
+import { Check, Languages } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 const LOCALES = [
-  { code: "zh-TW", label: "繁中" },
-  { code: "en", label: "EN" },
+  { code: "zh-TW", trigger: "zh-TW", label: "繁中" },
+  { code: "en", trigger: "EN", label: "EN" },
 ] as const;
 
 type LocaleCode = (typeof LOCALES)[number]["code"];
@@ -12,48 +31,45 @@ type LocaleToggleProps = {
   className?: string;
 };
 
-/**
- * Two-button segmented control for switching the app locale.
- *
- * Subscribes to i18n.language so re-renders happen automatically when
- * any other component (or the language detector) changes the locale.
- * Persistence to localStorage is handled by the i18next-browser-languagedetector
- * cache — no manual writes required here.
- */
 export function LocaleToggle({ className }: LocaleToggleProps) {
   const { i18n } = useTranslation();
   const current = i18n.language as LocaleCode;
+  const activeLabel = LOCALES.find((l) => l.code === current)?.trigger ?? current;
 
   return (
-    <div
-      className={cn(
-        "inline-flex rounded-md border border-(--color-border) bg-(--color-card) p-0.5",
-        className,
-      )}
-      role="group"
-      aria-label="Language"
-    >
-      {LOCALES.map(({ code, label }) => {
-        const isActive = current === code;
-        return (
-          <button
-            key={code}
-            type="button"
-            onClick={() => {
-              if (!isActive) i18n.changeLanguage(code);
-            }}
-            aria-pressed={isActive}
-            className={cn(
-              "rounded-[5px] px-2 py-0.5 text-xs font-medium transition-colors",
-              isActive
-                ? "bg-(--color-foreground) text-(--color-background)"
-                : "text-(--color-muted-foreground) hover:text-(--color-foreground)",
-            )}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        type="button"
+        data-testid="locale-toggle"
+        aria-label="Language"
+        className={cn(
+          "inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-(--color-foreground) hover:bg-(--color-muted) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-ring)",
+          className,
+        )}
+      >
+        <Languages className="size-4 text-(--color-muted-foreground)" />
+        <span>{activeLabel}</span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[8rem]">
+        {LOCALES.map(({ code, label }) => {
+          const isActive = current === code;
+          return (
+            <DropdownMenuItem
+              key={code}
+              data-testid={`locale-option-${code}`}
+              data-active={isActive ? "true" : undefined}
+              onSelect={() => {
+                if (!isActive) i18n.changeLanguage(code);
+              }}
+              aria-pressed={isActive}
+              className="flex items-center gap-2"
+            >
+              <span className="flex-1">{label}</span>
+              {isActive ? <Check className="size-4 text-(--color-primary)" /> : null}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

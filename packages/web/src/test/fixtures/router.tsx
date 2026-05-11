@@ -18,6 +18,7 @@ import {
 } from "@tanstack/react-router";
 import { render, type RenderResult } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
+import { ThemeProvider } from "../../lib/theme-provider";
 
 interface Options {
   initialEntries?: string[];
@@ -59,11 +60,17 @@ export async function renderWithRouter(
   const queryClient = makeQueryClient();
 
   const utils = render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
+    <ThemeProvider initialTheme="light">
+      <QueryClientProvider client={queryClient}>
+        {/* Cast through unknown — TanStack Router's typed Register can't be
+            narrowed to the synthetic test routes; the runtime is identical. */}
+        <RouterProvider
+          router={router as unknown as Parameters<typeof RouterProvider>[0]["router"]}
+        />
+      </QueryClientProvider>
+    </ThemeProvider>,
   );
-  return { ...utils, router };
+  return { ...utils, router: router as ReturnType<typeof createRouter> };
 }
 
 /**
@@ -80,11 +87,15 @@ export async function renderAppRoutes(
   await router.load();
   const queryClient = makeQueryClient();
   const utils = render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
+    <ThemeProvider initialTheme="light">
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider
+          router={router as unknown as Parameters<typeof RouterProvider>[0]["router"]}
+        />
+      </QueryClientProvider>
+    </ThemeProvider>,
   );
-  return { utils, router };
+  return { utils, router: router as ReturnType<typeof createRouter> };
 }
 
 /**
@@ -93,7 +104,11 @@ export async function renderAppRoutes(
 export function makeQueryWrapper() {
   const client = makeQueryClient();
   function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return (
+      <ThemeProvider initialTheme="light">
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      </ThemeProvider>
+    );
   }
   return { client, wrapper };
 }

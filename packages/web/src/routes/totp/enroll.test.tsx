@@ -3,14 +3,14 @@ import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithRouter } from "../../test/fixtures/router";
 
-const enableMock = mock(async () => ({
+const enableMock = mock(async (_arg: { password: string }) => ({
   data: {
     totpURI: "otpauth://totp/MeetingPlaybook:sean?secret=ABC&issuer=Meeting%20Playbook",
     backupCodes: ["aaaa-aaaa", "bbbb-bbbb", "cccc-cccc"],
   },
   error: null,
 }));
-const verifyTotpMock = mock(async () => ({ data: { verified: true } }));
+const verifyTotpMock = mock(async (_arg: { code: string }) => ({ data: { verified: true } }));
 
 mock.module("../../lib/auth-client", () => ({
   authClient: {
@@ -56,7 +56,7 @@ describe("TotpEnroll route", () => {
     await waitFor(() => {
       expect(enableMock).toHaveBeenCalledTimes(1);
     });
-    const arg = enableMock.mock.calls[0]?.[0] as { password: string };
+    const arg = enableMock.mock.calls[0]?.[0] as unknown as { password: string };
     expect(arg.password).toBe("hunter22hunter");
   });
 
@@ -101,15 +101,15 @@ describe("TotpEnroll route", () => {
     await waitFor(() => {
       expect(verifyTotpMock).toHaveBeenCalledTimes(1);
     });
-    const arg = verifyTotpMock.mock.calls[0]?.[0] as { code: string };
+    const arg = verifyTotpMock.mock.calls[0]?.[0] as unknown as { code: string };
     expect(arg.code).toBe("123456");
   });
 
   test("error from twoFactor.enable surfaces a localized error message", async () => {
-    enableMock.mockImplementationOnce(async () => ({
+    enableMock.mockImplementationOnce((async () => ({
       data: undefined as unknown as { totpURI: string; backupCodes: string[] },
       error: { message: "Invalid password" },
-    }));
+    })) as unknown as typeof enableMock);
 
     const user = userEvent.setup();
     await renderWithRouter(<TotpEnroll />, {

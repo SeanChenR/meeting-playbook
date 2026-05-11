@@ -78,7 +78,7 @@ describe("getPlaybook / upsertPlaybook error handling", () => {
       new Response(
         JSON.stringify({ error_code: "meeting.not_found", message: "Meeting not found" }),
         { status: 404, headers: { "content-type": "application/json" } },
-      )) as typeof fetch;
+      )) as unknown as typeof fetch;
 
     let caught: unknown = null;
     try {

@@ -1,19 +1,27 @@
 /**
- * CaptureIndicator — per-stream status pills for an active capture session.
+ * CaptureIndicator — slice ui-overhaul-claude-design task 5.3.
  *
- * Slice-07: renders ONE pill per stream (me + counterparty) side-by-side,
- * each driven by its own `StreamStatus`. Color tokens echo the TranscriptPane
- * accent so the two pills visually map to chunks below.
+ * Re-skinned to match the design bundle's bar-sparkline pattern:
+ *   - One row per stream (麥克風/我方 + 系統音訊/對方)
+ *   - Each row: pulsing dot + label (min-width 100px) + 10-bar sparkline
+ *   - Bar heights animate to a per-tick amplitude when active; collapse
+ *     to 1px when the stream is muted/stopped/ending.
+ *   - Container is a 10px-padded, bordered surface-2 box that can sit
+ *     side-by-side with the ASR Select inside MetadataCard.
  *
- * State variants per pill:
- *   - active           → accent color + pulsing dot + "{display_name} 擷取中"
- *   - silence          → destructive color + static dot + "{display_name} 30s 無聲"
- *   - stopped          → muted color + static dot + "{display_name} 已停止"
+ * Drives 10 random amplitude bars per row at 200ms cadence so the user
+ * sees motion even before we feed real audio frames. Tests assert the
+ * structural contract (row count, bar count, recording=false dot state)
+ * — they do NOT rely on the random amplitudes.
  *
- * The `ending` global phase greys ALL pills (server is draining; mute the
- * detail). NO emojis (per UI feedback memory).
+ * Behavioural contract preserved from slice-7:
+ *   - `streamStatus === null` → renders nothing (idle / not in_progress)
+ *   - `ending=true` mutes both rows regardless of stream status
+ *   - `data-testid="capture-indicator"` per row, with `data-stream` +
+ *     `data-state` attributes for state-aware assertions.
  */
 
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Stream } from "../lib/session-ws";
 import { cn } from "../lib/utils";
@@ -21,16 +29,21 @@ import { cn } from "../lib/utils";
 export type StreamPillState = "active" | "silence" | "stopped";
 
 export interface CaptureIndicatorProps {
-  // Slice-7: per-stream state mapping. `null` = the session is not in
-  // progress (idle / ended) and the indicator is hidden.
   streamStatus: Record<Stream, StreamPillState> | null;
   meDisplayName: string;
   counterpartyDisplayName: string;
-  // Global "ending" override: overrides all pills to a muted "處理最後音訊…" look.
   ending?: boolean;
 }
 
 const STREAM_ORDER: Stream[] = ["me", "counterparty"];
+const BAR_COUNT = 10;
+
+function _randomBars(): number[] {
+  // Bars in [2..6]; matches the design bundle's amplitude range.
+  return Array.from({ length: BAR_COUNT }, () => 2 + Math.floor(Math.random() * 5));
+}
+
+const _INITIAL_BARS = Array.from({ length: BAR_COUNT }, (_, i) => 2 + ((i * 3) % 5));
 
 export function CaptureIndicator({
   streamStatus,
@@ -39,71 +52,90 @@ export function CaptureIndicator({
   ending = false,
 }: CaptureIndicatorProps) {
   const { t } = useTranslation();
+  const [bars, setBars] = useState<{ me: number[]; counterparty: number[] }>({
+    me: _INITIAL_BARS,
+    counterparty: _INITIAL_BARS,
+  });
+
+  // Tick bar amplitudes while at least one stream is active. Skip the
+  // interval entirely when nothing is moving so happy-dom + reduced-motion
+  // users don't pay for it.
+  const anyActive =
+    !ending && streamStatus !== null && Object.values(streamStatus).some((s) => s === "active");
+
+  useEffect(() => {
+    if (!anyActive) return;
+    const id = window.setInterval(() => {
+      setBars({ me: _randomBars(), counterparty: _randomBars() });
+    }, 220);
+    return () => window.clearInterval(id);
+  }, [anyActive]);
+
   if (streamStatus === null) return null;
 
-  function _displayName(stream: Stream): string {
-    return stream === "me" ? meDisplayName : counterpartyDisplayName;
-  }
-
-  function _label(stream: Stream, status: StreamPillState): string {
-    if (ending) return t("meetings.session.endingHint");
-    if (status === "stopped")
-      return t("meetings.session.streamStopped", { name: _displayName(stream) });
-    if (status === "silence") {
-      const key =
-        stream === "counterparty"
-          ? "meetings.session.silenceWarningCounterparty"
-          : "meetings.session.silenceWarningMe";
-      return t(key, { name: _displayName(stream) });
+  function _label(stream: Stream): string {
+    if (stream === "me") {
+      return t("meetings.session.captureLabelMe", { name: meDisplayName });
     }
-    return t("meetings.session.capturingNamed", { name: _displayName(stream) });
+    return t("meetings.session.captureLabelCounterparty", { name: counterpartyDisplayName });
   }
 
   return (
-    <div className="inline-flex flex-wrap items-center gap-2" data-testid="capture-indicator-group">
+    <div
+      data-testid="capture-indicator-group"
+      className="flex flex-col gap-2 rounded-md border border-(--color-border) bg-(--color-muted)/40 p-2.5"
+    >
       {STREAM_ORDER.map((stream) => {
-        const status: StreamPillState = streamStatus[stream];
+        const status = streamStatus[stream];
+        const isActive = !ending && status === "active";
+        const isMuted = ending || status === "stopped";
         const isWarning = !ending && status === "silence";
-        const isStopped = ending || status === "stopped";
-
-        // Color resolution:
-        //  - ending → muted (overrides everything)
-        //  - silence → destructive
-        //  - stopped → muted
-        //  - active counterparty → primary
-        //  - active me → secondary / muted-foreground (matches TranscriptPane accent)
-        const containerCls = cn(
-          "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium",
-          isWarning
-            ? "bg-(--color-destructive)/10 text-(--color-destructive)"
-            : isStopped
-              ? "bg-(--color-muted) text-(--color-muted-foreground)"
-              : stream === "counterparty"
-                ? "bg-(--color-primary)/10 text-(--color-primary)"
-                : "bg-(--color-secondary) text-(--color-secondary-foreground)",
-        );
-
-        const dotCls = cn(
-          "inline-block h-2 w-2 rounded-full",
-          isWarning
-            ? "bg-(--color-destructive)"
-            : isStopped
-              ? "bg-(--color-muted-foreground)"
-              : stream === "counterparty"
-                ? "bg-(--color-primary) animate-pulse"
-                : "bg-(--color-muted-foreground) animate-pulse",
-        );
+        const state = ending ? "ending" : status;
+        const rowBars = bars[stream];
 
         return (
           <div
             key={stream}
             data-testid="capture-indicator"
             data-stream={stream}
-            data-state={ending ? "ending" : status}
-            className={containerCls}
+            data-state={state}
+            className="flex items-center gap-2"
           >
-            <span aria-hidden className={dotCls} />
-            {_label(stream, status)}
+            <span
+              aria-hidden
+              className={cn(
+                "inline-block size-2 rounded-full",
+                isActive
+                  ? "bg-(--color-destructive) animate-pulse"
+                  : isWarning
+                    ? "bg-(--color-destructive)"
+                    : "bg-(--color-muted-foreground)",
+              )}
+            />
+            <span className="min-w-[100px] text-xs text-(--color-foreground)">
+              {_label(stream)}
+            </span>
+            <div className="flex h-3 flex-1 items-end gap-0.5">
+              {rowBars.map((b, i) => (
+                <span
+                  key={i}
+                  aria-hidden
+                  data-testid="capture-indicator-bar"
+                  className={cn(
+                    "w-0.5 rounded-[1px] transition-[height,opacity] duration-200",
+                    isActive
+                      ? "bg-(--color-destructive)"
+                      : isMuted
+                        ? "bg-(--color-border)"
+                        : "bg-(--color-destructive)/60",
+                  )}
+                  style={{
+                    height: isActive ? `${b * 1.6}px` : "1px",
+                    opacity: isActive ? 0.55 + b / 12 : 1,
+                  }}
+                />
+              ))}
+            </div>
           </div>
         );
       })}

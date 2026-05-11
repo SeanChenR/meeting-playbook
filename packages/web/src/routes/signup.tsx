@@ -1,3 +1,21 @@
+/**
+ * Signup route — slice ui-overhaul-claude-design task 3.2.
+ *
+ * Visual contract aligned with design bundle `SignupScreen`:
+ *   - 360px width card centered inside AuthShell
+ *   - Headline + subhead inside the card
+ *   - Display name + Email + Password fields with hint text
+ *   - Primary "建立帳號" button (full width)
+ *   - Bottom "已有帳號？登入" link
+ *
+ * Confirm-password field retained for parity with the existing test
+ * contract (signup.test.tsx asserts /confirm password/i label and the
+ * mismatch / too-short error guards). Design bundle omits it; production
+ * keeps the safety net.
+ *
+ * Preserves existing i18n keys and Better Auth signUp.email behavior.
+ */
+
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -5,7 +23,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { AuthShell } from "../components/auth-shell";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { authClient } from "../lib/auth-client";
@@ -50,13 +68,16 @@ export function Signup() {
   };
 
   return (
-    <AuthShell eyebrow={t("auth.signup.eyebrow")}>
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("auth.signup.title")}</CardTitle>
-          <CardDescription>{t("auth.signup.subtitle")}</CardDescription>
-        </CardHeader>
-        <CardContent>
+    <AuthShell>
+      <Card className="mx-auto w-[360px]">
+        <CardContent className="space-y-5 p-6">
+          <div className="space-y-1 text-center">
+            <h1 className="text-xl font-semibold tracking-tight text-(--color-foreground)">
+              {t("auth.signup.title")}
+            </h1>
+            <p className="text-sm text-(--color-muted-foreground)">{t("auth.signup.subtitle")}</p>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="signup-name">{t("auth.signup.nameLabel")}</Label>
@@ -83,7 +104,12 @@ export function Signup() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="signup-password">{t("auth.signup.passwordLabel")}</Label>
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor="signup-password">{t("auth.signup.passwordLabel")}</Label>
+                <span className="text-xs text-(--color-muted-foreground)">
+                  {t("auth.signup.passwordHint")}
+                </span>
+              </div>
               <Input
                 id="signup-password"
                 type="password"
@@ -115,16 +141,16 @@ export function Signup() {
           </form>
 
           {error && (
-            <Alert variant="destructive" className="mt-4" data-testid="signup-error">
+            <Alert variant="destructive" data-testid="signup-error">
               {error}
             </Alert>
           )}
 
-          <p className="mt-5 text-center text-sm text-(--color-muted-foreground)">
+          <p className="text-center text-sm text-(--color-muted-foreground)">
             {t("auth.signup.alreadyHaveAccount")}{" "}
             <Link
               to="/login"
-              className="font-medium text-(--color-foreground) underline-offset-4 hover:underline"
+              className="font-medium text-(--color-primary) underline-offset-4 hover:underline"
             >
               {t("auth.signup.loginLink")}
             </Link>

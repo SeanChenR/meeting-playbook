@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -92,7 +92,7 @@ describe("PlaybookPane", () => {
     await waitFor(() => {
       expect(putCount).toBe(1);
     });
-    expect(putBody?.free_form_markdown).toBe("# brief");
+    expect((putBody as Record<string, unknown> | null)?.free_form_markdown).toBe("# brief");
     // Backend schema still requires all 7 fields — non-freeform fields are
     // sent as the GET-loaded values (or empty strings when absent).
     expect(putBody).toHaveProperty("objective");
@@ -108,6 +108,14 @@ describe("PlaybookPane", () => {
   });
 
   // ─── Slice 7 round 2 ─────────────────────────────────────────────
+
+  test("(6.4) Pane shell renders + AI draft badge visible", async () => {
+    await renderPane();
+    expect(screen.getByTestId("playbook-pane")).toBeDefined();
+    expect(screen.getByTestId("pane-accent")).toBeDefined();
+    expect(screen.getByTestId("pane-title").textContent).toBe("Playbook");
+    expect(screen.getByTestId("playbook-ai-draft-badge")).toBeDefined();
+  });
 
   test("freeform tab exposes Edit/Preview sub-toggle and renders markdown in preview", async () => {
     const user = userEvent.setup();

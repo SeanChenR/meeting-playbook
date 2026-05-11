@@ -4,8 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { i18n } from "../lib/i18n";
 import { renderWithRouter } from "../test/fixtures/router";
 
-const signInSocial = mock(async () => ({ data: {} }));
-const signInEmail = mock(async () => ({ data: { twoFactorRedirect: false }, error: null }));
+const signInSocial = mock(async (_arg: { provider: string; callbackURL: string }) => ({
+  data: {},
+}));
+const signInEmail = mock(async (_arg: { email: string; password: string }) => ({
+  data: { twoFactorRedirect: false },
+  error: null,
+}));
 
 mock.module("../lib/auth-client", () => ({
   authClient: {
@@ -36,7 +41,10 @@ describe("Login route", () => {
     await user.click(screen.getByRole("button", { name: /sign in with google/i }));
 
     expect(signInSocial).toHaveBeenCalledTimes(1);
-    const arg = signInSocial.mock.calls[0]?.[0] as { provider: string; callbackURL: string };
+    const arg = signInSocial.mock.calls[0]?.[0] as unknown as {
+      provider: string;
+      callbackURL: string;
+    };
     expect(arg.provider).toBe("google");
     expect(arg.callbackURL).toBe("/meetings");
   });
@@ -57,7 +65,7 @@ describe("Login route", () => {
     await user.click(screen.getByRole("button", { name: /^sign in$/i }));
 
     expect(signInEmail).toHaveBeenCalledTimes(1);
-    const arg = signInEmail.mock.calls[0]?.[0] as { email: string; password: string };
+    const arg = signInEmail.mock.calls[0]?.[0] as unknown as { email: string; password: string };
     expect(arg.email).toBe("sean@example.com");
     expect(arg.password).toBe("hunter22hunter");
   });
@@ -69,10 +77,10 @@ describe("Login route", () => {
   });
 
   test("backend error_code maps to localized message (zh-TW)", async () => {
-    signInEmail.mockImplementationOnce(async () => ({
+    signInEmail.mockImplementationOnce((async () => ({
       data: undefined as unknown as { twoFactorRedirect?: boolean },
       error: { error_code: "auth.invalid_credentials", message: "..." },
-    }));
+    })) as unknown as typeof signInEmail);
 
     const user = userEvent.setup();
     await renderWithRouter(<Login />, { initialEntries: ["/login"], path: "/login" });
@@ -89,10 +97,10 @@ describe("Login route", () => {
   test("backend error_code maps to localized message (en)", async () => {
     await i18n.changeLanguage("en");
 
-    signInEmail.mockImplementationOnce(async () => ({
+    signInEmail.mockImplementationOnce((async () => ({
       data: undefined as unknown as { twoFactorRedirect?: boolean },
       error: { error_code: "auth.invalid_credentials", message: "..." },
-    }));
+    })) as unknown as typeof signInEmail);
 
     const user = userEvent.setup();
     await renderWithRouter(<Login />, { initialEntries: ["/login"], path: "/login" });

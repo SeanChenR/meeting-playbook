@@ -1,14 +1,42 @@
+/**
+ * Home route — slice ui-overhaul-claude-design task 3.5.
+ *
+ * Visual contract aligned with design bundle `HomeScreen`:
+ *   - Top greeting (eyebrow + headline) + date / next meeting subline
+ *   - Sparkles CTA Card with "新會議" + "從 Calendar 匯入" buttons
+ *   - `Alert` (warning tone) — "尚未啟用兩階段驗證" — only when the user
+ *     has a credential account and 2FA is off
+ *   - 3-col Stat cards (本月會議 / 平均時長 / 進行中) — empty state per
+ *     Decision 7 ("Demo 資料只當設計參考、production 走空 state / API")
+ *   - 最近會議 Card with empty state when no recent meetings exist
+ *
+ * Preserves slice-1 plumbing:
+ *   - `/api/me` round-trip + `backend-confirmation` / `backend-error` testids
+ *   - `enable-totp-link` (credential users with 2FA off)
+ *   - `totp-status` (credential users with 2FA on)
+ *   - `oauth-2fa-notice` + `google-security-link` (OAuth-only users)
+ *
+ * Wraps the new `ProtectedShell` for the NavBar + session gate so this
+ * route no longer ships its own header.
+ */
+
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { ExternalLink, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
-import { useEffect } from "react";
+import { Link } from "@tanstack/react-router";
+import {
+  Calendar as CalendarIcon,
+  ExternalLink,
+  Plus,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { LocaleToggle } from "../components/locale-toggle";
-import { Avatar } from "../components/ui/avatar";
+import { ProtectedShell } from "../components/protected-shell";
+import { Alert } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { Separator } from "../components/ui/separator";
+import { Card, CardContent } from "../components/ui/card";
 import { authClient } from "../lib/auth-client";
 
 type ApiMeResponse = { user_id: string };
@@ -27,15 +55,8 @@ async function fetchHasCredential(): Promise<boolean> {
 }
 
 export function Home() {
-  const { t } = useTranslation();
-  const { data: session, isPending } = authClient.useSession();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!isPending && !session) {
-      navigate({ to: "/login", replace: true });
-    }
-  }, [session, isPending, navigate]);
+  const { t, i18n } = useTranslation();
+  const { data: session } = authClient.useSession();
 
   const meQuery = useQuery({
     queryKey: ["me"],
@@ -56,159 +77,186 @@ export function Home() {
       ? false
       : null;
 
-  const handleLogout = async () => {
-    await authClient.signOut();
-    navigate({ to: "/login", replace: true });
-  };
-
-  if (isPending) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-(--color-background) text-sm text-(--color-muted-foreground)">
-        {t("common.loading")}
-      </div>
-    );
+  if (!session) {
+    return <ProtectedShell>{null}</ProtectedShell>;
   }
-  if (!session) return null;
 
   const twoFactorEnabled = (session.user as { twoFactorEnabled?: boolean }).twoFactorEnabled;
   const displayName = session.user.name ?? session.user.email;
+  const dateText = new Date().toLocaleDateString(i18n.language, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   return (
-    <div className="min-h-dvh bg-(--color-background)">
-      <header className="border-b border-(--color-border) bg-(--color-card)">
-        <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-5">
-          <span className="text-sm font-semibold tracking-tight">{t("auth.home.topNavTitle")}</span>
-          <div className="flex items-center gap-3">
-            <LocaleToggle />
-            <Avatar
-              src={(session.user as { image?: string | null }).image}
-              alt={displayName}
-              fallback={displayName?.[0] ?? "?"}
-              data-testid="user-avatar"
-            />
-            <Button type="button" variant="ghost" size="sm" onClick={handleLogout}>
-              <LogOut className="size-4" />
-              {t("auth.home.logout")}
-            </Button>
+    <ProtectedShell>
+      <section className="space-y-1">
+        <p className="text-sm text-(--color-muted-foreground)">{t("auth.home.greetingEyebrow")}</p>
+        <h1 className="text-3xl font-bold tracking-tight text-(--color-foreground)">
+          {t("auth.home.greetingTitle", { name: displayName })}
+        </h1>
+        <p className="text-sm text-(--color-muted-foreground)">{dateText}</p>
+      </section>
+
+      <Card>
+        <CardContent className="flex items-start gap-4 p-6">
+          <div
+            aria-hidden
+            className="flex size-11 shrink-0 items-center justify-center rounded-md bg-(--color-primary)/12 text-(--color-primary)"
+          >
+            <Sparkles className="size-5" />
+          </div>
+          <div className="flex-1 space-y-3">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold text-(--color-foreground)">
+                {t("auth.home.ctaTitle")}
+              </h2>
+              <p className="text-sm text-(--color-muted-foreground)">
+                {t("auth.home.ctaDescription")}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link to="/meetings/new">
+                <Button type="button" size="sm">
+                  <Plus className="size-3.5" />
+                  {t("auth.home.ctaNewMeeting")}
+                </Button>
+              </Link>
+              <Link to="/calendar/import">
+                <Button type="button" variant="secondary" size="sm">
+                  <CalendarIcon className="size-3.5" />
+                  {t("auth.home.ctaImportCalendar")}
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {hasCredential === true && twoFactorEnabled !== true && (
+        <Alert variant="warning" data-testid="totp-warning">
+          <div className="flex items-start gap-3">
+            <Shield className="mt-0.5 size-4 shrink-0 text-(--color-warning)" />
+            <div className="flex-1 space-y-1">
+              <p className="text-sm font-semibold text-(--color-foreground)">
+                {t("auth.home.totpWarningTitle")}
+              </p>
+              <p className="text-xs text-(--color-muted-foreground)">
+                {t("auth.home.totpWarningBody")}{" "}
+                <Link
+                  to="/totp/enroll"
+                  data-testid="enable-totp-link"
+                  className="font-medium text-(--color-primary) underline-offset-4 hover:underline"
+                >
+                  {t("auth.home.totpWarningCta")}
+                </Link>
+              </p>
+            </div>
+          </div>
+        </Alert>
+      )}
+
+      {hasCredential === true && twoFactorEnabled === true && (
+        <div
+          data-testid="totp-status"
+          className="flex items-center gap-3 rounded-md border border-(--color-border) bg-(--color-card) p-4"
+        >
+          <ShieldCheck className="size-5 text-(--color-success)" />
+          <div className="flex-1 space-y-0.5">
+            <p className="text-sm font-medium text-(--color-foreground)">
+              {t("auth.home.enabledTitle")}
+            </p>
+            <p className="text-xs text-(--color-muted-foreground)">{t("auth.home.enabledHelp")}</p>
+          </div>
+          <Badge variant="success">{t("auth.home.enabledBadge")}</Badge>
+        </div>
+      )}
+
+      {hasCredential === false && (
+        <div
+          data-testid="oauth-2fa-notice"
+          className="flex items-start gap-3 rounded-md border border-(--color-border) bg-(--color-card) p-4"
+        >
+          <ShieldAlert className="mt-0.5 size-5 text-(--color-muted-foreground)" />
+          <div className="flex-1 space-y-2">
+            <p className="text-sm text-(--color-foreground)">{t("auth.home.oauthNoticeTitle")}</p>
+            <p className="text-xs text-(--color-muted-foreground)">
+              {t("auth.home.oauthNoticeBody")}
+            </p>
+            <a
+              href="https://myaccount.google.com/security"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="google-security-link"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-(--color-foreground) underline-offset-4 hover:underline"
+            >
+              {t("auth.home.oauthSecurityLink")}
+              <ExternalLink className="size-3.5" />
+            </a>
           </div>
         </div>
-      </header>
+      )}
 
-      <main className="mx-auto max-w-[1200px] space-y-6 px-5 py-10">
-        <Card>
-          <CardHeader>
-            <CardDescription>{t("auth.home.greetingEyebrow")}</CardDescription>
-            <CardTitle className="text-3xl">
-              {t("auth.home.greetingTitle", { name: displayName })}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {backendUserId && (
-              <div
-                data-testid="backend-confirmation"
-                className="flex items-center justify-between rounded-md border border-(--color-border) bg-(--color-muted)/40 px-3 py-2"
-              >
-                <span className="text-xs text-(--color-muted-foreground)">
-                  {t("auth.home.backendLabel")}
-                </span>
-                <code className="font-mono text-xs text-(--color-foreground)">{backendUserId}</code>
-              </div>
-            )}
-            {backendError && (
-              <div
-                data-testid="backend-error"
-                role="alert"
-                className="rounded-md border border-(--color-destructive)/30 bg-(--color-destructive)/10 px-3 py-2 text-xs text-(--color-destructive)"
-              >
-                {t("auth.home.backendErrorPrefix")}: {backendError}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatCard label={t("auth.home.statMonthlyMeetings")} value="—" />
+        <StatCard label={t("auth.home.statAverageDuration")} value="—" />
+        <StatCard label={t("auth.home.statActiveMeetings")} value="—" />
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("auth.home.securityTitle")}</CardTitle>
-            <CardDescription>
-              {hasCredential === false
-                ? t("auth.home.securityDescriptionOAuth")
-                : t("auth.home.securityDescriptionCredential")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {hasCredential === null ? (
-              <p className="text-sm text-(--color-muted-foreground)">
-                {t("auth.home.loadingAccount")}
-              </p>
-            ) : hasCredential ? (
-              <CredentialUserSecurity twoFactorEnabled={!!twoFactorEnabled} />
-            ) : (
-              <OAuthUserSecurity />
-            )}
-          </CardContent>
-        </Card>
-
-        <Separator />
-        <p className="text-xs text-(--color-muted-foreground)">{t("auth.home.sliceFooter")}</p>
-      </main>
-    </div>
-  );
-}
-
-function CredentialUserSecurity({ twoFactorEnabled }: { twoFactorEnabled: boolean }) {
-  const { t } = useTranslation();
-  if (twoFactorEnabled) {
-    return (
-      <div className="flex items-start gap-3" data-testid="totp-status">
-        <ShieldCheck className="mt-0.5 size-5 text-(--color-accent)" />
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium text-(--color-foreground)">
-            {t("auth.home.enabledTitle")}
+      <Card>
+        <CardContent className="p-6">
+          <div className="mb-3 flex items-center">
+            <p className="text-sm font-semibold text-(--color-foreground)">
+              {t("auth.home.recentMeetingsTitle")}
+            </p>
+            <div className="flex-1" />
+            <Link
+              to="/meetings"
+              className="text-sm font-medium text-(--color-primary) underline-offset-4 hover:underline"
+            >
+              {t("auth.home.recentMeetingsViewAll")}
+            </Link>
+          </div>
+          <p className="rounded-md bg-(--color-muted)/40 px-3 py-6 text-center text-sm text-(--color-muted-foreground)">
+            {t("auth.home.recentMeetingsEmpty")}
           </p>
-          <p className="text-xs text-(--color-muted-foreground)">{t("auth.home.enabledHelp")}</p>
-        </div>
-        <Badge variant="success" className="ml-auto">
-          {t("auth.home.enabledBadge")}
-        </Badge>
-      </div>
-    );
-  }
+        </CardContent>
+      </Card>
 
-  return (
-    <div className="flex items-start gap-3">
-      <ShieldAlert className="mt-0.5 size-5 text-(--color-muted-foreground)" />
-      <div className="space-y-2">
-        <p className="text-sm text-(--color-foreground)">{t("auth.home.disabledTitle")}</p>
-        <p className="text-xs text-(--color-muted-foreground)">{t("auth.home.disabledHelp")}</p>
-        <Link to="/totp/enroll" data-testid="enable-totp-link">
-          <Button type="button" variant="secondary" size="sm">
-            {t("auth.home.enableButton")}
-          </Button>
-        </Link>
-      </div>
-    </div>
+      {backendUserId && (
+        <div
+          data-testid="backend-confirmation"
+          className="flex items-center justify-between rounded-md border border-(--color-border) bg-(--color-muted)/40 px-3 py-2"
+        >
+          <span className="text-xs text-(--color-muted-foreground)">
+            {t("auth.home.backendLabel")}
+          </span>
+          <code className="font-mono text-xs text-(--color-foreground)">{backendUserId}</code>
+        </div>
+      )}
+      {backendError && (
+        <div
+          data-testid="backend-error"
+          role="alert"
+          className="rounded-md border border-(--color-destructive)/30 bg-(--color-destructive)/10 px-3 py-2 text-xs text-(--color-destructive)"
+        >
+          {t("auth.home.backendErrorPrefix")}: {backendError}
+        </div>
+      )}
+    </ProtectedShell>
   );
 }
 
-function OAuthUserSecurity() {
-  const { t } = useTranslation();
+function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start gap-3" data-testid="oauth-2fa-notice">
-      <ShieldCheck className="mt-0.5 size-5 text-(--color-accent)" />
-      <div className="space-y-2">
-        <p className="text-sm text-(--color-foreground)">{t("auth.home.oauthNoticeTitle")}</p>
-        <p className="text-xs text-(--color-muted-foreground)">{t("auth.home.oauthNoticeBody")}</p>
-        <a
-          href="https://myaccount.google.com/security"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-(--color-foreground) underline-offset-4 hover:underline"
-          data-testid="google-security-link"
-        >
-          {t("auth.home.oauthSecurityLink")}
-          <ExternalLink className="size-3.5" />
-        </a>
-      </div>
-    </div>
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-xs font-medium uppercase tracking-wider text-(--color-muted-foreground)">
+          {label}
+        </p>
+        <p className="mt-2 text-2xl font-bold tracking-tight text-(--color-foreground)">{value}</p>
+      </CardContent>
+    </Card>
   );
 }

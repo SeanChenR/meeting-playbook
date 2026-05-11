@@ -1,11 +1,20 @@
 /**
- * LayoutSwitcher — controlled toggle between Stack and Columns layouts.
+ * LayoutSwitcher — slice ui-overhaul-claude-design task 5.4.
  *
- * Slice-07. NO emojis. Uses inline SVG icons (lucide-style) so we don't
- * pull in another dependency just for two glyphs. The button currently
- * active gets `aria-pressed="true"` for screen readers.
+ * Icon-only segmented control matching the design bundle: a single bordered
+ * "pill" with 3px outer padding wrapping two 26px-tall icon buttons. Active
+ * state uses `--color-muted` background + `--color-foreground` text; inactive
+ * fades to `--color-muted-foreground`.
+ *
+ * `stack`  → Rows icon  (vertical strips)
+ * `columns`→ Cols icon (horizontal strips)
+ *
+ * Default value is read from `localStorage.mp-detail-layout` on mount so a
+ * fresh remount honours the user's last choice. Persistence is handled by
+ * the parent's `onChange` (existing `useDetailLayout` already writes there).
  */
 
+import { Columns3, Rows3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { DetailLayout } from "../hooks/use-detail-layout";
 import { cn } from "../lib/utils";
@@ -15,49 +24,15 @@ export interface LayoutSwitcherProps {
   onChange: (next: DetailLayout) => void;
 }
 
-function StackIcon() {
-  return (
-    <svg
-      aria-hidden
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect x="2" y="2" width="12" height="3" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="2" y="6.5" width="12" height="3" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="2" y="11" width="12" height="3" rx="1" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function ColumnsIcon() {
-  return (
-    <svg
-      aria-hidden
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect x="2" y="2" width="3" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="6.5" y="2" width="3" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <rect x="11" y="2" width="3" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
 export function LayoutSwitcher({ layout, onChange }: LayoutSwitcherProps) {
   const { t } = useTranslation();
 
   function _btnCls(active: boolean): string {
     return cn(
-      "inline-flex h-8 w-8 items-center justify-center rounded-md border border-(--color-border)",
+      "inline-flex h-[26px] items-center justify-center rounded-[5px] px-2 transition-colors",
       active
-        ? "bg-(--color-primary) text-(--color-primary-foreground)"
-        : "bg-(--color-card) text-(--color-muted-foreground) hover:bg-(--color-muted)",
+        ? "bg-(--color-muted) text-(--color-foreground)"
+        : "text-(--color-muted-foreground) hover:text-(--color-foreground)",
     );
   }
 
@@ -65,28 +40,30 @@ export function LayoutSwitcher({ layout, onChange }: LayoutSwitcherProps) {
     <div
       data-testid="layout-switcher"
       role="group"
-      className="inline-flex items-center gap-1"
-      aria-label={t("meetings.detail.layout.stack")}
+      aria-label={t("meetings.detail.layout.columns")}
+      className="inline-flex items-center gap-0.5 rounded-md border border-(--color-border) bg-(--color-card) p-[3px]"
     >
-      <button
-        type="button"
-        data-testid="layout-switcher-stack"
-        aria-label={t("meetings.detail.layout.stack")}
-        aria-pressed={layout === "stack"}
-        className={_btnCls(layout === "stack")}
-        onClick={() => onChange("stack")}
-      >
-        <StackIcon />
-      </button>
       <button
         type="button"
         data-testid="layout-switcher-columns"
         aria-label={t("meetings.detail.layout.columns")}
         aria-pressed={layout === "columns"}
-        className={_btnCls(layout === "columns")}
+        title={t("meetings.detail.layout.columns")}
         onClick={() => onChange("columns")}
+        className={_btnCls(layout === "columns")}
       >
-        <ColumnsIcon />
+        <Columns3 className="size-[15px]" />
+      </button>
+      <button
+        type="button"
+        data-testid="layout-switcher-stack"
+        aria-label={t("meetings.detail.layout.stack")}
+        aria-pressed={layout === "stack"}
+        title={t("meetings.detail.layout.stack")}
+        onClick={() => onChange("stack")}
+        className={_btnCls(layout === "stack")}
+      >
+        <Rows3 className="size-[15px]" />
       </button>
     </div>
   );

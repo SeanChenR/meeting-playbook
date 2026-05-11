@@ -1,3 +1,19 @@
+/**
+ * Login route — slice ui-overhaul-claude-design task 3.1.
+ *
+ * Visual contract matches design bundle `LoginScreen`:
+ *   - 360px width card centered inside AuthShell
+ *   - 40×40 logo block at the top (rounded square + horizontal-lines SVG)
+ *   - Headline + subhead
+ *   - Email + Password form (primary "登入" button, full width)
+ *   - "Or" separator
+ *   - Google secondary button (full width)
+ *   - Bottom "沒帳號？立即註冊" link
+ *
+ * Preserves existing i18n keys and the Better Auth flow (signIn.email,
+ * signIn.social, twoFactorRedirect navigation).
+ */
+
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -5,7 +21,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { AuthShell } from "../components/auth-shell";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Separator } from "../components/ui/separator";
@@ -57,30 +73,33 @@ export function Login() {
   };
 
   return (
-    <AuthShell eyebrow={t("auth.login.eyebrow")}>
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("auth.login.title")}</CardTitle>
-          <CardDescription>{t("auth.login.subtitle")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            onClick={handleGoogleSignIn}
-            className="w-full"
-          >
-            <GoogleIcon />
-            {t("auth.login.googleButton")}
-          </Button>
-
-          <div className="relative flex items-center gap-3">
-            <Separator className="flex-1" />
-            <span className="text-xs uppercase tracking-wider text-(--color-muted-foreground)">
-              {t("auth.login.separator")}
-            </span>
-            <Separator className="flex-1" />
+    <AuthShell>
+      <Card className="mx-auto w-[360px]">
+        <CardContent className="space-y-5 p-6">
+          <div className="space-y-3 text-center">
+            <div
+              aria-hidden
+              className="mx-auto flex size-10 items-center justify-center rounded-md bg-(--color-primary)"
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--color-primary-foreground)"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 7h18M3 12h12M3 17h18" />
+              </svg>
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-xl font-semibold tracking-tight text-(--color-foreground)">
+                {t("auth.login.title")}
+              </h1>
+              <p className="text-sm text-(--color-muted-foreground)">{t("auth.login.subtitle")}</p>
+            </div>
           </div>
 
           <form onSubmit={handleEmailSignIn} className="space-y-4">
@@ -114,6 +133,19 @@ export function Login() {
             </Button>
           </form>
 
+          <div className="relative flex items-center gap-3">
+            <Separator className="flex-1" />
+            <span className="text-xs uppercase tracking-wider text-(--color-muted-foreground)">
+              {t("auth.login.separator")}
+            </span>
+            <Separator className="flex-1" />
+          </div>
+
+          <Button type="button" variant="secondary" onClick={handleGoogleSignIn} className="w-full">
+            <GoogleIcon />
+            {t("auth.login.googleButton")}
+          </Button>
+
           {error && (
             <Alert variant="destructive" data-testid="login-error">
               {error}
@@ -124,7 +156,7 @@ export function Login() {
             {t("auth.login.noAccount")}{" "}
             <Link
               to="/signup"
-              className="font-medium text-(--color-foreground) underline-offset-4 hover:underline"
+              className="font-medium text-(--color-primary) underline-offset-4 hover:underline"
             >
               {t("auth.login.signupLink")}
             </Link>

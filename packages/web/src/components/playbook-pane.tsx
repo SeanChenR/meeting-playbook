@@ -1,16 +1,31 @@
+/**
+ * PlaybookPane — slice ui-overhaul-claude-design task 6.4.
+ *
+ * Re-skinned to use the shared `Pane` shell with the design-bundle's
+ * accent bar + "AI 草稿" badge + actions slot. Freeform Markdown editor
+ * (textarea + read-only preview) is preserved verbatim — structured 6-field
+ * view stays deferred per project memory `playbook_field_set_open`.
+ *
+ * The Edit / Preview sub-toggle keeps its prior data-testids
+ * (`freeform-edit-tab` / `freeform-preview-tab`) so the existing tests
+ * still resolve. Save behavior + i18n keys + PlaybookApiError handling
+ * are unchanged from slice-7 round 3.
+ */
+
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { localizedErrorMessage } from "../lib/i18n-errors";
+import { MarkdownPreview } from "../lib/markdown-preview";
 import {
   PlaybookApiError,
   playbookQueryOptions,
   useUpsertPlaybookMutation,
 } from "../lib/playbook-api";
-import { MarkdownPreview } from "../lib/markdown-preview";
+import { Pane } from "./pane";
 import { Alert } from "./ui/alert";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Label } from "./ui/label";
 import { cn } from "../lib/utils";
 
@@ -30,13 +45,10 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
   const query = useQuery(playbookQueryOptions(meetingId));
   const mutation = useUpsertPlaybookMutation(meetingId);
 
-  // Slice-7 round 3: structured tab removed per Sean's call — only freeform
-  // markdown remains. Sub-toggle still switches Edit / Preview within freeform.
   const [freeformMode, setFreeformMode] = useState<"edit" | "preview">("edit");
   const [draft, setDraft] = useState<string>("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  // Initialize draft from server once.
   useEffect(() => {
     if (!query.data) return;
     setDraft(query.data.free_form_markdown);
@@ -45,10 +57,6 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
 
   async function handleSave() {
     try {
-      // Backend playbook PUT still accepts the full 7-field shape. Send the
-      // textarea value as `free_form_markdown` and pass empty strings for the
-      // other fields so the schema stays satisfied without dropping data the
-      // user might have set via the LLM-generated draft.
       await mutation.mutateAsync({
         free_form_markdown: draft,
         objective: query.data?.objective ?? "",
@@ -83,15 +91,21 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
       : t("playbook.save.idle");
 
   return (
-    <Card className="flex h-full flex-col">
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <CardTitle>{t("playbook.heading")}</CardTitle>
-        {/* Slice-7 round 3: Edit / Preview sub-toggle promoted to header. */}
-        <div role="group" aria-label="freeform sub-mode" className="flex gap-1">
+    <Pane
+      data-testid="playbook-pane"
+      title={t("playbook.heading")}
+      accent="var(--color-primary)"
+      badge={
+        <Badge variant="outline" data-testid="playbook-ai-draft-badge">
+          {t("playbook.aiDraftBadge")}
+        </Badge>
+      }
+      actions={
+        <div role="group" aria-label="freeform sub-mode" className="inline-flex gap-1">
           <Button
             type="button"
             size="sm"
-            variant={freeformMode === "edit" ? "primary" : "outline"}
+            variant={freeformMode === "edit" ? "primary" : "ghost"}
             aria-pressed={freeformMode === "edit"}
             data-testid="freeform-edit-tab"
             onClick={() => setFreeformMode("edit")}
@@ -101,7 +115,7 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
           <Button
             type="button"
             size="sm"
-            variant={freeformMode === "preview" ? "primary" : "outline"}
+            variant={freeformMode === "preview" ? "primary" : "ghost"}
             aria-pressed={freeformMode === "preview"}
             data-testid="freeform-preview-tab"
             onClick={() => setFreeformMode("preview")}
@@ -109,9 +123,13 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
             {t("playbook.freeform.previewTab")}
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col space-y-4 overflow-y-auto">
-        {query.isLoading && <div>{t("playbook.loading")}</div>}
+      }
+      bodyClassName="px-3.5 py-3.5"
+    >
+      <div className="space-y-4">
+        {query.isLoading && (
+          <p className="text-sm text-(--color-muted-foreground)">{t("playbook.loading")}</p>
+        )}
         {error && <Alert variant="destructive">{error}</Alert>}
 
         <div className="space-y-2">
@@ -134,11 +152,11 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button type="button" onClick={handleSave} disabled={mutation.isPending}>
+          <Button type="button" onClick={handleSave} disabled={mutation.isPending} size="sm">
             {saveLabel}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Pane>
   );
 }

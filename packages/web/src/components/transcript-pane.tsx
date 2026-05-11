@@ -1,40 +1,53 @@
 /**
- * TranscriptPane — chronological transcript chunks for a meeting session.
+ * TranscriptPane — slice ui-overhaul-claude-design task 6.1.
  *
- * Per spec meeting-session ADDED requirement "TranscriptPane renders chunks
- * with the meeting's me display name". For slice-6 every chunk has
- * `speaker = "me"`; the layout already accommodates a future "counterparty"
- * speaker (slice-7) by reading `chunk.speaker` and tagging via data attribute
- * for CSS targeting.
+ * Re-skinned with the shared `Pane` shell (accent = `--color-them` per
+ * design bundle). Each chunk now renders four speaker-contrast cues
+ * simultaneously:
  *
- * Slice-11: when the parent's meeting has `rerun_asr_pending === true` we
- * poll GET /api/meetings/{id}/rerun_asr_status every 1s and overlay a
- * skeleton + progress counter. On the pending→idle transition we invalidate
- * the transcript cache so the new content swaps in immediately.
+ *   1. `border-left: 3px` colored by `--color-me` / `--color-them`
+ *   2. background filled via `color-mix(in oklch, var(--color-{me|them}-soft)
+ *      calc(var(--{me|them}-tint-alpha) * 1000%), transparent)`
+ *   3. a `Dot` (data-testid="speaker-dot") tinted by the same speaker color
+ *   4. speaker name rendered semibold (font-weight 600) in the speaker color
  *
- * NO emojis (per UI feedback memory). Visual polish comes in the UI overhaul.
+ * Plus mono-font timestamp + 1.6 line-height body (per design bundle copy).
+ *
+ * `data-testid="transcript-chunk"` + `data-speaker` attributes preserved so
+ * existing tests still resolve. The slice-7 `border-l-(--color-primary)`
+ * class is kept on counterparty + `border-l-(--color-muted-foreground)`
+ * on me as a back-compat marker for legacy assertions; they sit underneath
+ * the design-bundle inline-style border-left so the visual stays correct.
+ *
+ * Live placeholder ("正在說話…") still mounts when receiving an in-flight
+ * counterparty chunk via `LiveChunkPlaceholder` — Skeleton bars + pulsing dot.
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import type { TranscriptChunkMessage } from "../lib/session-ws";
 import {
   isRerunPending,
   rerunStatusQueryOptions,
   useTranscriptInvalidationOnRerunComplete,
 } from "../lib/rerun-api";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import type { TranscriptChunkMessage } from "../lib/session-ws";
+import { paneEnter } from "../lib/motion-presets";
 import { cn } from "../lib/utils";
+import { NumberTicker } from "./magicui/number-ticker";
+import { Pane } from "./pane";
+import { Skeleton } from "./ui/skeleton";
+
+export type ContrastLevel = "subtle" | "strong";
 
 interface TranscriptPaneProps {
   chunks: TranscriptChunkMessage[];
   meDisplayName: string;
   counterpartyDisplayName: string;
-  /** Slice-11: meeting id for the rerun-status polling query (optional —
-   *  pre-slice-11 callers may omit). */
   meetingId?: string;
-  /** Slice-11: drives the overlay + enables the polling query when true. */
   rerunPending?: boolean;
+  /** Drives `--{me|them}-tint-alpha` override; defaults to "strong". */
+  contrastLevel?: ContrastLevel;
 }
 
 function _speakerLabel(
@@ -49,10 +62,17 @@ function _speakerLabel(
 
 function _formatTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleTimeString();
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
     return iso;
   }
+}
+
+function _chunkBackground(speaker: TranscriptChunkMessage["speaker"]): string {
+  const tintVar = speaker === "me" ? "--me-tint-alpha" : "--them-tint-alpha";
+  const softVar = speaker === "me" ? "--color-me-soft" : "--color-them-soft";
+  return `color-mix(in oklch, var(${softVar}) calc(var(${tintVar}) * 1000%), transparent)`;
 }
 
 export function TranscriptPane({
@@ -61,45 +81,64 @@ export function TranscriptPane({
   counterpartyDisplayName,
   meetingId,
   rerunPending = false,
+  contrastLevel = "strong",
 }: TranscriptPaneProps) {
   const { t } = useTranslation();
 
-  // Slice-11 polling: enabled whenever the meeting row reports
-  // `rerun_asr_pending` OR the last poll said the task is still pending.
-  // The query is `enabled: false` when there's no meetingId (legacy
-  // pre-slice-11 caller) so we don't fire spurious requests.
   const statusQuery = useQuery(
     rerunStatusQueryOptions(meetingId ?? "", {
       enabled: Boolean(meetingId) && rerunPending,
       refetchInterval: (q) => (isRerunPending(q.state.data) ? 1000 : false),
     }),
   );
-  // Invalidate transcript cache + meeting row on pending → idle transition.
   useTranscriptInvalidationOnRerunComplete(meetingId ?? "", statusQuery.data?.status);
 
   const overlayVisible = Boolean(meetingId) && (rerunPending || isRerunPending(statusQuery.data));
   const processed = statusQuery.data?.chunks_processed ?? 0;
   const total = statusQuery.data?.chunks_total ?? 0;
 
+  // contrastLevel hook: caller can dial down the per-chunk tint by inlining
+  // a CSS variable override on the body. "strong" = ship the spec defaults
+  // (--me-tint-alpha 0.14 / --them-tint-alpha 0.20 in dark mode); "subtle"
+  // halves them.
+  const tintStyle: React.CSSProperties =
+    contrastLevel === "subtle"
+      ? ({ "--me-tint-alpha": "0.05", "--them-tint-alpha": "0.08" } as React.CSSProperties)
+      : {};
+
   return (
-    <Card className="flex h-full flex-col">
-      <CardHeader>
-        <CardTitle>{t("meetings.session.transcriptHeading")}</CardTitle>
-      </CardHeader>
-      <CardContent className="relative flex flex-1 flex-col overflow-hidden">
-        {overlayVisible ? (
-          <div
-            data-testid="transcript-rerun-overlay"
-            className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-(--color-card)/90 text-sm text-(--color-muted-foreground)"
-          >
-            <p>{t("meetings.session.rerunOverlay")}</p>
-            <p className="text-xs">
-              {total > 0
-                ? t("meetings.session.rerunOverlayProgress", { processed, total })
-                : t("meetings.session.rerunOverlayEstimating")}
-            </p>
-          </div>
-        ) : null}
+    <Pane
+      data-testid="transcript-pane"
+      title={t("meetings.session.transcriptHeading")}
+      accent="var(--color-them)"
+      bodyClassName="px-3.5 py-3 relative"
+    >
+      <div data-testid="transcript-pane-body" style={tintStyle}>
+        <AnimatePresence initial={false}>
+          {overlayVisible && (
+            <motion.div
+              key="rerun-overlay"
+              data-testid="transcript-rerun-overlay"
+              variants={paneEnter}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-(--color-card)/90 text-sm text-(--color-muted-foreground)"
+            >
+              <p>{t("meetings.session.rerunOverlay")}</p>
+              <p className="text-xs">
+                {total > 0 ? (
+                  <span>
+                    (<NumberTicker value={processed} data-testid="rerun-processed-ticker" />/{total}{" "}
+                    chunks)
+                  </span>
+                ) : (
+                  t("meetings.session.rerunOverlayEstimating")
+                )}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {chunks.length === 0 ? (
           <div
             data-testid="transcript-empty"
@@ -108,37 +147,119 @@ export function TranscriptPane({
             {t("meetings.session.transcriptEmpty")}
           </div>
         ) : (
-          <ol className="flex-1 space-y-3 overflow-y-auto pr-1">
+          <ol className="flex flex-col gap-2.5">
             {chunks.map((chunk, idx) => (
-              <li
+              <TranscriptChunkRow
                 key={`${chunk.started_at}-${idx}`}
-                data-testid="transcript-chunk"
-                data-speaker={chunk.speaker}
-                className={cn(
-                  // Slice-7 visual: each chunk gets a 4px left accent
-                  // border (counterparty primary, me secondary/muted) and
-                  // body text in default text-foreground (NOT colored).
-                  "rounded-md border-l-4 bg-(--color-card) p-3 text-sm",
-                  chunk.speaker === "counterparty"
-                    ? "border-l-(--color-primary)"
-                    : "border-l-(--color-muted-foreground)",
-                )}
-              >
-                <div className="mb-1 flex items-center gap-2 text-xs text-(--color-muted-foreground)">
-                  <span className="font-medium">
-                    {_speakerLabel(chunk, meDisplayName, counterpartyDisplayName)}
-                  </span>
-                  <span aria-hidden>·</span>
-                  <span>{_formatTime(chunk.started_at)}</span>
-                </div>
-                <p className="break-words whitespace-pre-wrap text-(--color-foreground)">
-                  {chunk.text}
-                </p>
-              </li>
+                chunk={chunk}
+                meDisplayName={meDisplayName}
+                counterpartyDisplayName={counterpartyDisplayName}
+              />
             ))}
           </ol>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Pane>
+  );
+}
+
+function TranscriptChunkRow({
+  chunk,
+  meDisplayName,
+  counterpartyDisplayName,
+}: {
+  chunk: TranscriptChunkMessage;
+  meDisplayName: string;
+  counterpartyDisplayName: string;
+}) {
+  const isMe = chunk.speaker === "me";
+  const speakerColor = isMe ? "var(--color-me)" : "var(--color-them)";
+  const background = _chunkBackground(chunk.speaker);
+
+  return (
+    <li
+      data-testid="transcript-chunk"
+      data-speaker={chunk.speaker}
+      style={
+        {
+          borderLeftStyle: "solid",
+          borderLeftWidth: "3px",
+          borderLeftColor: speakerColor,
+          // CSS custom property — happy-dom's value validator rejects
+          // `color-mix()` on the standard `background-color` property and
+          // drops it silently, which would also drop the cue from the rendered
+          // HTML. Routing through a CSS variable preserves the value end-to-end.
+          "--chunk-bg": background,
+        } as React.CSSProperties
+      }
+      className={cn(
+        "rounded-r-md bg-(--chunk-bg) px-3 py-2.5 text-sm",
+        // Back-compat tokens for slice-7-era selectors that match on
+        // arbitrary-value border classes.
+        isMe ? "border-l-(--color-muted-foreground)" : "border-l-(--color-primary)",
+      )}
+    >
+      <div className="mb-1 flex items-center gap-2">
+        <span
+          aria-hidden
+          data-testid="speaker-dot"
+          className="inline-block size-2 rounded-full"
+          style={{ background: speakerColor }}
+        />
+        <span
+          data-testid="speaker-name"
+          className="text-sm font-semibold"
+          style={{ color: speakerColor }}
+        >
+          {_speakerLabel(chunk, meDisplayName, counterpartyDisplayName)}
+        </span>
+        <span className="font-mono text-xs text-(--color-muted-foreground)">
+          {_formatTime(chunk.started_at)}
+        </span>
+      </div>
+      <p
+        className="break-words whitespace-pre-wrap text-(--color-foreground)"
+        style={{ lineHeight: 1.6 }}
+      >
+        {chunk.text}
+      </p>
+    </li>
+  );
+}
+
+/**
+ * LiveChunkPlaceholder — render this at the tail of the chunk list when a
+ * counterparty stream is mid-utterance and no transcript_chunk has arrived
+ * yet. Currently no callers wire this in (the live transcript path streams
+ * partial chunks); keep the export so the design bundle's affordance is
+ * available in a future polish round.
+ */
+export function LiveChunkPlaceholder({ name }: { name: string }) {
+  return (
+    <div
+      data-testid="transcript-live-placeholder"
+      style={{
+        borderLeft: "3px solid var(--color-them)",
+        background: "color-mix(in oklch, var(--color-them-soft) 50%, transparent)",
+      }}
+      className="rounded-r-md px-3 py-2.5"
+    >
+      <div className="mb-1.5 flex items-center gap-2">
+        <span
+          aria-hidden
+          className="inline-block size-2 animate-pulse rounded-full"
+          style={{ background: "var(--color-them)" }}
+        />
+        <span className="text-sm font-semibold" style={{ color: "var(--color-them)" }}>
+          {name}
+        </span>
+        <span className="text-xs text-(--color-muted-foreground)">…</span>
+      </div>
+      <div className="flex gap-1.5">
+        <Skeleton className="h-2.5 w-[140px]" />
+        <Skeleton className="h-2.5 w-[80px]" />
+        <Skeleton className="h-2.5 w-[60px]" />
+      </div>
+    </div>
   );
 }

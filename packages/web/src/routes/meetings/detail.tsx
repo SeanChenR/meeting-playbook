@@ -1,34 +1,60 @@
+/**
+ * MeetingDetail route — slice ui-overhaul-claude-design tasks 5.1 + 5.6.
+ *
+ * Structure aligned with design bundle `MeetingDetailScreen`:
+ *   <ProtectedShell fullBleed>
+ *     <div max-w-[1440px] mx-auto px-6 pt-5 ...>
+ *       <BackLink to="/meetings" />
+ *       <MetadataCard ... />                      ← extracted (task 5.2)
+ *       <div tabs row>
+ *         <Tabs>工作區 / 摘要</Tabs>
+ *         <LayoutSwitcher />                      ← only on workspace tab
+ *       </div>
+ *       <AnimatePresence mode="wait">             ← task 5.6 cross-fade
+ *         workspace ? <Workspace />               ← task 5.5
+ *                   : <SummaryPane />
+ *       </AnimatePresence>
+ *     </div>
+ *   </ProtectedShell>
+ *
+ * The Workspace tab content uses framer-motion `AnimatePresence` with the
+ * `tabContent` preset (100ms exit / 150ms enter cross-fade); the summary
+ * tab is disabled via radix `disabled` until status === "completed".
+ */
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AdvisorPane } from "../../components/advisor-pane";
 import { AsrProviderSelector } from "../../components/asr-provider-selector";
-import { RecordingBadge } from "../../components/recording-badge";
-import { RerunButton } from "../../components/rerun-button";
-import { SummaryPane } from "../../components/summary-pane";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
-import { useDetailTab } from "../../hooks/use-detail-tab";
-import { chatMessagesQueryOptions } from "../../lib/chat-api";
+import { BackLink } from "../../components/back-link";
 import { CaptureIndicator } from "../../components/capture-indicator";
 import { HeadphonesHint } from "../../components/headphones-hint";
 import { LayoutSwitcher } from "../../components/layout-switcher";
+import { MetadataCard } from "../../components/metadata-card";
 import { PlaybookPane } from "../../components/playbook-pane";
 import { ProtectedShell } from "../../components/protected-shell";
+import { RerunButton } from "../../components/rerun-button";
+import { SummaryPane } from "../../components/summary-pane";
 import { TranscriptPane } from "../../components/transcript-pane";
-import { useDetailLayout } from "../../hooks/use-detail-layout";
-import { useMeetingSession } from "../../hooks/use-meeting-session";
-import { rowToMessage, transcriptChunksQueryOptions } from "../../lib/transcripts-api";
-import { AlertDialog } from "../../components/ui/alert-dialog";
+import { Workspace } from "../../components/workspace";
 import { Alert } from "../../components/ui/alert";
-import { Button, buttonVariants } from "../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { AlertDialog } from "../../components/ui/alert-dialog";
+import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { useDetailLayout } from "../../hooks/use-detail-layout";
+import { useDetailTab } from "../../hooks/use-detail-tab";
+import { useMeetingSession } from "../../hooks/use-meeting-session";
+import { chatMessagesQueryOptions } from "../../lib/chat-api";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
+import { tabContent } from "../../lib/motion-presets";
 import {
   meetingQueryOptions,
   MeetingApiError,
   useDeleteMeetingMutation,
 } from "../../lib/meetings-api";
+import { rowToMessage, transcriptChunksQueryOptions } from "../../lib/transcripts-api";
 
 export function MeetingDetail() {
   const { t } = useTranslation();
@@ -45,10 +71,9 @@ export function MeetingDetail() {
   const meeting = query.data ?? null;
   const session = useMeetingSession(meetingId);
   const queryClient = useQueryClient();
+  const reducedMotion = useReducedMotion();
 
-  // Slice-9: hydrate persisted chat history into the advisor reducer +
-  // wire the advice-done callback so the React Query cache invalidates
-  // when a stream completes (so the just-persisted pair refetches).
+  // Slice-9: hydrate persisted chat history + invalidate cache on advice_done.
   const chatMessagesQuery = useQuery(chatMessagesQueryOptions(meetingId, !!meetingId));
   useEffect(() => {
     if (Array.isArray(chatMessagesQuery.data)) {
@@ -64,20 +89,15 @@ export function MeetingDetail() {
     };
   }, [session, queryClient, meetingId]);
 
-  // Slice-10: when the WS session reaches `ended` phase (meeting_ended
-  // received OR client-side cleanup), invalidate the meeting cache so
-  // the route re-fetches and sees `status = "completed"`. Without this
-  // the user has to manually refresh before the Summary tab unlocks
-  // and the "開始會議" button hides itself.
+  // Slice-10: invalidate meeting cache when WS reaches `ended` so the
+  // status flips to "completed" and the Summary tab unlocks.
   useEffect(() => {
     if (session.state.phase === "ended") {
       queryClient.invalidateQueries({ queryKey: ["meetings", meetingId] });
     }
   }, [session.state.phase, queryClient, meetingId]);
 
-  // Slice-7: derive per-stream pill state for the indicator. Outside an
-  // active session (idle / connecting / ended / error) the indicator is
-  // hidden by passing `streamStatus={null}`.
+  // Slice-7: per-stream indicator state. Hidden outside in-progress / ending.
   const indicatorStreamStatus =
     session.state.phase === "in_progress" || session.state.phase === "ending"
       ? session.state.streamStatus
@@ -105,12 +125,7 @@ export function MeetingDetail() {
     session.state.phase === "connecting" ||
     session.state.phase === "in_progress" ||
     session.state.phase === "ending";
-  // Slice-7 round 3: End button is hidden entirely once the user clicks End.
-  // Server is draining queued audio; the "ending" state lives on the
-  // CaptureIndicator pulse + the muted "結束中…" indicator. No second click
-  // possible → no need to keep a disabled-but-visible button competing for
-  // attention.
-  const showEndButton = session.state.phase === "in_progress";
+
   const fetchError =
     query.isError && query.error instanceof MeetingApiError && query.error.errorCode
       ? localizedErrorMessage(query.error.errorCode, t)
@@ -134,8 +149,7 @@ export function MeetingDetail() {
     }
   }
 
-  // Three workspace panes — rendered identically in both layouts; the
-  // wrapper element decides the geometry (3-col grid vs vertical stack).
+  // Three workspace panes — built once, layout-agnostic.
   const playbookPane = meeting && <PlaybookPane meetingId={meetingId} />;
   const transcriptPane = meeting && (
     <TranscriptPane
@@ -152,81 +166,52 @@ export function MeetingDetail() {
 
   return (
     <ProtectedShell fullBleed>
-      <div className="flex items-center justify-between">
-        <Link to="/meetings" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-          {t("meetings.detail.back")}
-        </Link>
-        <LayoutSwitcher layout={layout} onChange={setLayout} />
-      </div>
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-6 pt-5">
+        <BackLink to="/meetings" />
 
-      {error && <Alert variant="destructive">{error}</Alert>}
+        {error && <Alert variant="destructive">{error}</Alert>}
 
-      {meeting === null && !error && <div>{t("common.loading")}</div>}
+        {meeting === null && !error && (
+          <p className="text-sm text-(--color-muted-foreground)">{t("common.loading")}</p>
+        )}
 
-      {meeting && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{meeting.title}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div>
-              <span className="font-medium">{t("meetings.detail.counterpartyLabel")}：</span>
-              <span>{meeting.counterparty_display_name}</span>
-            </div>
-            <div>
-              <span className="font-medium">{t("meetings.detail.meLabel")}：</span>
-              <span>{meeting.me_display_name}</span>
-            </div>
-            <div>
-              <span className="font-medium">{t("meetings.detail.statusLabel")}：</span>
-              <span>{t(`meetings.status.${meeting.status}`)}</span>
-            </div>
-            <RecordingBadge available={Boolean(meeting.recordings_available)} />
-            <AsrProviderSelector meeting={meeting} />
-            <div>
-              <span className="font-medium">{t("meetings.detail.createdAtLabel")}：</span>
-              <span>{new Date(meeting.created_at).toLocaleString()}</span>
-            </div>
-            <HeadphonesHint visible={meeting.status === "scheduled"} />
-            <RerunButton meeting={meeting} />
-            <div className="flex flex-wrap items-center gap-3 pt-4">
-              <Button onClick={session.start} disabled={startDisabled}>
-                {t("meetings.session.start")}
-              </Button>
-              {showEndButton && (
-                <Button variant="outline" onClick={session.end}>
-                  {t("meetings.session.end")}
-                </Button>
-              )}
+        {meeting && (
+          <MetadataCard
+            meeting={meeting}
+            phase={session.state.phase}
+            onStart={session.start}
+            onEnd={session.end}
+            startDisabled={startDisabled}
+            onDelete={() => setConfirmOpen(true)}
+            asrSelector={<AsrProviderSelector meeting={meeting} />}
+            captureIndicator={
               <CaptureIndicator
                 streamStatus={indicatorStreamStatus}
                 meDisplayName={meeting.me_display_name}
                 counterpartyDisplayName={meeting.counterparty_display_name}
                 ending={session.state.phase === "ending"}
               />
-              <Button
-                variant="destructive"
-                onClick={() => setConfirmOpen(true)}
-                className="ml-auto"
-              >
-                {t("meetings.detail.deleteButton")}
-              </Button>
-            </div>
-            {sessionError && <Alert variant="destructive">{sessionError}</Alert>}
-          </CardContent>
-        </Card>
-      )}
+            }
+            rerunSlot={<RerunButton meeting={meeting} />}
+          />
+        )}
 
-      {meeting && (
-        <DetailTabsView
-          meeting={meeting}
-          meetingId={meetingId}
-          layout={layout}
-          playbookPane={playbookPane}
-          transcriptPane={transcriptPane}
-          advisorPane={advisorPane}
-        />
-      )}
+        {meeting && <HeadphonesHint visible={meeting.status === "scheduled"} />}
+        {sessionError && <Alert variant="destructive">{sessionError}</Alert>}
+
+        {meeting && (
+          <DetailTabsView
+            meeting={meeting}
+            meetingId={meetingId}
+            layout={layout}
+            onLayoutChange={setLayout}
+            playbookPane={playbookPane}
+            transcriptPane={transcriptPane}
+            advisorPane={advisorPane}
+            reducedMotion={!!reducedMotion}
+          />
+        )}
+      </div>
 
       <AlertDialog
         open={confirmOpen}
@@ -246,82 +231,102 @@ interface DetailTabsViewProps {
   meeting: { title: string; created_at: string; status: string };
   meetingId: string;
   layout: "columns" | "stack";
+  onLayoutChange: (next: "columns" | "stack") => void;
   playbookPane: React.ReactNode;
   transcriptPane: React.ReactNode;
   advisorPane: React.ReactNode;
+  reducedMotion: boolean;
 }
 
-/**
- * Slice-10: wraps the existing 3-column workspace AND the new SummaryPane
- * inside a Tabs primitive. Workspace tab is always enabled; Summary tab
- * is disabled until the meeting reaches `completed` status. Persistence
- * is handled by `useDetailTab(meetingId, meeting)`.
- */
 function DetailTabsView({
   meeting,
   meetingId,
   layout,
+  onLayoutChange,
   playbookPane,
   transcriptPane,
   advisorPane,
+  reducedMotion,
 }: DetailTabsViewProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useDetailTab(meetingId, meeting);
   const summaryEnabled = meeting.status === "completed";
 
+  // Reduced motion → 0-duration cross-fade so the swap is instant but the
+  // AnimatePresence node tree stays consistent.
+  const motionTransition = reducedMotion ? { duration: 0 } : undefined;
+
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as "workspace" | "summary")}>
-      <TabsList>
-        <TabsTrigger value="workspace" data-testid="detail-tab-workspace">
-          {t("meetings.detail.tabs.workspace")}
-        </TabsTrigger>
-        <TabsTrigger
-          value="summary"
-          disabled={!summaryEnabled}
-          title={!summaryEnabled ? t("meetings.summary.disabledHint") : undefined}
-          data-testid="detail-tab-summary"
-        >
-          {t("meetings.detail.tabs.summary")}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="workspace">
-        {layout === "columns" ? (
-          <div
-            data-testid="detail-columns"
-            className="grid grid-cols-1 gap-4 lg:grid-cols-[30%_40%_30%] lg:h-[calc(100vh-300px)]"
+      <div className="flex items-center justify-between gap-3">
+        <TabsList className="h-9">
+          <TabsTrigger value="workspace" data-testid="detail-tab-workspace">
+            {t("meetings.detail.tabs.workspace")}
+          </TabsTrigger>
+          <TabsTrigger
+            value="summary"
+            disabled={!summaryEnabled}
+            title={!summaryEnabled ? t("meetings.summary.disabledHint") : undefined}
+            data-testid="detail-tab-summary"
           >
-            <div
-              data-testid="detail-pane-playbook"
-              className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
-            >
-              {playbookPane}
-            </div>
-            <div
-              data-testid="detail-pane-transcript"
-              className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
-            >
-              {transcriptPane}
-            </div>
-            <div
-              data-testid="detail-pane-advisor"
-              className="min-w-0 lg:h-full lg:overflow-hidden lg:[&>*]:h-full"
-            >
-              {advisorPane}
-            </div>
-          </div>
-        ) : (
-          <div data-testid="detail-stack" className="space-y-4">
-            <div data-testid="detail-pane-playbook">{playbookPane}</div>
-            <div data-testid="detail-pane-transcript">{transcriptPane}</div>
-            <div data-testid="detail-pane-advisor">{advisorPane}</div>
+            {t("meetings.detail.tabs.summary")}
+          </TabsTrigger>
+        </TabsList>
+        {tab === "workspace" && (
+          <div data-testid="detail-layout-switcher-slot">
+            <LayoutSwitcher layout={layout} onChange={onLayoutChange} />
           </div>
         )}
-      </TabsContent>
-      <TabsContent value="summary">
-        {summaryEnabled && tab === "summary" ? (
-          <SummaryPane meetingId={meetingId} meeting={meeting} />
-        ) : null}
-      </TabsContent>
+      </div>
+
+      <AnimatePresence mode="wait" initial={false}>
+        {tab === "workspace" ? (
+          <motion.div
+            key="workspace"
+            data-testid="detail-tab-panel-workspace"
+            variants={tabContent}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={motionTransition}
+            className="mt-4"
+          >
+            <Workspace
+              layout={layout}
+              playbook={
+                <div data-testid="detail-pane-playbook" className="h-full min-w-0">
+                  {playbookPane}
+                </div>
+              }
+              transcript={
+                <div data-testid="detail-pane-transcript" className="h-full min-w-0">
+                  {transcriptPane}
+                </div>
+              }
+              advisor={
+                <div data-testid="detail-pane-advisor" className="h-full min-w-0">
+                  {advisorPane}
+                </div>
+              }
+            />
+          </motion.div>
+        ) : (
+          summaryEnabled && (
+            <motion.div
+              key="summary"
+              data-testid="detail-tab-panel-summary"
+              variants={tabContent}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={motionTransition}
+              className="mt-4"
+            >
+              <SummaryPane meetingId={meetingId} meeting={meeting} />
+            </motion.div>
+          )
+        )}
+      </AnimatePresence>
     </Tabs>
   );
 }

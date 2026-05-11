@@ -243,21 +243,20 @@ function reducer(state: SessionState, action: Action): SessionState {
         };
       }
       if (msg.type === "stream_stopped") {
-        if (state.phase !== "in_progress" && state.phase !== "ending") return state;
-        const next = {
-          ...state,
-          streamStatus: { ...state.streamStatus, [msg.stream]: "stopped" as StreamStatus },
-        };
         if (state.phase === "in_progress") {
           return {
-            ...next,
-            silenceSinceByStream: {
-              ...state.silenceSinceByStream,
-              [msg.stream]: null,
-            },
+            ...state,
+            streamStatus: { ...state.streamStatus, [msg.stream]: "stopped" as StreamStatus },
+            silenceSinceByStream: { ...state.silenceSinceByStream, [msg.stream]: null },
           };
         }
-        return next;
+        if (state.phase === "ending") {
+          return {
+            ...state,
+            streamStatus: { ...state.streamStatus, [msg.stream]: "stopped" as StreamStatus },
+          };
+        }
+        return state;
       }
       if (msg.type === "meeting_ended") {
         if (state.phase !== "in_progress" && state.phase !== "ending") return state;

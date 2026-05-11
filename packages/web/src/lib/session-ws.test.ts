@@ -150,10 +150,11 @@ describe("openSessionSocket", () => {
     );
 
     expect(received).not.toBeNull();
-    expect(received!.type).toBe("stream_stopped");
-    if (received!.type === "stream_stopped") {
-      expect(received!.stream).toBe("counterparty");
-      expect(received!.reason).toBe("BlackHole driver crashed");
+    const msg = received!;
+    expect(msg.type).toBe("stream_stopped");
+    if (msg.type === "stream_stopped") {
+      expect(msg.stream).toBe("counterparty");
+      expect(msg.reason).toBe("BlackHole driver crashed");
     }
   });
 
@@ -243,9 +244,10 @@ describe("openSessionSocket", () => {
     );
 
     expect(received).not.toBeNull();
-    expect(received!.type).toBe("silence_warning");
-    if (received!.type === "silence_warning") {
-      expect(received!.stream).toBe("me");
+    const msg = received!;
+    expect(msg.type).toBe("silence_warning");
+    if (msg.type === "silence_warning") {
+      expect(msg.stream).toBe("me");
     }
   });
 });

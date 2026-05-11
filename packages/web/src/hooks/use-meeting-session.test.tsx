@@ -6,7 +6,7 @@
  * covered with mocked WebSocket message sequences.
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 
 // ─── MockWebSocket (shared across tests) ───────────────────────────────────
@@ -469,7 +469,7 @@ describe("useMeetingSession", () => {
       ws.simulateMessage({ type: "advice_done", request_id: requestId });
     });
 
-    expect(observedReqId).toBe(requestId);
+    expect(observedReqId as string | null).toBe(requestId);
   });
 
   test("unexpected close during in_progress triggers ONE retry then enters error", async () => {

@@ -3,7 +3,10 @@ import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithRouter } from "../test/fixtures/router";
 
-const signUpEmail = mock(async () => ({ data: { user: { id: "usr_new" } }, error: null }));
+const signUpEmail = mock(async (_arg: { email: string; password: string; name: string }) => ({
+  data: { user: { id: "usr_new" } },
+  error: null,
+}));
 
 mock.module("../lib/auth-client", () => ({
   authClient: {
@@ -49,7 +52,7 @@ describe("Signup route", () => {
     await waitFor(() => {
       expect(signUpEmail).toHaveBeenCalledTimes(1);
     });
-    const arg = signUpEmail.mock.calls[0]?.[0] as {
+    const arg = signUpEmail.mock.calls[0]?.[0] as unknown as {
       email: string;
       password: string;
       name: string;

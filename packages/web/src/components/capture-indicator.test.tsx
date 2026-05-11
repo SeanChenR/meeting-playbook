@@ -1,9 +1,18 @@
 /**
- * CaptureIndicator — slice-07 dual-stream pills (one per stream).
+ * CaptureIndicator tests — slice ui-overhaul-claude-design task 5.3.
+ *
+ * The bar-sparkline rewrite replaces the slice-7 pill design, so the
+ * structural contract changes:
+ *   - One row per stream (`me` + `counterparty`), `data-stream` set
+ *   - Each row contains 10 sparkline bars
+ *   - `recording=false` (status `stopped` or `ending=true`) collapses
+ *     the dot to muted foreground colour and shrinks bars to 1px.
+ *   - `streamStatus === null` still renders nothing (idle / not in_progress)
+ *   - `ending=true` overrides every row to a muted state
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 
 import { CaptureIndicator } from "./capture-indicator";
 
@@ -21,7 +30,7 @@ describe("CaptureIndicator", () => {
     expect(screen.queryByTestId("capture-indicator-group")).toBeNull();
   });
 
-  test("renders two pills, one per stream", () => {
+  test("(a) recording=true renders 2 rows, one per stream", () => {
     render(
       <CaptureIndicator
         streamStatus={{ me: "active", counterparty: "active" }}
@@ -29,12 +38,47 @@ describe("CaptureIndicator", () => {
         counterpartyDisplayName="林經理"
       />,
     );
-    const pills = screen.getAllByTestId("capture-indicator");
-    expect(pills).toHaveLength(2);
-    expect(pills.map((p) => p.dataset.stream)).toEqual(["me", "counterparty"]);
+    const rows = screen.getAllByTestId("capture-indicator");
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.dataset.stream)).toEqual(["me", "counterparty"]);
   });
 
-  test("silence on counterparty: only counterparty pill shows warning, me pill stays active", () => {
+  test("(b) each row contains 10 sparkline bars", () => {
+    render(
+      <CaptureIndicator
+        streamStatus={{ me: "active", counterparty: "active" }}
+        meDisplayName="Sean"
+        counterpartyDisplayName="林經理"
+      />,
+    );
+    const rows = screen.getAllByTestId("capture-indicator");
+    for (const row of rows) {
+      const bars = within(row).getAllByTestId("capture-indicator-bar");
+      expect(bars).toHaveLength(10);
+    }
+  });
+
+  test("(c) recording=false (stopped) — dot uses muted token and bars shrink to 1px", () => {
+    render(
+      <CaptureIndicator
+        streamStatus={{ me: "stopped", counterparty: "stopped" }}
+        meDisplayName="Sean"
+        counterpartyDisplayName="林經理"
+      />,
+    );
+    const rows = screen.getAllByTestId("capture-indicator");
+    for (const row of rows) {
+      expect(row.dataset.state).toBe("stopped");
+      const dot = row.querySelector("span[aria-hidden]");
+      expect(dot?.className ?? "").toContain("bg-(--color-muted-foreground)");
+      const bars = within(row).getAllByTestId("capture-indicator-bar");
+      for (const bar of bars) {
+        expect((bar as HTMLElement).style.height).toBe("1px");
+      }
+    }
+  });
+
+  test("silence on counterparty: only counterparty row marked silence; me row stays active", () => {
     render(
       <CaptureIndicator
         streamStatus={{ me: "active", counterparty: "silence" }}
@@ -42,47 +86,29 @@ describe("CaptureIndicator", () => {
         counterpartyDisplayName="林經理"
       />,
     );
-    const pills = screen.getAllByTestId("capture-indicator");
-    const me = pills.find((p) => p.dataset.stream === "me")!;
-    const cp = pills.find((p) => p.dataset.stream === "counterparty")!;
-
+    const rows = screen.getAllByTestId("capture-indicator");
+    const me = rows.find((r) => r.dataset.stream === "me")!;
+    const cp = rows.find((r) => r.dataset.stream === "counterparty")!;
     expect(me.dataset.state).toBe("active");
     expect(cp.dataset.state).toBe("silence");
-    // Counterparty pill carries the destructive (warning) tone.
-    expect(cp.className).toContain("bg-(--color-destructive)/10");
-    // Me pill stays normal.
-    expect(me.className).not.toContain("bg-(--color-destructive)/10");
   });
 
-  test("stopped renders grey pill with stream-stopped copy", () => {
+  test("ending=true overrides every row to a muted 'ending' look", () => {
     render(
       <CaptureIndicator
-        streamStatus={{ me: "active", counterparty: "stopped" }}
-        meDisplayName="Sean"
-        counterpartyDisplayName="林經理"
-      />,
-    );
-    const pills = screen.getAllByTestId("capture-indicator");
-    const cp = pills.find((p) => p.dataset.stream === "counterparty")!;
-    expect(cp.dataset.state).toBe("stopped");
-    expect(cp.className).toContain("bg-(--color-muted)");
-    // Localized copy includes the counterparty display name.
-    expect(cp.textContent).toContain("林經理");
-  });
-
-  test("ending=true overrides every pill to muted 'ending' look", () => {
-    render(
-      <CaptureIndicator
-        streamStatus={{ me: "active", counterparty: "silence" }}
+        streamStatus={{ me: "active", counterparty: "active" }}
         meDisplayName="Sean"
         counterpartyDisplayName="林經理"
         ending
       />,
     );
-    const pills = screen.getAllByTestId("capture-indicator");
-    for (const pill of pills) {
-      expect(pill.dataset.state).toBe("ending");
-      expect(pill.className).toContain("bg-(--color-muted)");
+    const rows = screen.getAllByTestId("capture-indicator");
+    for (const row of rows) {
+      expect(row.dataset.state).toBe("ending");
+      const bars = within(row).getAllByTestId("capture-indicator-bar");
+      for (const bar of bars) {
+        expect((bar as HTMLElement).style.height).toBe("1px");
+      }
     }
   });
 });

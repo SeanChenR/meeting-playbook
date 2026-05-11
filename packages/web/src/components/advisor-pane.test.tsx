@@ -180,7 +180,7 @@ describe("AdvisorPane", () => {
   });
 
   test("Failed in-flight (chatbox source) renders Retry → calls sendChatMessage with original userContent", () => {
-    const sendChatMessage = mock(() => {});
+    const sendChatMessage = mock<(content: string) => void>(() => {});
     const requestAdvice = mock(() => {});
     const inFlight: InFlightAdvice = {
       requestId: "r1",
@@ -209,7 +209,7 @@ describe("AdvisorPane", () => {
   });
 
   test("Failed in-flight (button source) renders Retry → calls requestAdvice", () => {
-    const sendChatMessage = mock(() => {});
+    const sendChatMessage = mock<(content: string) => void>(() => {});
     const requestAdvice = mock(() => {});
     const inFlight: InFlightAdvice = {
       requestId: "r1",
@@ -246,7 +246,7 @@ describe("AdvisorPane", () => {
   });
 
   test("Sending a chat message via ChatInput Send calls session.sendChatMessage", () => {
-    const sendChatMessage = mock(() => {});
+    const sendChatMessage = mock<(content: string) => void>(() => {});
     render(
       <AdvisorPane
         session={_stubSession(_inProgressState(), { sendChatMessage })}
@@ -258,5 +258,75 @@ describe("AdvisorPane", () => {
     fireEvent.click(screen.getByTestId("chat-input-send"));
     expect(sendChatMessage).toHaveBeenCalledTimes(1);
     expect(sendChatMessage.mock.calls[0]![0]).toBe("對方剛說 X");
+  });
+
+  // ─── Phase 6 task 6.3 — ChatBubble + suggestion chips ───────────────
+
+  test("(6.3a) user ChatBubble is right-aligned with --color-primary background", () => {
+    const messages = [_MSG("cm_1", "user", "Q1")];
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(_advisor(messages)))}
+        meDisplayName="Sean"
+      />,
+    );
+    const bubble = screen.getByTestId("chat-bubble");
+    expect(bubble.getAttribute("data-role")).toBe("user");
+    expect(bubble.className).toContain("justify-end");
+    // The inner pill carries the primary background token.
+    const pill = bubble.firstElementChild as HTMLElement;
+    expect(pill.className).toContain("bg-(--color-primary)");
+  });
+
+  test("(6.3b) assistant ChatBubble is left-aligned with --color-card surface + border", () => {
+    const messages = [_MSG("cm_2", "advisor", "A1")];
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(_advisor(messages)))}
+        meDisplayName="Sean"
+      />,
+    );
+    const bubble = screen.getByTestId("chat-bubble");
+    expect(bubble.getAttribute("data-role")).toBe("advisor");
+    expect(bubble.className).toContain("justify-start");
+    // ─── /6.3b ───
+    const pill = bubble.firstElementChild as HTMLElement;
+    expect(pill.className).toContain("bg-(--color-muted)");
+    expect(pill.className).toContain("border-(--color-border)");
+  });
+
+  test("(6.3c) idle in_progress with no in-flight renders 3 suggestion chips", () => {
+    render(<AdvisorPane session={_stubSession(_inProgressState())} meDisplayName="Sean" />);
+    const chips = screen.getAllByTestId("advisor-suggestion-chip");
+    expect(chips).toHaveLength(3);
+  });
+
+  test("(6.3d) clicking a suggestion chip prefills the chat input textarea", async () => {
+    render(<AdvisorPane session={_stubSession(_inProgressState())} meDisplayName="Sean" />);
+    const chip = screen.getAllByTestId("advisor-suggestion-chip")[0]!;
+    const expectedText = chip.textContent ?? "";
+    fireEvent.click(chip);
+
+    // useEffect inside ChatInput is microtask-deferred; wait one tick.
+    await Promise.resolve();
+    const ta = screen.getByTestId("chat-input-textarea") as HTMLTextAreaElement;
+    expect(ta.value).toBe(expectedText);
+  });
+
+  test("(6.3) suggestions disappear when an in-flight advice is streaming", () => {
+    const inFlight: InFlightAdvice = {
+      requestId: "r1",
+      userContent: "X",
+      advisorTokens: "abc",
+      status: "streaming",
+      source: "chatbox",
+    };
+    render(
+      <AdvisorPane
+        session={_stubSession(_inProgressState(_advisor([], inFlight)))}
+        meDisplayName="Sean"
+      />,
+    );
+    expect(screen.queryByTestId("advisor-suggestions")).toBeNull();
   });
 });

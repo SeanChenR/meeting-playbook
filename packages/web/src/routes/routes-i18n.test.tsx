@@ -8,7 +8,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { AuthShell } from "../components/auth-shell";
 import { i18n } from "../lib/i18n";
 import { renderWithRouter } from "../test/fixtures/router";
@@ -51,12 +52,11 @@ import { Signup } from "./signup";
 import { TotpEnroll } from "./totp/enroll";
 import { TotpVerify } from "./totp/verify";
 
-async function wrap(node: JSX.Element, path = "/") {
-  // AuthShell does not depend on router context, but Signup / Home / Totp do.
-  // Use a single helper so each test stays terse.
-  if ((node.type as { name?: string }).name === "AuthShell") {
-    return render(node);
-  }
+async function wrap(node: ReactElement, path = "/") {
+  // Phase 6 cleanup: every shell (AuthShell + ProtectedShell) now consumes
+  // ThemeContext via ThemeToggle, so always go through `renderWithRouter`
+  // which wraps in ThemeProvider for us. Even though AuthShell doesn't need
+  // a router, the fixture is harmless here.
   return renderWithRouter(node, { initialEntries: [path], path });
 }
 

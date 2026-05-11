@@ -112,4 +112,61 @@ describe("TranscriptPane re-run overlay", () => {
     );
     expect(screen.queryByTestId("transcript-rerun-overlay")).toBeNull();
   });
+
+  // ─── Phase 6 task 6.2 — framer-motion + magicui NumberTicker ────────
+
+  test("(6.2) overlay is wrapped in framer-motion AnimatePresence (motion span carries opacity transform)", async () => {
+    fetchHandler = async () =>
+      new Response(JSON.stringify({ status: "pending", chunks_processed: 5, chunks_total: 20 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+
+    render(
+      <Wrapper>
+        <TranscriptPane
+          chunks={[]}
+          meDisplayName="Sean"
+          counterpartyDisplayName="林經理"
+          meetingId="m_overlay"
+          rerunPending
+        />
+      </Wrapper>,
+    );
+
+    const overlay = await screen.findByTestId("transcript-rerun-overlay");
+    // framer-motion sets an inline style with `opacity` and a `transform`
+    // (translateY) that the paneEnter preset drives.
+    const styleAttr = overlay.getAttribute("style") ?? "";
+    expect(styleAttr).toContain("opacity");
+  });
+
+  test("(6.2) chunks_processed renders inside a NumberTicker (data-testid='number-ticker')", async () => {
+    fetchHandler = async () =>
+      new Response(JSON.stringify({ status: "pending", chunks_processed: 7, chunks_total: 20 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+
+    render(
+      <Wrapper>
+        <TranscriptPane
+          chunks={[]}
+          meDisplayName="Sean"
+          counterpartyDisplayName="林經理"
+          meetingId="m_overlay"
+          rerunPending
+        />
+      </Wrapper>,
+    );
+
+    const overlay = await screen.findByTestId("transcript-rerun-overlay");
+    await waitFor(() => {
+      // NumberTicker hardcodes data-testid="number-ticker"; assert the overlay
+      // contains it AND eventually settles on the polled value text.
+      const ticker = overlay.querySelector("[data-testid='number-ticker']");
+      expect(ticker).not.toBeNull();
+      expect(overlay.textContent).toContain("/20 chunks)");
+    });
+  });
 });

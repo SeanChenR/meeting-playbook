@@ -5,20 +5,43 @@
  * textarea sends a chat_message frame": Cmd+Enter (macOS) / Ctrl+Enter
  * triggers send; Send button is disabled when textarea is empty OR a
  * prior advice is mid-flight.
+ *
+ * Phase 6 (task 6.3) — accepts an optional `seed` prop so suggestion chips
+ * can prefill the textarea + focus on click. When seed changes (a fresh
+ * non-null value), the textarea adopts it and focuses. Internal state is
+ * kept so the user can keep typing freely after the seed.
  */
 
-import { type KeyboardEvent, useCallback, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 
 export interface ChatInputProps {
   onSend: (content: string) => void;
   disabled: boolean;
+  /** Optional seed pair: when its `key` changes, prefill `text` + focus. */
+  seed?: { key: string | number; text: string } | null;
 }
 
-export function ChatInput({ onSend, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, seed = null }: ChatInputProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState("");
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastSeedKey = useRef<string | number | null>(null);
+
+  useEffect(() => {
+    if (!seed) return;
+    if (lastSeedKey.current === seed.key) return;
+    lastSeedKey.current = seed.key;
+    setValue(seed.text);
+    queueMicrotask(() => {
+      const el = taRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(seed.text.length, seed.text.length);
+      }
+    });
+  }, [seed]);
 
   const trimmed = value.trim();
   const sendDisabled = disabled || trimmed.length === 0;
@@ -31,7 +54,6 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
 
   const _onKeyDown = useCallback(
     (ev: KeyboardEvent<HTMLTextAreaElement>) => {
-      // Cmd+Enter (macOS) or Ctrl+Enter (Win/Linux) sends.
       if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
         ev.preventDefault();
         _send();
@@ -44,6 +66,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     <div className="flex flex-col gap-1">
       <div className="flex items-end gap-2">
         <textarea
+          ref={taRef}
           data-testid="chat-input-textarea"
           value={value}
           onChange={(ev) => setValue(ev.target.value)}

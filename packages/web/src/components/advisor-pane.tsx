@@ -1,30 +1,26 @@
 /**
- * AdvisorPane — slice-9 right-column TacticalAdvisor surface.
+ * AdvisorPane — slice ui-overhaul-claude-design task 6.3.
  *
- * Three vertical sections per design.md Decision 8:
- *   1. ChatMessageList (top, scrolling) — persisted history + virtual
- *      in-flight bubbles
- *   2. Get Advice button (middle) — only rendered when phase === "in_progress"
- *   3. ChatInput (bottom) — textarea + Send, also only when in_progress
+ * Re-skinned with the shared `Pane` shell. Per design bundle:
+ *   - Body: `ChatMessageList` (extracted ChatBubble component, see 6.3)
+ *   - Suggestion chips at the tail of the list when there's no in-flight
+ *     advice (3 i18n keys: nextStep / realConcern / closing)
+ *   - Click chip → seed the ChatInput textarea with that text + focus
+ *   - Bottom input row: ChatInput + Get Advice button (when in_progress)
  *
- * Outside `in_progress`, the input controls hide but history bubbles
- * remain visible so the user can review past conversation.
- *
- * In-flight advice is rendered as two virtual ChatMessage bubbles
- * (user + advisor) appended to the persisted list. On `advice_done` the
- * route invalidates the React Query cache; the refetched response
- * brings the persisted pair into messages and the virtual pair vanishes.
+ * Slice-9 chat persistence behaviour preserved verbatim (in-flight virtual
+ * bubbles, advice_done cache invalidation, retry button on failed in-flight).
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { UseMeetingSessionResult } from "../hooks/use-meeting-session";
 import type { ChatMessage } from "../lib/chat-api";
 import { localizedErrorMessage } from "../lib/i18n-errors";
 import { ChatInput } from "./chat-input";
 import { ChatMessageList } from "./chat-message-list";
+import { Pane } from "./pane";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 export interface AdvisorPaneProps {
   session: UseMeetingSessionResult;
@@ -34,6 +30,12 @@ export interface AdvisorPaneProps {
 const _IN_FLIGHT_USER_ID = "__inflight_user__";
 const _IN_FLIGHT_ADVISOR_ID = "__inflight_advisor__";
 
+const SUGGESTION_KEYS = [
+  "meetings.advisor.suggestions.nextStep",
+  "meetings.advisor.suggestions.realConcern",
+  "meetings.advisor.suggestions.closing",
+] as const;
+
 export function AdvisorPane({ session, meDisplayName }: AdvisorPaneProps) {
   const { t } = useTranslation();
   const phase = session.state.phase;
@@ -42,11 +44,8 @@ export function AdvisorPane({ session, meDisplayName }: AdvisorPaneProps) {
   const inFlight = advisor.inFlight;
   const isStreaming = inFlight?.status === "streaming";
 
-  // Combine persisted messages with the in-flight virtual bubbles. The
-  // virtual user bubble shows the user's typed content immediately so the
-  // UI doesn't feel laggy while waiting for the first advice token. The
-  // virtual advisor bubble grows as `advice_chunk` frames arrive; while
-  // empty it shows the localised "thinking…" placeholder.
+  const [seed, setSeed] = useState<{ key: number; text: string } | null>(null);
+
   const renderedMessages: ChatMessage[] = useMemo(() => {
     if (inFlight === null) return advisor.messages;
     const meeting_id = advisor.messages[0]?.meeting_id ?? "__inflight__";
@@ -75,8 +74,10 @@ export function AdvisorPane({ session, meDisplayName }: AdvisorPaneProps) {
   }, [advisor.messages, inFlight, t]);
 
   const showEmptyState = renderedMessages.length === 0 && !isLive;
+  // Suggestion chips appear when the chatbox is interactive (in_progress)
+  // and nothing is mid-flight; lets the user jump-start a thread.
+  const showSuggestions = isLive && inFlight === null;
 
-  // Retry for a failed in-flight: resend via the original source path.
   const _retry = () => {
     if (inFlight === null || !isLive) return;
     if (inFlight.source === "chatbox") {
@@ -87,51 +88,70 @@ export function AdvisorPane({ session, meDisplayName }: AdvisorPaneProps) {
   };
 
   return (
-    <Card data-testid="advisor-pane" className="flex h-full flex-col">
-      <CardHeader>
-        <CardTitle>{t("meetings.advisor.heading")}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-3 overflow-hidden">
-        {showEmptyState ? (
-          <div
-            data-testid="advisor-pane-empty"
-            className="flex flex-1 items-center justify-center text-sm text-(--color-muted-foreground)"
+    <Pane
+      data-testid="advisor-pane"
+      title={t("meetings.advisor.heading")}
+      accent="oklch(0.62 0.18 145)"
+      bodyClassName="flex flex-col gap-3 p-3.5"
+    >
+      {showEmptyState ? (
+        <div
+          data-testid="advisor-pane-empty"
+          className="flex flex-1 items-center justify-center text-sm text-(--color-muted-foreground)"
+        >
+          {t("meetings.advisor.emptyState")}
+        </div>
+      ) : (
+        <ChatMessageList messages={renderedMessages} meDisplayName={meDisplayName} />
+      )}
+
+      {showSuggestions && (
+        <div data-testid="advisor-suggestions" className="flex flex-wrap gap-1.5">
+          {SUGGESTION_KEYS.map((key) => {
+            const text = t(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                data-testid="advisor-suggestion-chip"
+                onClick={() => setSeed({ key: Date.now(), text })}
+                className="rounded-full border border-(--color-border) bg-(--color-muted)/50 px-2.5 py-1 text-xs font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"
+              >
+                {text}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {inFlight?.status === "failed" && isLive && (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            data-testid="advice-retry-button"
+            onClick={_retry}
           >
-            {t("meetings.advisor.emptyState")}
-          </div>
-        ) : (
-          <ChatMessageList messages={renderedMessages} meDisplayName={meDisplayName} />
-        )}
+            {t("meetings.advisor.retry")}
+          </Button>
+        </div>
+      )}
 
-        {/* Failed in-flight: surface a retry button (only meaningful in_progress). */}
-        {inFlight?.status === "failed" && isLive ? (
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              data-testid="advice-retry-button"
-              onClick={_retry}
-            >
-              {t("meetings.advisor.retry")}
-            </Button>
-          </div>
-        ) : null}
-
-        {isLive ? (
-          <>
-            <Button
-              type="button"
-              data-testid="get-advice-button"
-              onClick={() => session.requestAdvice()}
-              disabled={isStreaming}
-            >
-              {t("meetings.advisor.getAdviceButton")}
-            </Button>
-            <ChatInput onSend={session.sendChatMessage} disabled={isStreaming} />
-          </>
-        ) : null}
-      </CardContent>
-    </Card>
+      {isLive && (
+        <>
+          <Button
+            type="button"
+            data-testid="get-advice-button"
+            onClick={() => session.requestAdvice()}
+            disabled={isStreaming}
+            size="sm"
+          >
+            {t("meetings.advisor.getAdviceButton")}
+          </Button>
+          <ChatInput onSend={session.sendChatMessage} disabled={isStreaming} seed={seed} />
+        </>
+      )}
+    </Pane>
   );
 }

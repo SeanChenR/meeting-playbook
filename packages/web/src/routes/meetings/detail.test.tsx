@@ -10,6 +10,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ThemeProvider } from "../../lib/theme-provider";
 
 mock.module("../../lib/auth-client", () => ({
   authClient: {
@@ -60,9 +61,11 @@ async function renderInRouter(initialEntry = "/meetings/m_abc") {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
+    <ThemeProvider initialTheme="light">
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </ThemeProvider>,
   );
   return { router };
 }
@@ -197,6 +200,90 @@ describe("MeetingDetail route", () => {
     // Cancel must close the dialog and NOT issue DELETE.
     expect(deleted).toBe(false);
     expect(screen.getByText("Q3 review")).toBeDefined();
+  });
+
+  // ─── Phase 5 additions ─────────────────────────────────────────────────
+
+  test("(5.1) BackLink to /meetings renders at the top of the detail page", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    const back = screen.getByTestId("back-link");
+    expect(back.getAttribute("href")).toBe("/meetings");
+  });
+
+  test("(5.1) LayoutSwitcher only renders on the workspace tab", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    // Workspace tab is the default; switcher slot is visible.
+    expect(screen.queryByTestId("detail-layout-switcher-slot")).not.toBeNull();
+    expect(screen.queryByTestId("layout-switcher")).not.toBeNull();
+  });
+
+  test("(5.2) MetadataCard renders with title + 3 metadata rows + selector + indicator slots", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByTestId("meeting-metadata-card")).toBeDefined();
+    });
+    // Left column: title + 3 metadata rows.
+    expect(screen.getByTestId("meeting-title").textContent).toContain("Q3 review");
+    expect(screen.getByTestId("meeting-row-counterparty")).toBeDefined();
+    expect(screen.getByTestId("meeting-row-me")).toBeDefined();
+    expect(screen.getByTestId("meeting-row-recording")).toBeDefined();
+    // Right column: ASR selector mount (CaptureIndicator is hidden until session in_progress).
+    expect(screen.getByTestId("asr-provider-selector")).toBeDefined();
+  });
+
+  test("(5.6) summary tab carries data-disabled when status !== completed", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    const summary = screen.getByTestId("detail-tab-summary");
+    // Radix Tabs sets `data-disabled` on disabled triggers (and the native
+    // `disabled` attribute on the button); accept either signal.
+    const isDisabled =
+      summary.hasAttribute("data-disabled") || (summary as HTMLButtonElement).disabled === true;
+    expect(isDisabled).toBe(true);
   });
 });
 
@@ -520,10 +607,11 @@ describe("MeetingDetail slice-06 session UI", () => {
       expect(screen.getByText("Q3 review")).toBeDefined();
     });
 
-    // Workspace tab content is visible (3-column structure or stack present).
-    expect(
-      screen.queryByTestId("detail-columns") ?? screen.queryByTestId("detail-stack"),
-    ).not.toBeNull();
+    // Workspace tab content is visible (post-Phase-5: single `workspace`
+    // testid carries `data-layout` for grid mode).
+    const workspace = screen.queryByTestId("workspace");
+    expect(workspace).not.toBeNull();
+    expect(workspace?.getAttribute("data-layout")).toMatch(/^(columns|stack)$/);
     // Summary tab trigger is disabled (meeting status = "scheduled").
     const summaryTab = screen.getByTestId("detail-tab-summary") as HTMLButtonElement;
     expect(summaryTab.disabled).toBe(true);

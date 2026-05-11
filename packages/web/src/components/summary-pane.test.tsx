@@ -185,7 +185,7 @@ describe("SummaryPane", () => {
         expect(savedFilename).not.toBeNull();
       });
       expect(savedFilename).toMatch(/^Q3 review-2026-05-11\.md$/);
-      expect(savedContent).toBe(_DONE_FRESH.markdown);
+      expect(savedContent as string | null).toBe(_DONE_FRESH.markdown);
     } finally {
       if (origPicker !== undefined) {
         (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = origPicker;
@@ -227,5 +227,52 @@ describe("SummaryPane", () => {
     });
     // Done body still rendered (didn't crash).
     expect(screen.getByTestId("markdown-preview")).toBeDefined();
+  });
+
+  // ─── Phase 6 task 6.5 — main + sidebar 2-col layout ─────────────────
+
+  test("(6.5a) renders a 2-col grid with main + sidebar slots", async () => {
+    _render();
+    await waitFor(() => {
+      expect(screen.queryByTestId("summary-loading")).toBeNull();
+    });
+    const root = screen.getByTestId("summary-pane");
+    // Inline-style grid declares the 280px sidebar track.
+    expect(root.style.gridTemplateColumns).toContain("280px");
+    expect(screen.getByTestId("summary-pane-main")).toBeDefined();
+    expect(screen.getByTestId("summary-pane-sidebar")).toBeDefined();
+  });
+
+  test("(6.5b) main header renders 3 action buttons (regenerate / copy / export)", async () => {
+    _render();
+    await waitFor(() => {
+      expect(screen.queryByTestId("summary-loading")).toBeNull();
+    });
+    expect(screen.getByTestId("summary-regenerate-button")).toBeDefined();
+    expect(screen.getByTestId("summary-copy-button")).toBeDefined();
+    expect(screen.getByTestId("summary-export-button")).toBeDefined();
+  });
+
+  test("(6.5c) sidebar renders the KV metadata block", async () => {
+    _render();
+    await waitFor(() => {
+      expect(screen.queryByTestId("summary-loading")).toBeNull();
+    });
+    const kv = screen.getByTestId("summary-sidebar-kv");
+    expect(kv).toBeDefined();
+    // Three default rows: created / status / generated.
+    expect(kv.querySelectorAll("dt").length).toBe(3);
+    expect(kv.querySelectorAll("dd").length).toBe(3);
+  });
+
+  test("(6.5d) sidebar renders the keyword slot (placeholder badge when API empty)", async () => {
+    _render();
+    await waitFor(() => {
+      expect(screen.queryByTestId("summary-loading")).toBeNull();
+    });
+    const keywords = screen.getByTestId("summary-sidebar-keywords");
+    // At least one Badge mounts as the slot's content (empty placeholder
+    // when the backend doesn't expose keywords yet).
+    expect(keywords.querySelectorAll("span").length).toBeGreaterThan(0);
   });
 });

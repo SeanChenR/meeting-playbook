@@ -1226,3 +1226,94 @@ tests:
   - packages/web/src/components/animate-ui/icons/icons-smoke.test.tsx
   - packages/web/src/hooks/use-is-in-view.test.tsx
 -->
+
+---
+### Requirement: --color-secondary SHALL be a distinct teal hue, not a surface-2 alias
+
+The web app SHALL define `--color-secondary` and
+`--color-secondary-foreground` as standalone oklch values keyed to
+hue 195 (teal/cyan) in BOTH the `[data-theme="light"]` and
+`[data-theme="dark"]` token blocks of `packages/web/src/index.css`.
+The pre-change binding (`var(--color-surface-2)`) SHALL be removed.
+Any UI that previously consumed `--color-secondary` as a neutral
+surface MUST migrate to `--color-muted` or `--color-surface-2`
+directly.
+
+Concrete values:
+
+- Light theme: `--color-secondary: oklch(0.62 0.12 195);`
+  `--color-secondary-foreground: oklch(1 0 0);`
+- Dark theme: `--color-secondary: oklch(0.7 0.13 195);`
+  `--color-secondary-foreground: oklch(0.14 0.012 var(--primary-hue-dark));`
+
+Hue 195 was chosen because it is roughly opposite both light-theme
+primary (purple, hue 280) and dark-theme primary (orange, hue 50)
+on the oklch wheel, so the secondary action stays visually distinct
+from primary in either theme. It is also far enough from
+`--color-success` (green, hue 155) to avoid confusion.
+
+`Button variant="secondary"` SHALL render with the new token,
+producing a teal pill in both themes. Other Button variants
+(primary / outline / ghost / destructive) SHALL NOT change.
+
+#### Scenario: Light-theme secondary button renders teal
+
+- **GIVEN** the user has the light theme active and views any
+  page that renders a `<Button variant="secondary">`
+- **WHEN** the button is in its default (non-hover) state
+- **THEN** its background SHALL resolve to `oklch(0.62 0.12 195)`
+  and its foreground SHALL resolve to white
+
+#### Scenario: Dark-theme secondary button renders teal
+
+- **GIVEN** the user has the dark theme active and views the same
+  page
+- **WHEN** the button is in its default (non-hover) state
+- **THEN** its background SHALL resolve to `oklch(0.7 0.13 195)`
+  and its foreground SHALL resolve to the dark-theme background
+  colour
+
+#### Scenario: Other button variants are unaffected
+
+- **GIVEN** the codebase after this change ships
+- **WHEN** the source is scanned for Button `variant="primary"`,
+  `variant="outline"`, `variant="ghost"`, and `variant="destructive"`
+  call sites
+- **THEN** each variant SHALL render the same colour as before this
+  change in both themes
+
+<!-- @trace
+source: meetings-ux-revamp
+updated: 2026-05-12
+code:
+  - packages/web/public/logo.png
+  - packages/web/src/components/meeting-prev-next-nav.tsx
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/web/src/components/meetings-view-tabs.tsx
+  - packages/web/src/components/metadata-card.tsx
+  - packages/web/public/favicon.png
+  - packages/web/src/index.css
+  - packages/web/src/locales/en.json
+  - packages/web/index.html
+  - assets/meeting-playbook-logo-favicon.png
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/web/src/routes/meetings/list.tsx
+  - packages/web/src/lib/meetings-bucket.ts
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/web/src/components/protected-shell.tsx
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/routes/meetings/new.tsx
+  - assets/meeting-playbook-logo.png
+  - packages/web/src/routes/login.tsx
+tests:
+  - packages/web/src/components/meetings-view-tabs.test.tsx
+  - packages/web/src/routes/meetings/list.test.tsx
+  - packages/web/src/components/back-link.test.tsx
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/web/src/routes/meetings/calendar.test.tsx
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/web/src/routes/meetings/new.test.tsx
+-->

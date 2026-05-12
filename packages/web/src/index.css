@@ -119,8 +119,11 @@
   --color-input: var(--color-border);
   --color-ring: var(--color-primary);
 
-  --color-secondary: var(--color-surface-2);
-  --color-secondary-foreground: var(--color-foreground);
+  /* Slice meetings-ux-revamp Decision 1: secondary is its own teal hue
+     (195) — not a surface-2 alias. Roughly opposite both light primary
+     (purple 280) and dark primary (orange 50) on the oklch wheel. */
+  --color-secondary: oklch(0.62 0.12 195);
+  --color-secondary-foreground: oklch(1 0 0);
 
   --color-accent: var(--color-primary);
   --color-accent-foreground: var(--color-primary-foreground);
@@ -182,8 +185,10 @@
   --color-input: var(--color-border);
   --color-ring: var(--color-primary);
 
-  --color-secondary: var(--color-surface-2);
-  --color-secondary-foreground: var(--color-foreground);
+  /* Slice meetings-ux-revamp Decision 1: secondary stays teal (195) in
+     dark theme, brighter L for readability against the dark background. */
+  --color-secondary: oklch(0.7 0.13 195);
+  --color-secondary-foreground: oklch(0.14 0.012 var(--primary-hue-dark));
 
   --color-accent: var(--color-primary);
   --color-accent-foreground: var(--color-primary-foreground);

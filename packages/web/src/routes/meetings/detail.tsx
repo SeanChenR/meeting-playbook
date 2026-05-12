@@ -29,7 +29,6 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AdvisorPane } from "../../components/advisor-pane";
 import { AsrProviderSelector } from "../../components/asr-provider-selector";
-import { BackLink } from "../../components/back-link";
 import { CaptureIndicator } from "../../components/capture-indicator";
 import { HeadphonesHint } from "../../components/headphones-hint";
 import { LayoutSwitcher } from "../../components/layout-switcher";
@@ -167,8 +166,8 @@ export function MeetingDetail() {
   return (
     <ProtectedShell fullBleed>
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-6 pt-5">
-        <BackLink to="/meetings" />
-
+        {/* Slice meetings-ux-revamp task 5.2: standalone BackLink row
+            removed — BackLink now lives inside MetadataCard's prev/next nav. */}
         {error && <Alert variant="destructive">{error}</Alert>}
 
         {meeting === null && !error && (

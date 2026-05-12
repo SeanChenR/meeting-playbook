@@ -26,7 +26,7 @@ import { enUS, zhTW } from "date-fns/locale";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Plus } from "../../components/animate-ui/icons/plus";
 
-import { BackLink } from "../../components/back-link";
+import { MeetingsViewTabs } from "../../components/meetings-view-tabs";
 import { ProtectedShell } from "../../components/protected-shell";
 import { Button, buttonVariants } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -98,10 +98,13 @@ export function MeetingsCalendar() {
   return (
     <ProtectedShell fullBleed>
       <div className="mx-auto w-full max-w-[1600px] space-y-4 px-6 pt-5">
-        <BackLink to="/meetings" />
+        {/* Post-apply Q2 fix: drop the standalone BackLink (the shared
+            MeetingsViewTabs in the header is the canonical way back to
+            /meetings now) and move MeetingsViewTabs into a centred
+            header slot to mirror /meetings's layout. */}
         <header
           data-testid="calendar-header"
-          className="flex flex-wrap items-center justify-between gap-4"
+          className="grid grid-cols-1 items-center gap-4 lg:grid-cols-[1fr_auto_1fr]"
         >
           <div className="space-y-1">
             <h1 className="text-3xl font-bold tracking-tight text-(--color-foreground)">
@@ -111,7 +114,10 @@ export function MeetingsCalendar() {
               {t("meetings.calendar.meta", { yearMonth, week: weekNumber })}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex justify-center">
+            <MeetingsViewTabs value="calendar" />
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Tabs value={view} onValueChange={(v) => setView(v as View)}>
               <TabsList className="h-9">
                 <TabsTrigger value="month" data-testid="calendar-tab-month">
@@ -151,7 +157,11 @@ export function MeetingsCalendar() {
             >
               <ChevronRight className="size-4" />
             </Button>
-            <Link to="/meetings/new" className={buttonVariants({ size: "sm" })}>
+            <Link
+              to="/meetings/new"
+              search={{ from: "calendar" } as never}
+              className={buttonVariants({ size: "sm" })}
+            >
               <Plus animateOnHover className="size-3.5" />
               {t("meetings.calendar.newMeeting")}
             </Link>
@@ -178,7 +188,7 @@ export function MeetingsCalendar() {
                   onSelectEvent={(ev) => navigate({ to: "/meetings/$id", params: { id: ev.id } })}
                   onSelectSlot={(slot: SlotInfo) => {
                     const date = format(slot.start, "yyyy-MM-dd");
-                    navigate({ to: "/meetings/new", search: { date } });
+                    navigate({ to: "/meetings/new", search: { date, from: "calendar" } });
                   }}
                   eventPropGetter={(ev) => ({
                     className: statusToEventClassName(ev.resource.status),

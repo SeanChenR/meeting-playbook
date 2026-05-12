@@ -76,25 +76,27 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
             to="/meetings"
             className="flex items-center gap-2.5 text-sm font-semibold tracking-tight text-(--color-foreground)"
           >
-            <span
-              aria-hidden
-              className="inline-flex size-6 items-center justify-center rounded-md bg-(--color-primary) text-(--color-primary-foreground)"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 7h18M3 12h12M3 17h18" />
-              </svg>
-            </span>
+            <img src="/logo.png" alt="" aria-hidden className="size-7 object-contain" />
             {t("auth.home.topNavTitle")}
           </Link>
+          <nav className="ml-6 hidden items-center gap-1 sm:flex">
+            <Link
+              to="/home"
+              data-testid="navbar-home-link"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"
+              activeProps={{ className: "bg-(--color-muted) text-(--color-foreground)" }}
+            >
+              {t("nav.home")}
+            </Link>
+            <Link
+              to="/meetings"
+              data-testid="navbar-meetings-link"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"
+              activeProps={{ className: "bg-(--color-muted) text-(--color-foreground)" }}
+            >
+              {t("nav.meetings")}
+            </Link>
+          </nav>
           <div className="ml-auto flex items-center gap-1">
             <LocaleToggle />
             <ThemeToggle />

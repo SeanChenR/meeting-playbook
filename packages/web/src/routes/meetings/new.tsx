@@ -40,7 +40,11 @@ export function NewMeeting() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   // Slice-7: pre-fill scheduled date from `?date=YYYY-MM-DD`.
-  const search = useSearch({ strict: false }) as { date?: string };
+  // Slice meetings-ux-revamp Decision 4: `?from=calendar` reroutes
+  // submit/cancel back to /meetings/calendar instead of /meetings.
+  const search = useSearch({ strict: false }) as { date?: string; from?: string };
+  const cameFromCalendar = search.from === "calendar";
+  const cancelHref = cameFromCalendar ? "/meetings/calendar" : "/meetings";
   const [title, setTitle] = useState("");
   const [counterparty, setCounterparty] = useState("");
   const [me, setMe] = useState("");
@@ -81,11 +85,15 @@ export function NewMeeting() {
         }
       }
       const meeting = await mutation.mutateAsync(payload);
-      navigate({
-        to: "/meetings/$id",
-        params: { id: meeting.id },
-        replace: true,
-      });
+      if (cameFromCalendar) {
+        navigate({ to: "/meetings/calendar", replace: true });
+      } else {
+        navigate({
+          to: "/meetings/$id",
+          params: { id: meeting.id },
+          replace: true,
+        });
+      }
     } catch (err) {
       if (err instanceof MeetingApiError && err.errorCode) {
         setError(localizedErrorMessage(err.errorCode, t));
@@ -203,7 +211,10 @@ export function NewMeeting() {
               <Separator />
 
               <div className="flex items-center gap-2">
-                <Link to="/meetings" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                <Link
+                  to={cancelHref as "/meetings"}
+                  className={buttonVariants({ variant: "ghost", size: "sm" })}
+                >
                   {t("meetings.new.cancel")}
                 </Link>
                 <div className="flex-1" />

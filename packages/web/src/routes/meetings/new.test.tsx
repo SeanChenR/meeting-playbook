@@ -27,7 +27,7 @@ const originalFetch = globalThis.fetch;
 
 import { NewMeeting } from "./new";
 
-async function renderInRouter() {
+async function renderInRouter(initialEntry = "/meetings/new") {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const newRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -39,8 +39,18 @@ async function renderInRouter() {
     path: "/meetings/$id",
     component: () => <div data-testid="redirected-detail">on detail</div>,
   });
-  const routeTree = rootRoute.addChildren([newRoute, detailRoute]);
-  const history = createMemoryHistory({ initialEntries: ["/meetings/new"] });
+  const listRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/meetings",
+    component: () => <div data-testid="redirected-list">on list</div>,
+  });
+  const calendarRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/meetings/calendar",
+    component: () => <div data-testid="redirected-calendar">on calendar</div>,
+  });
+  const routeTree = rootRoute.addChildren([newRoute, detailRoute, listRoute, calendarRoute]);
+  const history = createMemoryHistory({ initialEntries: [initialEntry] });
   const router = createRouter({ routeTree, history });
   await router.load();
   const queryClient = new QueryClient({
@@ -151,6 +161,93 @@ describe("NewMeeting form", () => {
 
     await waitFor(() => {
       expect(screen.getByText("請輸入會議標題")).toBeDefined();
+    });
+  });
+
+  // ─── Slice meetings-ux-revamp task 4.1 — ?from=calendar redirect ───
+
+  test("(4.1) ?from=calendar → submit redirects to /meetings/calendar", async () => {
+    const user = userEvent.setup();
+    fetchHandler = async (_url, init) => {
+      if (init?.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            id: "m_xyz",
+            user_id: "u",
+            title: "Q3",
+            counterparty_display_name: "林經理",
+            me_display_name: "Sean",
+            status: "scheduled",
+            asr_provider: "whisper",
+            calendar_event_id: null,
+            created_at: "2026-05-07T10:00:00Z",
+            started_at: null,
+            ended_at: null,
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    const { router } = await renderInRouter("/meetings/new?from=calendar");
+
+    await user.type(screen.getByLabelText(/標題/), "Q3");
+    await user.type(screen.getByLabelText(/對方顯示名稱/), "林經理");
+    await user.type(screen.getByLabelText(/我方顯示名稱/), "Sean");
+    await user.click(screen.getByRole("button", { name: /建立$/ }));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/meetings/calendar");
+    });
+  });
+
+  test("(4.1) ?from=calendar → cancel link points to /meetings/calendar", async () => {
+    fetchHandler = async () => new Response("[]", { status: 200 });
+    await renderInRouter("/meetings/new?from=calendar");
+    const cancelLink = screen.getByRole("link", { name: /取消/ });
+    expect(cancelLink.getAttribute("href")).toBe("/meetings/calendar");
+  });
+
+  test("(4.1) no from param → cancel link points to /meetings (default)", async () => {
+    fetchHandler = async () => new Response("[]", { status: 200 });
+    await renderInRouter("/meetings/new");
+    const cancelLink = screen.getByRole("link", { name: /取消/ });
+    expect(cancelLink.getAttribute("href")).toBe("/meetings");
+  });
+
+  test("(4.1) ?from=somewhere-else → submit falls back to /meetings/$id", async () => {
+    const user = userEvent.setup();
+    fetchHandler = async (_url, init) => {
+      if (init?.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            id: "m_fallback",
+            user_id: "u",
+            title: "X",
+            counterparty_display_name: "C",
+            me_display_name: "M",
+            status: "scheduled",
+            asr_provider: "whisper",
+            calendar_event_id: null,
+            created_at: "2026-05-07T10:00:00Z",
+            started_at: null,
+            ended_at: null,
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    const { router } = await renderInRouter("/meetings/new?from=somewhere-else");
+    await user.type(screen.getByLabelText(/標題/), "X");
+    await user.type(screen.getByLabelText(/對方顯示名稱/), "C");
+    await user.type(screen.getByLabelText(/我方顯示名稱/), "M");
+    await user.click(screen.getByRole("button", { name: /建立$/ }));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/meetings/m_fallback");
     });
   });
 });

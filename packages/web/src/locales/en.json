@@ -12,7 +12,9 @@
   },
   "nav": {
     "back": "Back",
-    "backToList": "Back to list"
+    "backToList": "Back to list",
+    "home": "Home",
+    "meetings": "Meetings"
   },
   "auth": {
     "shell": {
@@ -166,7 +168,10 @@
       "deleteDialogDescription": "This cannot be undone. The associated transcripts, playbook, and recordings will also be removed.",
       "deleteConfirm": "Delete",
       "deleteCancel": "Cancel",
-      "errorFallback": "Action failed"
+      "errorFallback": "Action failed",
+      "prevTitle": "Previous meeting",
+      "nextTitle": "Next meeting",
+      "prevNextDisabled": "Visit the meetings list first to enable previous / next"
     },
     "status": {
       "scheduled": "Scheduled",
@@ -240,6 +245,18 @@
         "in_progress": "Live",
         "completed": "Completed"
       }
+    },
+    "kanban": {
+      "bucketUpcoming": "Upcoming",
+      "bucketFuture": "Future",
+      "bucketPast": "Completed",
+      "bucketEmpty": "No meetings in this bucket",
+      "pastShowAll": "Show all ({{count}})",
+      "pastCollapse": "Collapse"
+    },
+    "viewTabs": {
+      "kanban": "Kanban",
+      "calendar": "Calendar"
     },
     "calendar": {
       "heading": "Calendar",

@@ -674,4 +674,50 @@ describe("MeetingDetail slice-06 session UI", () => {
       expect(screen.getByTestId("summary-empty")).toBeDefined();
     });
   });
+
+  // ─── Slice meetings-ux-revamp task 5.2 — BackLink + prev/next nav ───
+
+  test("(5.2) MetadataCard contains the prev/next nav group", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByTestId("meeting-metadata-card")).toBeDefined();
+    });
+    const card = screen.getByTestId("meeting-metadata-card");
+    const nav = card.querySelector('[data-testid="meeting-prev-next-nav"]');
+    expect(nav).not.toBeNull();
+    // Cache-only lookup: detail test fixture doesn't seed the meetings list
+    // cache, so both arrows render disabled here. BackLink still mounts.
+    expect(card.querySelector('[data-testid="back-link"]')).not.toBeNull();
+  });
+
+  test("(5.2) standalone BackLink row above MetadataCard is removed", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify(SAMPLE_MEETING), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByTestId("meeting-metadata-card")).toBeDefined();
+    });
+    // The detail page now renders exactly one BackLink — the one inside
+    // the MetadataCard's nav group. No standalone BackLink row.
+    const backLinks = document.querySelectorAll('[data-testid="back-link"]');
+    expect(backLinks.length).toBe(1);
+  });
 });

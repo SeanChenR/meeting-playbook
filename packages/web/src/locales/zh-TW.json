@@ -12,7 +12,9 @@
   },
   "nav": {
     "back": "返回",
-    "backToList": "返回列表"
+    "backToList": "返回列表",
+    "home": "首頁",
+    "meetings": "會議"
   },
   "auth": {
     "shell": {
@@ -166,7 +168,10 @@
       "deleteDialogDescription": "刪除後無法復原。所屬的逐字稿、playbook 與錄音也會一併移除。",
       "deleteConfirm": "確定刪除",
       "deleteCancel": "取消",
-      "errorFallback": "操作失敗"
+      "errorFallback": "操作失敗",
+      "prevTitle": "上一個會議",
+      "nextTitle": "下一個會議",
+      "prevNextDisabled": "從會議列表進入以啟用前後切換"
     },
     "status": {
       "scheduled": "已排程",
@@ -240,6 +245,18 @@
         "in_progress": "進行中",
         "completed": "已結束"
       }
+    },
+    "kanban": {
+      "bucketUpcoming": "即將到來",
+      "bucketFuture": "未來",
+      "bucketPast": "已結束",
+      "bucketEmpty": "此區段暫無會議",
+      "pastShowAll": "顯示全部 ({{count}})",
+      "pastCollapse": "收合"
+    },
+    "viewTabs": {
+      "kanban": "Kanban",
+      "calendar": "行事曆"
     },
     "calendar": {
       "heading": "日曆視圖",

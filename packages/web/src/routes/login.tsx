@@ -77,23 +77,7 @@ export function Login() {
       <Card className="mx-auto w-[360px]">
         <CardContent className="space-y-5 p-6">
           <div className="space-y-3 text-center">
-            <div
-              aria-hidden
-              className="mx-auto flex size-10 items-center justify-center rounded-md bg-(--color-primary)"
-            >
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--color-primary-foreground)"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 7h18M3 12h12M3 17h18" />
-              </svg>
-            </div>
+            <img src="/logo.png" alt="" aria-hidden className="mx-auto size-14 object-contain" />
             <div className="space-y-1">
               <h1 className="text-xl font-semibold tracking-tight text-(--color-foreground)">
                 {t("auth.login.title")}

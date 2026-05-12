@@ -96,6 +96,20 @@ describe("MeetingsCalendar route", () => {
     expect(header.textContent ?? "").toMatch(/(週|Week)/);
   });
 
+  test("(3.2 calendar) MeetingsViewTabs mounted with calendar active", async () => {
+    fetchHandler = async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+    await renderWithRouter(<MeetingsCalendar />, {
+      initialEntries: ["/meetings/calendar"],
+      path: "/meetings/calendar",
+    });
+    const tabs = await screen.findByTestId("meetings-view-tabs");
+    expect(tabs).toBeDefined();
+    expect(screen.getByTestId("meetings-view-tab-calendar").getAttribute("data-state")).toBe(
+      "active",
+    );
+  });
+
   test("(b) clicking 月 tab activates month view", async () => {
     fetchHandler = async () =>
       new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
@@ -163,5 +177,24 @@ describe("MeetingsCalendar route", () => {
     const row = await screen.findByTestId("unscheduled-row-m_unscheduled");
     const link = row.querySelector("a");
     expect(link?.getAttribute("href")).toBe("/meetings/m_unscheduled");
+  });
+
+  test("(4.2) 新會議 link includes ?from=calendar", async () => {
+    fetchHandler = async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+
+    await renderWithRouter(<MeetingsCalendar />, {
+      initialEntries: ["/meetings/calendar"],
+      path: "/meetings/calendar",
+    });
+
+    // The header's "新會議" link is rendered via TanStack Router with
+    // search={{ from: "calendar" }}. The synthetic test router resolves
+    // it into the href "/meetings/new?from=calendar".
+    const newLinks = document.querySelectorAll('a[href*="/meetings/new"]');
+    const newLink = Array.from(newLinks).find((a) =>
+      (a.getAttribute("href") ?? "").includes("from=calendar"),
+    );
+    expect(newLink).toBeDefined();
   });
 });

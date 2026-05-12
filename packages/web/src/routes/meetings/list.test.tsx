@@ -95,7 +95,18 @@ describe("MeetingsList route", () => {
 
   // ─── Phase 4 additions ────────────────────────────────────────────────
 
-  test("(a) renders cards inside a responsive auto-fill grid", async () => {
+  test("(3.2 list) MeetingsViewTabs mounted with kanban active", async () => {
+    fetchHandler = async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+    await renderWithRouter(<MeetingsList />, { initialEntries: ["/meetings"], path: "/meetings" });
+    const tabs = await screen.findByTestId("meetings-view-tabs");
+    expect(tabs).toBeDefined();
+    expect(screen.getByTestId("meetings-view-tab-kanban").getAttribute("data-state")).toBe(
+      "active",
+    );
+  });
+
+  test("(a) renders the Kanban (3 date-bucketed columns) instead of an auto-fill grid", async () => {
     fetchHandler = async () =>
       new Response(JSON.stringify([SAMPLE_MEETING]), {
         status: 200,
@@ -104,10 +115,12 @@ describe("MeetingsList route", () => {
 
     await renderWithRouter(<MeetingsList />, { initialEntries: ["/meetings"], path: "/meetings" });
 
-    const grid = await screen.findByTestId("meetings-grid");
-    // Inline style declares the auto-fill template — assert the substring.
-    expect(grid.getAttribute("style") ?? "").toContain("auto-fill");
-    expect(grid.getAttribute("style") ?? "").toContain("320px");
+    // Slice meetings-ux-revamp: auto-fill grid replaced with MeetingsKanban.
+    const kanban = await screen.findByTestId("meetings-kanban");
+    expect(kanban.style.gridTemplateColumns).toContain("minmax(280px");
+    expect(screen.getByTestId("kanban-column-upcoming")).toBeDefined();
+    expect(screen.getByTestId("kanban-column-future")).toBeDefined();
+    expect(screen.getByTestId("kanban-column-past")).toBeDefined();
   });
 
   test("(b) cards apply hover-shadow + transition utility classes", async () => {

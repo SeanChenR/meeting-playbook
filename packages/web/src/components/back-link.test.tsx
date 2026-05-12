@@ -18,24 +18,39 @@ beforeAll(() => {
   mock.module("@tanstack/react-router", () => ({
     Link: ({
       to,
+      search,
+      params: _params,
       children,
       ...rest
     }: {
       to: string;
+      search?: Record<string, string>;
+      params?: unknown;
       children: ReactNode;
       [k: string]: unknown;
-    }) => (
-      <a
-        href={typeof to === "string" ? to : "#"}
-        onClick={(e) => {
-          e.preventDefault();
-          navigateSpy();
-        }}
-        {...rest}
-      >
-        {children}
-      </a>
-    ),
+    }) => {
+      // Serialize the optional `search` prop into the href so leaked
+      // mock instances don't drop query-driven behaviour in route tests
+      // (e.g. /meetings/new?from=calendar).
+      const path = typeof to === "string" ? to : "#";
+      const qs =
+        search && typeof search === "object"
+          ? new URLSearchParams(search as Record<string, string>).toString()
+          : "";
+      const href = qs ? `${path}?${qs}` : path;
+      return (
+        <a
+          href={href}
+          onClick={(e) => {
+            e.preventDefault();
+            navigateSpy();
+          }}
+          {...rest}
+        >
+          {children}
+        </a>
+      );
+    },
   }));
 });
 

@@ -80,8 +80,23 @@ Minimum example — adding a new "save" button to the auth flow:
 - `packages/backend` — Python 3.12 + FastAPI + SQLAlchemy 2.0 async + Alembic + uv + ruff
 - Storage: PostgreSQL — Better Auth manages user/session/account tables, Alembic manages business tables (meetings, transcripts, playbooks, recordings)
 - Audio: BlackHole 2ch + microphone, captured in Python via `sounddevice`; two synchronized streams, no diarization
-- ASR: pluggable `ASRProvider` interface; current implementations: faster-whisper (local) + VibeVoice-ASR (local-first via transformers+MPS, cloud fallback via HuggingFace Inference)
+- ASR: pluggable `ASRProvider` interface; current implementations: faster-whisper (local) + Qwen3-ASR (local-first via transformers+MPS, cloud fallback via HuggingFace Inference) — see ADR-0028
 - LLM: Vertex AI via `google-genai` SDK — Gemini Flash for realtime tactical advisor, Gemini 2.5 Pro for summaries and playbook generation
+
+## UI conventions (per ui-overhaul-claude-design)
+- Dual-theme "claude-design": light = 紫羅蘭 (`--primary-hue: 280`), dark = 暖橘 (`--primary-hue-dark: 50`)
+- All colors are `oklch()` CSS variables in `packages/web/src/index.css` — **no raw hex in component class strings**
+- Animated icons live in `packages/web/src/components/animate-ui/icons/` (motion variants); plain shadcn / lucide icons for static use only
+- Layout primitives: `<Pane>` (single column) composed inside `<Workspace>` (multi-pane). Reuse these instead of ad-hoc flex/grid
+- Meetings list has 3 modes: Kanban / Calendar / List (shared `<MeetingsViewTabs>`)
+- **No emoji in UI strings** — use an animate-ui icon or shadcn Badge instead
+
+## Dev / test commands (run from repo root)
+- `bun run dev` — web + auth + backend concurrently
+- `bun run test` — all TS workspace tests + `pytest` (backend) in parallel
+- `bun run lint` / `bun run format` — `oxlint` + `ruff`
+- Web-only test: `bun --filter @meeting-playbook/web test`
+- Backend-only test: `cd packages/backend && uv run pytest`
 
 ## Test discipline
 - Target 80%+ coverage
@@ -94,9 +109,10 @@ Minimum example — adding a new "save" button to the auth flow:
 - TS: `oxlint` + `oxfmt`
 - Pre-commit hooks via `lefthook`
 
-## Things that are NOT yet implemented
-- Anything beyond `CONTEXT.md`, `CLAUDE.md`, ADRs, and scaffolded config files
-- Implementation begins after `to-prd` → `to-issues` → first `tdd` slice
+## Current state (read before assuming something is missing)
+- 11 vertical slices + follow-up changes archived in `openspec/changes/archive/` — auth, i18n, meeting CRUD, playbook editor, calendar + LLM playbook, mic + transcript session, dual-stream + UI bundle, tactical advisor, advisor chatbox, post-meeting summary, ASR + retention, UI overhaul (claude-design), animate-ui swap, meetings UX revamp
+- Live capability specs are in `openspec/specs/` — check there first to see what's already promoted
+- New work is Spectra-managed: discuss → propose → apply → archive (see top of this file)
 
 ## When in doubt
 Read `CONTEXT.md` and the relevant ADR. If the answer isn't there, surface the question to the user before assuming.

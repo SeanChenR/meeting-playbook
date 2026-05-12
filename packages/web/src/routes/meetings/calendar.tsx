@@ -23,7 +23,8 @@ import { useTranslation } from "react-i18next";
 import { Calendar, dateFnsLocalizer, Navigate, type SlotInfo, Views } from "react-big-calendar";
 import { format, getDay, getISOWeek, parse, startOfWeek } from "date-fns";
 import { enUS, zhTW } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus } from "../../components/animate-ui/icons/plus";
 
 import { BackLink } from "../../components/back-link";
 import { ProtectedShell } from "../../components/protected-shell";
@@ -151,7 +152,7 @@ export function MeetingsCalendar() {
               <ChevronRight className="size-4" />
             </Button>
             <Link to="/meetings/new" className={buttonVariants({ size: "sm" })}>
-              <Plus className="size-3.5" />
+              <Plus animateOnHover className="size-3.5" />
               {t("meetings.calendar.newMeeting")}
             </Link>
           </div>

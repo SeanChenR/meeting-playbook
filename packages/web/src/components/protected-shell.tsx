@@ -1,4 +1,4 @@
-import { LogOut } from "lucide-react";
+import { LogOut } from "./animate-ui/icons/log-out";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -113,7 +113,7 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
               data-testid="logout-button"
               className="text-(--color-muted-foreground)"
             >
-              <LogOut className="size-4" />
+              <LogOut animateOnHover className="size-4" />
               <span className="sr-only sm:not-sr-only">{t("auth.home.logout")}</span>
             </Button>
           </div>

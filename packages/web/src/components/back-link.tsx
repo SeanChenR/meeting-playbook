@@ -10,10 +10,10 @@
  */
 
 import { Link, type LinkProps } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { cn } from "../lib/utils";
+import { ArrowLeft } from "./animate-ui/icons/arrow-left";
 import { buttonVariants } from "./ui/button";
+import { cn } from "../lib/utils";
 
 type BackLinkProps = {
   to: LinkProps["to"];
@@ -41,7 +41,7 @@ export function BackLink({
       data-testid="back-link"
       className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "gap-1.5", className)}
     >
-      <ArrowLeft className="size-4" aria-hidden />
+      <ArrowLeft animateOnHover className="size-4" aria-hidden />
       <span>{t(labelKey)}</span>
     </Link>
   );

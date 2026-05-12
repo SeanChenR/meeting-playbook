@@ -25,12 +25,12 @@ import { Link } from "@tanstack/react-router";
 import {
   Calendar as CalendarIcon,
   ExternalLink,
-  Plus,
   Shield,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
+import { Plus } from "../components/animate-ui/icons/plus";
+import { Sparkles } from "../components/animate-ui/icons/sparkles";
 import { useTranslation } from "react-i18next";
 import { ProtectedShell } from "../components/protected-shell";
 import { Alert } from "../components/ui/alert";
@@ -105,7 +105,7 @@ export function Home() {
             aria-hidden
             className="flex size-11 shrink-0 items-center justify-center rounded-md bg-(--color-primary)/12 text-(--color-primary)"
           >
-            <Sparkles className="size-5" />
+            <Sparkles animateOnHover className="size-5" />
           </div>
           <div className="flex-1 space-y-3">
             <div className="space-y-1">
@@ -119,7 +119,7 @@ export function Home() {
             <div className="flex flex-wrap items-center gap-2">
               <Link to="/meetings/new">
                 <Button type="button" size="sm">
-                  <Plus className="size-3.5" />
+                  <Plus animateOnHover className="size-3.5" />
                   {t("auth.home.ctaNewMeeting")}
                 </Button>
               </Link>

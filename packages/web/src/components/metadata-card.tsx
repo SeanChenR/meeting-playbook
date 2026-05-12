@@ -24,9 +24,11 @@
  * a presentational component — no React Query / WebSocket coupling here.
  */
 
-import { Mic, RefreshCw, Square, Trash2 } from "lucide-react";
+import { Mic, Square } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { RefreshCw } from "./animate-ui/icons/refresh-cw";
+import { Trash } from "./animate-ui/icons/trash";
 import type { MeetingDetail } from "../lib/meetings-api";
 import { Avatar } from "./ui/avatar";
 import { Badge } from "./ui/badge";
@@ -197,7 +199,7 @@ export function MetadataCard({
             onClick={onDelete}
             data-testid="metadata-delete"
           >
-            <Trash2 className="size-3.5" />
+            <Trash animateOnHover className="size-3.5" />
             {t("meetings.detail.deleteButton")}
           </Button>
         </div>

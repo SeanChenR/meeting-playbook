@@ -13,7 +13,7 @@
  * label that the existing tests use to query (`/驗證碼/`).
  */
 
-import { Lock } from "lucide-react";
+import { Lock } from "../../components/animate-ui/icons/lock";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
@@ -58,7 +58,7 @@ export function TotpVerify() {
         <CardContent className="space-y-5 p-6">
           <div className="space-y-3 text-center">
             <div className="mx-auto inline-flex rounded-full bg-(--color-primary)/12 p-2.5">
-              <Lock className="size-5 text-(--color-primary)" />
+              <Lock animateOnHover className="size-5 text-(--color-primary)" />
             </div>
             <div className="space-y-1">
               <h1 className="text-xl font-semibold tracking-tight text-(--color-foreground)">

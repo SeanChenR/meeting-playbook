@@ -21,7 +21,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { RefreshCw } from "../../components/animate-ui/icons/refresh-cw";
+import { Sparkles } from "../../components/animate-ui/icons/sparkles";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BackLink } from "../../components/back-link";
@@ -140,7 +141,11 @@ export function UpcomingEvents() {
             disabled={query.isFetching}
             data-testid="calendar-refresh"
           >
-            <RefreshCw className={`size-3.5 ${query.isFetching ? "animate-spin" : ""}`} />
+            <RefreshCw
+              animate={query.isFetching ? "rotate" : undefined}
+              animateOnHover
+              className="size-3.5"
+            />
             {t("calendar.refresh")}
           </Button>
         </header>
@@ -231,7 +236,7 @@ function EventRow({
         disabled={importingAny}
         data-testid={`calendar-import-${evt.id}`}
       >
-        <Sparkles className="size-3.5" />
+        <Sparkles animateOnHover className="size-3.5" />
         {importing ? t("calendar.row.importing") : t("calendar.row.import")}
       </Button>
     </li>

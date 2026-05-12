@@ -1,6 +1,10 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:3001";
 
@@ -23,6 +27,18 @@ const _swallow = (err: unknown): void => {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // animate-ui icon registry imports from `motion/react`. The project already
+  // ships framer-motion 12, which is the same library under the previous
+  // name (Motion v12+ rebranded from framer-motion). Aliasing avoids
+  // bundling two copies. Switch to a real `motion` install only if the
+  // wrapper later relies on a Motion v13-exclusive API.
+  resolve: {
+    alias: [
+      { find: "motion/react", replacement: "framer-motion" },
+      { find: /^motion$/, replacement: "framer-motion" },
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+    ],
+  },
   server: {
     port: 5173,
     strictPort: false,

@@ -22,7 +22,7 @@
  */
 
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Sparkles } from "lucide-react";
+import { Sparkles } from "../../components/animate-ui/icons/sparkles";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BackLink } from "../../components/back-link";
@@ -222,7 +222,7 @@ export function NewMeeting() {
                   disabled={submitting}
                   data-testid="create-meeting-button"
                 >
-                  <Sparkles className="size-3.5" />
+                  <Sparkles animateOnHover className="size-3.5" />
                   {submitting ? t("meetings.new.submitting") : t("meetings.new.submit")}
                 </Button>
               </div>

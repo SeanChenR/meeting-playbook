@@ -13,7 +13,10 @@
  * by the auth flow and asserted by enroll.test.tsx.
  */
 
-import { Copy, Download, Loader2, Shield, ShieldCheck } from "lucide-react";
+import { Shield, ShieldCheck } from "lucide-react";
+import { Copy } from "../../components/animate-ui/icons/copy";
+import { Download } from "../../components/animate-ui/icons/download";
+import { Loader } from "../../components/animate-ui/icons/loader";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
@@ -137,7 +140,7 @@ export function TotpEnroll() {
                 />
               </div>
               <Button type="submit" disabled={submitting} className="w-full">
-                {submitting && <Loader2 className="size-4 animate-spin" />}
+                {submitting && <Loader animate="spin" className="size-4" />}
                 {submitting
                   ? t("auth.totp.enroll.continueSubmitting")
                   : t("auth.totp.enroll.continueButton")}
@@ -193,7 +196,7 @@ export function TotpEnroll() {
                 onClick={() => handleCopySecret(secret)}
                 className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-(--color-muted-foreground) hover:bg-(--color-muted) hover:text-(--color-foreground)"
               >
-                <Copy className="size-3.5" />
+                <Copy animateOnHover className="size-3.5" />
               </button>
             </div>
           )}
@@ -245,7 +248,7 @@ export function TotpEnroll() {
               onClick={() => handleDownloadBackupCodes(enrollData.backupCodes)}
               data-testid="download-backup-codes"
             >
-              <Download className="size-3.5" />
+              <Download animateOnHover className="size-3.5" />
               {t("auth.totp.enroll.downloadBackupCodes")}
             </Button>
             <div className="flex-1" />
@@ -255,7 +258,7 @@ export function TotpEnroll() {
               disabled={submitting}
               onClick={(e) => handleVerifySubmit(e as unknown as FormEvent<HTMLFormElement>)}
             >
-              {submitting && <Loader2 className="size-3.5 animate-spin" />}
+              {submitting && <Loader animate="spin" className="size-3.5" />}
               {submitting
                 ? t("auth.totp.enroll.verifySubmitting")
                 : t("auth.totp.enroll.verifyButton")}

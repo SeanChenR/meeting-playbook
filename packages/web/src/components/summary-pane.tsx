@@ -19,7 +19,10 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, RefreshCw, Sparkles } from "lucide-react";
+import { Copy } from "./animate-ui/icons/copy";
+import { Download } from "./animate-ui/icons/download";
+import { RefreshCw } from "./animate-ui/icons/refresh-cw";
+import { Sparkles } from "./animate-ui/icons/sparkles";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { localizedErrorMessage } from "../lib/i18n-errors";
@@ -115,7 +118,7 @@ export function SummaryPane({ meetingId, meeting }: SummaryPaneProps) {
       >
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-(--color-border) px-5 py-3.5">
           <div className="flex items-center gap-2">
-            <Sparkles className="size-4 text-(--color-primary)" aria-hidden />
+            <Sparkles animateOnHover className="size-4 text-(--color-primary)" aria-hidden />
             <span className="text-sm font-semibold text-(--color-foreground)">
               {t("meetings.summary.aiHeading")}
             </span>
@@ -134,7 +137,7 @@ export function SummaryPane({ meetingId, meeting }: SummaryPaneProps) {
               onClick={_trigger}
               disabled={isMutating}
             >
-              <RefreshCw className="size-3" />
+              <RefreshCw animateOnHover className="size-3" />
               {t("meetings.summary.regenerate")}
             </Button>
             <Button
@@ -145,7 +148,7 @@ export function SummaryPane({ meetingId, meeting }: SummaryPaneProps) {
               onClick={() => isDone && data && _copy(data.markdown)}
               disabled={!isDone}
             >
-              <Copy className="size-3" />
+              <Copy animateOnHover className="size-3" />
               {copied ? t("meetings.summary.copied") : t("meetings.summary.copy")}
             </Button>
             <Button
@@ -155,7 +158,7 @@ export function SummaryPane({ meetingId, meeting }: SummaryPaneProps) {
               onClick={() => isDone && data && exportSummaryAsMarkdown(meeting, data.markdown)}
               disabled={!isDone}
             >
-              <Download className="size-3" />
+              <Download animateOnHover className="size-3" />
               {t("meetings.summary.exportMd")}
             </Button>
           </div>
@@ -243,7 +246,11 @@ export function SummaryPane({ meetingId, meeting }: SummaryPaneProps) {
 
           <Alert variant="default" data-testid="summary-sidebar-info">
             <div className="flex items-start gap-2">
-              <Sparkles className="mt-0.5 size-3.5 text-(--color-primary)" aria-hidden />
+              <Sparkles
+                animateOnHover
+                className="mt-0.5 size-3.5 text-(--color-primary)"
+                aria-hidden
+              />
               <p className="text-xs text-(--color-muted-foreground)">
                 {t("meetings.summary.sidebarInfo")}
               </p>

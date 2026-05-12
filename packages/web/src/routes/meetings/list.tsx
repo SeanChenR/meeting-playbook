@@ -17,7 +17,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Calendar as CalendarIcon, Plus } from "lucide-react";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { Plus } from "../../components/animate-ui/icons/plus";
 import { useTranslation } from "react-i18next";
 import { ProtectedShell } from "../../components/protected-shell";
 import { Badge } from "../../components/ui/badge";
@@ -112,7 +113,7 @@ export function MeetingsList() {
             {t("meetings.list.fromCalendarButton")}
           </Link>
           <Link to="/meetings/new" className={buttonVariants({ size: "sm" })}>
-            <Plus className="size-3.5" />
+            <Plus animateOnHover className="size-3.5" />
             {t("meetings.list.newButtonShort")}
           </Link>
         </div>

@@ -14,7 +14,7 @@
  * signIn.social, twoFactorRedirect navigation).
  */
 
-import { Loader2 } from "lucide-react";
+import { Loader } from "../components/animate-ui/icons/loader";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -128,7 +128,7 @@ export function Login() {
               />
             </div>
             <Button type="submit" disabled={submitting} className="w-full">
-              {submitting && <Loader2 className="size-4 animate-spin" />}
+              {submitting && <Loader animate="spin" className="size-4" />}
               {submitting ? t("auth.login.submitting") : t("auth.login.submit")}
             </Button>
           </form>

@@ -22,6 +22,7 @@ import wave
 from pathlib import Path
 from typing import Annotated
 
+import anyio.to_thread
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,8 +57,12 @@ def _voice_enrollment_dir() -> Path:
 
 
 def _http_422(error_code: str, message: str) -> HTTPException:
+    # `HTTP_422_UNPROCESSABLE_ENTITY` was renamed to `HTTP_422_UNPROCESSABLE_CONTENT`
+    # in starlette to match the IETF RFC 9110 wording change. Both expose the
+    # same numeric 422, but the old alias emits a DeprecationWarning at use
+    # site — keep our code on the new name.
     return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail={"error_code": error_code, "message": message},
     )
 
@@ -125,8 +130,10 @@ async def upload_voice_enrollment(
         )
 
     # ── 3. Duration check via stdlib wave ───────────────────────────────
+    # `wave.open` does blocking I/O on the underlying BytesIO; offload to a
+    # worker thread so concurrent uploads don't stall the FastAPI event loop.
     try:
-        duration_s = _wav_duration_seconds(body)
+        duration_s = await anyio.to_thread.run_sync(_wav_duration_seconds, body)
     except (wave.Error, EOFError) as exc:
         raise _http_422(
             "voice_enrollment.unsupported_format",
@@ -139,15 +146,28 @@ async def upload_voice_enrollment(
         )
 
     # ── 4. Persist file under VOICE_ENROLLMENT_DIR ──────────────────────
+    # Defense-in-depth: even though `user_id` comes from the auth gateway via
+    # `X-User-Id`, sanitize the filename component so a compromised gateway or
+    # mis-injected header can never resolve outside the enrollment directory
+    # (e.g. `../../etc/passwd`). `Path(...).name` strips any directory pieces.
     enrollment_dir = _voice_enrollment_dir()
     enrollment_dir.mkdir(parents=True, exist_ok=True)
-    wav_path = enrollment_dir / f"{user_id}.wav"
-    wav_path.write_bytes(body)
+    safe_user_id = Path(user_id).name
+    if not safe_user_id:
+        raise _http_422(
+            "voice_enrollment.unsupported_format",
+            "user_id is empty after path sanitization; cannot derive WAV filename.",
+        )
+    wav_path = enrollment_dir / f"{safe_user_id}.wav"
+    await anyio.to_thread.run_sync(wav_path.write_bytes, body)
 
     # ── 5. Compute embedding + upsert (with cleanup on failure) ─────────
     try:
         try:
-            embedding = compute_enrollment_embedding(wav_path)
+            # Pyannote inference is heavy (~10–30s first time including
+            # model load). Run in a worker thread so other API requests
+            # served by the same event loop keep responding.
+            embedding = await anyio.to_thread.run_sync(compute_enrollment_embedding, wav_path)
         except InvalidEnrollmentSample as exc:
             raise _http_422("voice_enrollment.invalid_sample", str(exc)) from exc
 

@@ -29,6 +29,23 @@ import { encodeWavFromBlob } from "../../lib/wav-encoder";
 
 const _MAX_RECORD_SECONDS = 30;
 
+/**
+ * Browser-specific MIME negotiation for `MediaRecorder`:
+ * - Chrome / Firefox: `audio/webm` (Opus).
+ * - Safari (macOS + iOS): no WebM support — falls back to `audio/mp4` (AAC).
+ *
+ * Returns `null` when none of the preferred types are supported; callers
+ * then construct `MediaRecorder` without a `mimeType` option and let the
+ * browser pick its own default.
+ */
+function _pickSupportedMimeType(): string | null {
+  if (typeof MediaRecorder === "undefined") return null;
+  for (const mime of ["audio/webm", "audio/mp4"]) {
+    if (MediaRecorder.isTypeSupported?.(mime)) return mime;
+  }
+  return null;
+}
+
 type RecordingState = "idle" | "recording" | "stopped" | "saving" | "saved";
 
 export function SettingsVoice() {
@@ -94,11 +111,14 @@ export function SettingsVoice() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // MediaRecorder cannot output WAV in any browser; record in the most
-      // broadly supported container (WebM/Opus on Chrome, MP4/AAC on Safari)
-      // and transcode to 16kHz mono PCM WAV in `_saveRecording` via the
-      // `encodeWavFromBlob` helper before uploading.
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      // MediaRecorder cannot output WAV in any browser; record in whichever
+      // container the runtime supports — WebM/Opus on Chrome/Firefox,
+      // MP4/AAC on Safari — and transcode to 16kHz mono PCM WAV in
+      // `_saveRecording` via `encodeWavFromBlob` before upload.
+      const mimeType = _pickSupportedMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream); // last-resort: let the browser pick
       recorderRef.current = recorder;
       const chunks: BlobPart[] = [];
 
@@ -109,7 +129,7 @@ export function SettingsVoice() {
         // Preserve the recorder's native MIME so the preview <audio> element
         // can play it back. WAV conversion happens at save time.
         const recordedBlob = new Blob(chunks, {
-          type: recorder.mimeType || "audio/webm",
+          type: recorder.mimeType || mimeType || "audio/webm",
         });
         setBlob(recordedBlob);
         if (previewUrl) URL.revokeObjectURL(previewUrl);

@@ -50,13 +50,24 @@ interface TranscriptPaneProps {
   contrastLevel?: ContrastLevel;
 }
 
+const _CLUSTER_LABEL_RE = /^speaker_cluster_(\d+|unknown)$/;
+
 function _speakerLabel(
   chunk: TranscriptChunkMessage,
   meDisplayName: string,
   counterpartyDisplayName: string,
+  t: (key: string, options?: Record<string, unknown>) => string,
 ): string {
   if (chunk.speaker === "me") return meDisplayName;
   if (chunk.speaker === "counterparty") return counterpartyDisplayName;
+  // Slice-12 (ADR-0029): single-channel mode emits
+  // `speaker_cluster_<N>` / `speaker_cluster_unknown` labels.
+  const match = _CLUSTER_LABEL_RE.exec(chunk.speaker);
+  if (match) {
+    const token = match[1];
+    if (token === "unknown") return t("meetings.session.speaker.cluster_unknown");
+    return t("meetings.session.speaker.cluster", { n: token });
+  }
   return chunk.speaker;
 }
 
@@ -172,6 +183,7 @@ function TranscriptChunkRow({
   meDisplayName: string;
   counterpartyDisplayName: string;
 }) {
+  const { t } = useTranslation();
   const isMe = chunk.speaker === "me";
   const speakerColor = isMe ? "var(--color-me)" : "var(--color-them)";
   const background = _chunkBackground(chunk.speaker);
@@ -211,7 +223,7 @@ function TranscriptChunkRow({
           className="text-sm font-semibold"
           style={{ color: speakerColor }}
         >
-          {_speakerLabel(chunk, meDisplayName, counterpartyDisplayName)}
+          {_speakerLabel(chunk, meDisplayName, counterpartyDisplayName, t)}
         </span>
         <span className="font-mono text-xs text-(--color-muted-foreground)">
           {_formatTime(chunk.started_at)}

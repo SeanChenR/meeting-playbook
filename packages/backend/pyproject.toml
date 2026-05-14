@@ -20,6 +20,7 @@ dependencies = [
     "numpy>=2.4.4",
     "qwen-asr>=0.0.6",
     "opencc-python-reimplemented>=0.1.7",
+    "pyannote-audio>=4.0.4",
 ]
 
 [dependency-groups]

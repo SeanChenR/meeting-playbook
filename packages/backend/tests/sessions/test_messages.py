@@ -250,3 +250,81 @@ def test_advice_chunk_done_failed_serialization():
     assert reparsed_failed.type == "advisor_failed"
     assert isinstance(reparsed_failed, AdvisorFailedMessage)
     assert reparsed_failed.error_code == "advisor.timeout"
+
+
+# ─── Slice 12 (ADR-0029): transcript_chunk speaker value space ─────────
+
+
+@pytest.mark.parametrize("speaker", ["me", "counterparty"])
+def test_transcript_chunk_accepts_binary_speaker_values(speaker: str) -> None:
+    """Existing dual-channel behaviour (ADR-0016) — `me` / `counterparty`
+    SHALL still validate after slice 12 widens the value space.
+    """
+    msg = TranscriptChunkMessage(
+        meeting_id="m_t",
+        speaker=speaker,
+        text="hi",
+        started_at="2026-05-14T10:00:00+00:00",
+        ended_at="2026-05-14T10:00:10+00:00",
+        asr_provider_used="whisper",
+    )
+    assert msg.speaker == speaker
+
+
+@pytest.mark.parametrize(
+    "speaker", ["speaker_cluster_1", "speaker_cluster_42", "speaker_cluster_unknown"]
+)
+def test_transcript_chunk_accepts_single_channel_cluster_labels(speaker: str) -> None:
+    """Slice-12 ADR-0029: single-channel sessions emit `speaker_cluster_<N>`
+    or `speaker_cluster_unknown` labels.
+    """
+    msg = TranscriptChunkMessage(
+        meeting_id="m_t",
+        speaker=speaker,
+        text="hi",
+        started_at="2026-05-14T10:00:00+00:00",
+        ended_at="2026-05-14T10:00:10+00:00",
+        asr_provider_used="whisper",
+    )
+    assert msg.speaker == speaker
+
+
+@pytest.mark.parametrize(
+    "speaker",
+    [
+        "",
+        "host",
+        "speaker_cluster_",  # missing N
+        "speaker_cluster_abc",  # non-numeric, non-unknown
+        "Speaker_cluster_1",  # wrong case
+        "speaker_cluster_-1",  # negative
+        "me ",  # trailing whitespace
+    ],
+)
+def test_transcript_chunk_rejects_invalid_speaker_values(speaker: str) -> None:
+    """Per slice-12 spec, speaker values outside the agreed set are a
+    contract violation rejected at construction time.
+    """
+    with pytest.raises(Exception):  # pydantic ValidationError
+        TranscriptChunkMessage(
+            meeting_id="m_t",
+            speaker=speaker,
+            text="hi",
+            started_at="2026-05-14T10:00:00+00:00",
+            ended_at="2026-05-14T10:00:10+00:00",
+            asr_provider_used="whisper",
+        )
+
+
+def test_transcript_chunk_round_trips_cluster_label_through_parse() -> None:
+    msg = TranscriptChunkMessage(
+        meeting_id="m_t",
+        speaker="speaker_cluster_2",
+        text="hi",
+        started_at="2026-05-14T10:00:00+00:00",
+        ended_at="2026-05-14T10:00:10+00:00",
+        asr_provider_used="whisper",
+    )
+    reparsed = parse_server_message(msg.model_dump_json())
+    assert isinstance(reparsed, TranscriptChunkMessage)
+    assert reparsed.speaker == "speaker_cluster_2"

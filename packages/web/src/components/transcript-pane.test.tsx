@@ -170,4 +170,55 @@ describe("TranscriptPane", () => {
     expect(styleAttr).toMatch(/--me-tint-alpha:\s*0\.05/);
     expect(styleAttr).toMatch(/--them-tint-alpha:\s*0\.08/);
   });
+
+  // ─── Slice 12 (ADR-0029) — Single-channel mode speaker_cluster labels ───
+
+  test("renders speaker_cluster_<N> chunks as 「與會者 N」 via i18n", () => {
+    const chunks = [
+      _chunk("first", "speaker_cluster_1" as unknown as TranscriptChunkMessage["speaker"]),
+      _chunk("second", "speaker_cluster_2" as unknown as TranscriptChunkMessage["speaker"]),
+    ];
+
+    _render(
+      <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
+    );
+
+    const items = screen.getAllByTestId("transcript-chunk");
+    expect(items).toHaveLength(2);
+    expect(items[0]?.textContent).toContain("與會者 1");
+    expect(items[1]?.textContent).toContain("與會者 2");
+    // Sanity: do NOT fall back to "me" / "counterparty" display names.
+    expect(items[0]?.textContent).not.toContain("Sean");
+    expect(items[1]?.textContent).not.toContain("林經理");
+  });
+
+  test("renders speaker_cluster_unknown as 「與會者（未辨識）」", () => {
+    const chunks = [
+      _chunk(
+        "uncertain",
+        "speaker_cluster_unknown" as unknown as TranscriptChunkMessage["speaker"],
+      ),
+    ];
+
+    _render(
+      <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
+    );
+
+    const item = screen.getByTestId("transcript-chunk");
+    expect(item.textContent).toContain("與會者（未辨識）");
+    expect(item.textContent).toContain("uncertain");
+  });
+
+  test("data-speaker attribute preserves raw cluster value (for downstream styling / debugging)", () => {
+    const chunks = [
+      _chunk("hi", "speaker_cluster_3" as unknown as TranscriptChunkMessage["speaker"]),
+    ];
+
+    _render(
+      <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
+    );
+
+    const item = screen.getByTestId("transcript-chunk");
+    expect(item.getAttribute("data-speaker")).toBe("speaker_cluster_3");
+  });
 });

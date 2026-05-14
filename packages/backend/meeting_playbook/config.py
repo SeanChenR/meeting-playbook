@@ -84,6 +84,19 @@ class Settings(BaseSettings):
     blackhole_device_name: str | None = None
     mic_device_name: str | None = None
 
+    # Slice 12 — single-channel speaker attribution (面對面模式)
+    # HuggingFace access token for downloading pyannote/speaker-diarization-3.1.
+    # Required for `SingleChannelStrategy`; absent → `select_strategy` raises
+    # `DiarizationProviderUnavailable` and the session orchestrator rejects
+    # single-channel finalize. See ADR-0029 + README §3.5.
+    pyannote_auth_token: str = ""
+
+    # Slice 12 — rollback / kill switch for the hybrid attribution pipeline.
+    # When false, `select_strategy` accepts only dual-channel configurations
+    # and treats single-channel as `InvalidSpeakerConfiguration`. Useful to
+    # revert quickly if pyannote outputs degrade in production.
+    speaker_hybrid_enabled: bool = True
+
     # Backend service URL (gateway forwards /api/* here)
     backend_url: str = "http://localhost:8000"
 

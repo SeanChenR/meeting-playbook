@@ -196,7 +196,11 @@
       "transcriptEmpty": "Waiting for the first transcript chunk… (the first run needs 10–25s to load the model)",
       "rerunOverlay": "Re-running transcription…",
       "rerunOverlayProgress": "({{processed}}/{{total}} chunks)",
-      "rerunOverlayEstimating": "(...)"
+      "rerunOverlayEstimating": "(...)",
+      "speaker": {
+        "cluster": "Speaker {{n}}",
+        "cluster_unknown": "Speaker (unidentified)"
+      }
     },
     "detail": {
       "back": "← Back to list",

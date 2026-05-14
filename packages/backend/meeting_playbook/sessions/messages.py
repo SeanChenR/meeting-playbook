@@ -7,9 +7,16 @@ the meeting session". The frontend's TypeScript types in
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_validator
+
+
+# Slice-12 (ADR-0029): transcript_chunk.speaker may be "me", "counterparty",
+# or a single-channel cluster label `speaker_cluster_<N>` / `speaker_cluster_unknown`.
+_SPEAKER_CLUSTER_RE = re.compile(r"^speaker_cluster_(\d+|unknown)$")
+_BINARY_SPEAKERS: frozenset[str] = frozenset({"me", "counterparty"})
 
 # ─── Server → client ────────────────────────────────────────────────────────
 
@@ -28,6 +35,24 @@ class TranscriptChunkMessage(BaseModel):
     ended_at: str
     asr_provider_used: str
     confidence: float | None = None
+
+    @field_validator("speaker")
+    @classmethod
+    def _validate_speaker(cls, value: str) -> str:
+        """Per slice-12 ADR-0029 / meeting-session spec: `speaker` SHALL be one
+        of `me`, `counterparty`, `speaker_cluster_<N>` (N is 1+ digits), or
+        `speaker_cluster_unknown`. Anything else is a contract violation —
+        rejected here so the bug surfaces at frame construction time rather
+        than reaching the wire.
+        """
+        if value in _BINARY_SPEAKERS:
+            return value
+        if _SPEAKER_CLUSTER_RE.match(value):
+            return value
+        raise ValueError(
+            f"speaker={value!r} is not a valid attribution; expected "
+            f"'me', 'counterparty', 'speaker_cluster_<N>', or 'speaker_cluster_unknown'"
+        )
 
 
 class SilenceWarningMessage(BaseModel):

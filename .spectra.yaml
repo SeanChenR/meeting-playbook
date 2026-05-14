@@ -11,13 +11,13 @@ locale: tw
 # Workflow toggles
 tdd: true
 audit: true
-parallel_tasks: true  # marks intra-slice tasks that touch different files as parallel-safe
+parallel_tasks: true
 
 # Claude slash commands (set true to also generate /spectra:X commands)
 # claude_slash_commands: true
 
 # Enable git worktree support for isolated change branches
-# worktree: true
+worktree: true
 
 # Custom git worktrees directory
 # worktrees_dir: .spectra/worktrees

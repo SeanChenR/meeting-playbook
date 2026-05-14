@@ -70,6 +70,16 @@ In the Google Cloud Console:
 4. Copy the **Client ID** and **Client secret**.
 5. Enable the **Vertex AI API** and create a service-account JSON key (required for playbook generation, advisor, and summary).
 
+#### 3.5 Get a HuggingFace token for pyannote diarization (optional, but recommended)
+
+The Single-channel mode (面對面模式) introduced in slice 12 uses [`pyannote/speaker-diarization-3.1`](https://huggingface.co/pyannote/speaker-diarization-3.1) by default to partition single-mic recordings into Speaker clusters (與會者一/二/三...). Without the token the system silently falls back to `AppleSpeechProvider` (macOS Speech Framework), which works but with lower cluster precision.
+
+1. Create a personal access token at <https://huggingface.co/settings/tokens> (read-only is sufficient).
+2. Visit the model page and accept its gated terms: <https://huggingface.co/pyannote/speaker-diarization-3.1>.
+3. The first single-channel meeting will download the pyannote pipeline (~300MB) and cache it under `~/.cache/huggingface/`.
+
+You will add the token to `.env` in the next step as `PYANNOTE_AUTH_TOKEN=...`.
+
 #### 4. Environment file
 
 ```bash
@@ -81,7 +91,8 @@ Fill in:
 - `BETTER_AUTH_SECRET` — generate with `openssl rand -base64 32`
 - `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` — from step 3
 - `BETTER_AUTH_URL` — leave as `http://localhost:3001`
-- `GOOGLE_APPLICATION_CREDENTIALS`, `VERTEX_PROJECT`, `VERTEX_LOCATION` — from step 3.5
+- `GOOGLE_APPLICATION_CREDENTIALS`, `VERTEX_PROJECT`, `VERTEX_LOCATION` — from the Vertex AI service-account JSON in step 3
+- `PYANNOTE_AUTH_TOKEN` — from step 3.5 (optional; without it Single-channel mode falls back to AppleSpeechProvider)
 
 #### 5. Install dependencies
 

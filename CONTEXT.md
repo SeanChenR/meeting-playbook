@@ -24,6 +24,8 @@ Three lifecycle phases of one meeting:
 | **Tactical advisor** | One-click LLM call returning realtime advice based on the last 60s of transcript + the full playbook |
 | **ASR Provider** | Pluggable transcription engine implementing the `ASRProvider` interface (current providers: Whisper, VibeVoice-ASR) |
 | **Dual-channel capture** | BlackHole + microphone produce two synchronized audio streams; speaker identity is tagged at the source, no diarization is required |
+| **Single-channel mode (面對面模式)** | Capture path used when only a single microphone Recording exists (e.g. face-to-face meeting); a `DiarizationProvider` partitions the audio into speaker clusters because there is no per-stream source tag to rely on |
+| **Speaker cluster (與會者一 / 與會者二 / ...)** | Unsupervised speaker grouping output from `DiarizationProvider` under `Single-channel mode`; stored on `transcript_chunk.speaker` as `speaker_cluster_{N}` (1-based) and rendered in the UI as 「與會者 N」 |
 | **Recording window** | The 30-day retention window for raw WAV audio files; older recordings are auto-deleted but transcripts are preserved |
 | **Meeting** | A single timeboxed event with one playbook, one set of audio recordings, one transcript, and (post-completion) one summary |
 
@@ -35,7 +37,7 @@ Three lifecycle phases of one meeting:
 
 ## Non-goals (v1)
 - Mobile / Windows / Linux clients
-- Multi-speaker diarization beyond the binary counterparty/me split
+- Multi-speaker diarization 限制於 Single-channel mode；Dual-channel capture 仍為 binary（per ADR-0016 + ADR-0029）
 - Realtime streaming summary (post-meeting summary is batch-only)
 - Calendar providers other than Google Calendar
 - Gmail / Notion / Linear / Slack integration

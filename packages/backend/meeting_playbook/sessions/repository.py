@@ -107,5 +107,29 @@ class SessionRepository:
         await self._session.flush()
         return rec
 
+    async def update_chunk_speakers(self, updates: list[tuple[str, str]]) -> int:
+        """Slice-12: bulk-update `transcript_chunk.speaker` for a list of
+        `(chunk_id, new_speaker)` pairs. Returns the number of rows updated.
+
+        Called by the session finalize path after `SpeakerAttributionStrategy`
+        has computed the final speaker labels for the meeting. Only invokes
+        an UPDATE when the new value differs from the current value, so the
+        dual-channel pass-through path costs at most one SELECT.
+        """
+        from sqlalchemy import update
+
+        if not updates:
+            return 0
+        rows_changed = 0
+        for chunk_id, new_speaker in updates:
+            result = await self._session.execute(
+                update(TranscriptChunk)
+                .where(TranscriptChunk.id == chunk_id)
+                .where(TranscriptChunk.speaker != new_speaker)
+                .values(speaker=new_speaker)
+            )
+            rows_changed += result.rowcount or 0
+        return rows_changed
+
 
 __all__ = ["SessionRepository"]

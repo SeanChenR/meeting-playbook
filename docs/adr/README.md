@@ -30,3 +30,6 @@ Format inspired by Michael Nygard's ADR template, kept short.
 23. [structlog (Python) + console (TS) for logging](./0023-logging.md)
 24. [lefthook pre-commit hooks](./0024-lefthook-pre-commit.md)
 25. [No TS ORM; Better Auth uses pg.Pool directly](./0025-no-ts-orm.md)
+27. [Calendar scope linked to meeting create](./0027-calendar-scope-link.md)
+28. [Qwen3-ASR replaces VibeVoice](./0028-qwen3-asr-replaces-vibevoice.md)
+29. [Hybrid speaker attribution (amends ADR-0016)](./0029-hybrid-speaker-attribution.md)

@@ -196,7 +196,11 @@
       "transcriptEmpty": "等待第一段逐字稿…（首次啟動約需 10–25 秒載入模型）",
       "rerunOverlay": "重新轉錄中…",
       "rerunOverlayProgress": "({{processed}}/{{total}} chunks)",
-      "rerunOverlayEstimating": "(...)"
+      "rerunOverlayEstimating": "(...)",
+      "speaker": {
+        "cluster": "與會者 {{n}}",
+        "cluster_unknown": "與會者（未辨識）"
+      }
     },
     "detail": {
       "back": "← 返回列表",

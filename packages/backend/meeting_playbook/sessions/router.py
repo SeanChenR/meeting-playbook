@@ -490,6 +490,33 @@ async def meeting_session_endpoint(
                         file_path=str(wav_path),
                         bytes_size=wav_bytes,
                     )
+        # Commit so apply_speaker_attribution can read the recordings back.
+        await session.commit()
+
+        # Slice-12 (ADR-0029): run speaker attribution before transitioning
+        # to `completed`. Dual-channel is a validating pass-through (zero
+        # DB updates); single-channel runs diarization and rewrites chunk
+        # `speaker` values. Errors surface as WS frames per spec scenario
+        # "Invalid recording configuration aborts session finalize with
+        # explicit error".
+        from meeting_playbook.speaker.diarization import (
+            DiarizationProviderUnavailable,
+        )
+        from meeting_playbook.speaker.finalize import apply_speaker_attribution
+        from meeting_playbook.speaker.strategy import InvalidSpeakerConfiguration
+
+        try:
+            await apply_speaker_attribution(meeting_id=meeting_id, repo=session_repo)
+            await session.commit()
+        except (InvalidSpeakerConfiguration, DiarizationProviderUnavailable) as exc:
+            logger.warning(
+                "speaker_attribution_aborted",
+                extra={"meeting_id": meeting_id, "error": str(exc)},
+            )
+            with contextlib.suppress(Exception):
+                await _send_error("session.invalid_speaker_configuration", str(exc))
+            # Still transition the meeting to `completed` — the recordings
+            # are persisted; the user can re-run ASR / attribution later.
         with contextlib.suppress(MeetingStatusConflict):
             await meeting_repo.transition_status(
                 meeting_id=meeting_id,

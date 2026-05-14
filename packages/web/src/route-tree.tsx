@@ -14,6 +14,7 @@ import { MeetingsCalendar } from "./routes/meetings/calendar";
 import { MeetingsList } from "./routes/meetings/list";
 import { NewMeeting } from "./routes/meetings/new";
 import { UpcomingEvents } from "./routes/calendar/upcoming";
+import { SettingsVoice } from "./routes/settings/voice";
 import { Signup } from "./routes/signup";
 import { TotpEnroll } from "./routes/totp/enroll";
 import { TotpVerify } from "./routes/totp/verify";
@@ -93,6 +94,14 @@ const calendarImportRoute = createRoute({
   component: UpcomingEvents,
 });
 
+// Slice-13: standalone /settings/voice (no /settings shell yet — will be
+// folded into the sub-nav when slice-19 ships).
+const settingsVoiceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/voice",
+  component: SettingsVoice,
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -105,4 +114,5 @@ export const routeTree = rootRoute.addChildren([
   meetingsCalendarRoute,
   meetingDetailRoute,
   calendarImportRoute,
+  settingsVoiceRoute,
 ]);

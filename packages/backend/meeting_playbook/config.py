@@ -97,6 +97,24 @@ class Settings(BaseSettings):
     # revert quickly if pyannote outputs degrade in production.
     speaker_hybrid_enabled: bool = True
 
+    # Slice 13 — voice enrollment (聲紋樣本) for single-channel auto-me.
+    # Directory where each user's 30s enrollment WAV is persisted; the
+    # `voice_enrollment` row only carries the file path, the embedding lives
+    # in the DB. The user_id is appended as the filename to avoid collisions.
+    voice_enrollment_dir: str = "~/MeetingPlaybook/voice_enrollments"
+
+    # Cosine similarity threshold for matching a single-channel cluster's
+    # embedding against the enrolled embedding. Best-cluster similarity must
+    # be >= this value before the rename to `me` runs (per slice-13 ADR-0029
+    # + design.md "Matching：cosine similarity + tunable threshold"). 0.5 is
+    # the pyannote x-vector default; tune up if you see false positives.
+    voice_enrollment_match_threshold: float = 0.5
+
+    # Rollback flag for the voice enrollment integration. When false,
+    # `apply_speaker_attribution` skips the post-strategy rename pass even
+    # if a `voice_enrollment` row exists for the current user.
+    voice_enrollment_enabled: bool = True
+
     # Backend service URL (gateway forwards /api/* here)
     backend_url: str = "http://localhost:8000"
 

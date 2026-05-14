@@ -14,13 +14,16 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from meeting_playbook.speaker.diarization import (
     DiarizationProvider,
     DiarizationProviderUnavailable,
     DiarizationSegment,
 )
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 logger = logging.getLogger(__name__)
@@ -76,12 +79,56 @@ class PyannoteProvider:
         self._checkpoint = checkpoint
         self._loader = loader
         self._pipeline: Any | None = None
+        # Slice-13: voice enrollment needs the per-cluster speaker embedding
+        # vectors from the pipeline output. We expose them via instance state
+        # populated on every `diarize(...)` call; `cluster_embeddings()` is
+        # the consumer-facing accessor. See slice-13 design "Embedding 暴露
+        # 問題：把 DiarizeOutput.speaker_embeddings 傳出 SingleChannelStrategy".
+        self.last_diarize_output: Any | None = None
+        self._label_to_cluster_id: dict[str, int] | None = None
 
     def diarize(self, wav_path: Path) -> list[DiarizationSegment]:
         pipeline = self._ensure_pipeline()
         output = pipeline(str(wav_path))
         annotation = _extract_annotation(output)
-        return _annotation_to_segments(annotation)
+        segments, label_to_cluster_id = _annotation_to_segments_and_mapping(annotation)
+        # Stash the raw pipeline output + label->cluster_id so the caller
+        # (SingleChannelStrategy / compute_enrollment_embedding) can map our
+        # 1-based cluster_ids back onto pyannote's speaker_embeddings rows.
+        self.last_diarize_output = output
+        self._label_to_cluster_id = label_to_cluster_id
+        return segments
+
+    def cluster_embeddings(self) -> dict[int, np.ndarray] | None:
+        """Return the most recent diarize call's per-cluster embedding vectors.
+
+        Maps `cluster_id` (1-based, the same id written into
+        `DiarizationSegment.cluster_id`) to the float-ndarray embedding for
+        that speaker. Returns `None` when no diarize call has happened yet
+        OR when the pipeline did not produce embeddings (e.g. older pyannote
+        version that returned a bare Annotation).
+
+        The mapping pulls rows out of `DiarizeOutput.speaker_embeddings` by
+        index matching the alphabetical order of speaker labels in the
+        annotation — which is how pyannote 4.x lays out the array.
+        """
+        import numpy as np  # local import keeps module-load fast
+
+        if self.last_diarize_output is None or self._label_to_cluster_id is None:
+            return None
+        embeddings_array = getattr(self.last_diarize_output, "speaker_embeddings", None)
+        if embeddings_array is None:
+            return None
+        labels_sorted = sorted(self._label_to_cluster_id.keys())
+        if len(labels_sorted) != embeddings_array.shape[0]:
+            # Defensive: if label count and embedding-row count drift apart,
+            # surface as "no embeddings" rather than mis-indexing.
+            return None
+        result: dict[int, np.ndarray] = {}
+        for row_index, label in enumerate(labels_sorted):
+            cluster_id = self._label_to_cluster_id[label]
+            result[cluster_id] = embeddings_array[row_index]
+        return result
 
     def _ensure_pipeline(self) -> Any:
         if self._pipeline is None:
@@ -115,13 +162,17 @@ def _extract_annotation(output: Any) -> Any:
     return output
 
 
-def _annotation_to_segments(annotation: Any) -> list[DiarizationSegment]:
-    """Convert a pyannote `Annotation` into the `DiarizationProvider`
-    contract: list[DiarizationSegment] sorted by start_ms, 1-based cluster_id.
+def _annotation_to_segments_and_mapping(
+    annotation: Any,
+) -> tuple[list[DiarizationSegment], dict[str, int]]:
+    """Convert a pyannote `Annotation` into segments + a label→cluster_id map.
 
-    pyannote emits speaker labels like `"SPEAKER_00"`, `"SPEAKER_01"`...
-    We map each label to a stable 1-based int (`SPEAKER_00` → 1) by
-    first-seen order within this annotation.
+    The segments list satisfies the `DiarizationProvider.diarize` contract
+    (sorted by `start_ms`, non-overlapping). The mapping captures the
+    first-seen order of speaker labels (`"SPEAKER_00"` → 1, `"SPEAKER_01"`
+    → 2, ...) so slice-13 callers can recover which pyannote speaker label
+    each cluster_id refers to — needed for joining with
+    `DiarizeOutput.speaker_embeddings` (slice-13 task 5.2).
     """
     raw: list[tuple[int, int, str]] = []
     for segment, _, label in annotation.itertracks(yield_label=True):
@@ -154,4 +205,14 @@ def _annotation_to_segments(annotation: Any) -> list[DiarizationSegment]:
             )
         )
         last_end_ms = end_ms
-    return result
+    return result, label_to_cluster
+
+
+def _annotation_to_segments(annotation: Any) -> list[DiarizationSegment]:
+    """Backward-compatible wrapper retained for slice-12 tests that imported
+    this function directly. Returns only the segments list; new callers that
+    also need the label→cluster_id mapping SHALL use
+    `_annotation_to_segments_and_mapping`.
+    """
+    segments, _ = _annotation_to_segments_and_mapping(annotation)
+    return segments

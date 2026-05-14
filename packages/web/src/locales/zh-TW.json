@@ -372,6 +372,25 @@
       "fallback": "儲存失敗，請稍後再試"
     }
   },
+  "settings": {
+    "voice": {
+      "heading": "聲紋登錄",
+      "subhead": "錄製 30 秒的自我介紹，單聲道會議時系統會自動把符合的說話者標為「我」。",
+      "permissionHint": "首次錄製時瀏覽器會請求麥克風權限。",
+      "startRecording": "開始錄製",
+      "stopRecording": "停止錄製",
+      "recording": "錄製中 {{seconds}}s / 30s",
+      "preview": "預聽",
+      "rerecord": "重新錄製",
+      "save": "儲存",
+      "saving": "上傳中…",
+      "saved": "聲紋已儲存",
+      "missingRecording": "請先錄製一段樣本再儲存。",
+      "permissionDenied": "瀏覽器麥克風權限被拒，請開啟後重試。",
+      "previouslyEnrolled": "聲紋已登錄（最後更新於 {{timestamp}}）",
+      "reRecordToOverwrite": "重新錄製覆蓋"
+    }
+  },
   "errors": {
     "common": {
       "unknown": "發生未知錯誤",
@@ -404,6 +423,12 @@
       "quota": "Vertex API 配額已用盡",
       "auth": "Vertex 認證失敗，請檢查 GOOGLE_APPLICATION_CREDENTIALS",
       "unknown": "戰術建議暫時無法使用"
+    },
+    "voice_enrollment": {
+      "unsupported_format": "檔案格式不支援，僅接受 audio/wav",
+      "too_large": "檔案超過 5MB 上限",
+      "too_long": "錄音超過 30 秒上限",
+      "invalid_sample": "樣本驗證失敗：請在安靜環境錄製 30 秒以內單人講話"
     },
     "summary": {
       "busy": "上一個生成尚未完成",

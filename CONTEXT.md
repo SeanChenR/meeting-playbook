@@ -26,6 +26,7 @@ Three lifecycle phases of one meeting:
 | **Dual-channel capture** | BlackHole + microphone produce two synchronized audio streams; speaker identity is tagged at the source, no diarization is required |
 | **Single-channel mode (面對面模式)** | Capture path used when only a single microphone Recording exists (e.g. face-to-face meeting); a `DiarizationProvider` partitions the audio into speaker clusters because there is no per-stream source tag to rely on |
 | **Speaker cluster (與會者一 / 與會者二 / ...)** | Unsupervised speaker grouping output from `DiarizationProvider` under `Single-channel mode`; stored on `transcript_chunk.speaker` as `speaker_cluster_{N}` (1-based) and rendered in the UI as 「與會者 N」 |
+| **Voice enrollment sample (聲紋樣本)** | A one-time 30-second WAV the user records via `/settings/voice`; its pyannote-derived embedding lets `Single-channel mode` automatically rename the matching speaker cluster to `me` at session finalize (per ADR-0029 + slice 13) |
 | **Recording window** | The 30-day retention window for raw WAV audio files; older recordings are auto-deleted but transcripts are preserved |
 | **Meeting** | A single timeboxed event with one playbook, one set of audio recordings, one transcript, and (post-completion) one summary |
 

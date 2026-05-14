@@ -34,6 +34,7 @@ from meeting_playbook.meetings.router import router as meetings_router
 from meeting_playbook.playbooks.router import router as playbooks_router
 from meeting_playbook.retention import runtime as retention_runtime
 from meeting_playbook.sessions.router import router as sessions_router
+from meeting_playbook.voice_enrollment.router import router as voice_enrollment_router
 from meeting_playbook.summarization.router import router as summary_router
 
 logger = logging.getLogger(__name__)
@@ -164,6 +165,7 @@ def create_app() -> FastAPI:
     app.include_router(sessions_router)
     app.include_router(chat_router)
     app.include_router(summary_router)
+    app.include_router(voice_enrollment_router)
     return app
 
 

@@ -22,13 +22,15 @@ import logging
 import time
 from dataclasses import dataclass
 
-from meeting_playbook.sessions.models import Recording
+from meeting_playbook.sessions.models import Recording, TranscriptChunk
 from meeting_playbook.sessions.repository import SessionRepository
 from meeting_playbook.speaker.diarization import DiarizationProvider
 from meeting_playbook.speaker.strategy import (
     SingleChannelStrategy,
     select_strategy,
 )
+from meeting_playbook.voice_enrollment.matcher import VoiceEnrollmentMatcher
+from meeting_playbook.voice_enrollment.repository import VoiceEnrollmentRepository
 
 
 logger = logging.getLogger(__name__)
@@ -56,11 +58,22 @@ async def apply_speaker_attribution(
     meeting_id: str,
     repo: SessionRepository,
     single_channel_provider: DiarizationProvider | None = None,
+    voice_enrollment_repo: VoiceEnrollmentRepository | None = None,
+    current_user_id: str | None = None,
+    match_threshold: float = 0.5,
 ) -> AttributionResult:
     """Run speaker attribution for one meeting's persisted chunks.
 
     `single_channel_provider` is for tests; production omits it and inherits
     the module-level default (PyannoteProvider gated on PYANNOTE_AUTH_TOKEN).
+
+    `voice_enrollment_repo` + `current_user_id` enable the slice-13
+    auto-me-rename pass: when both are supplied AND a `voice_enrollment` row
+    exists for the user AND the strategy is `SingleChannelStrategy`, the
+    matching cluster's chunks are rewritten from `speaker_cluster_<N>` to
+    `me` (per ADR-0029 + slice-13 spec
+    `apply_speaker_attribution renames the matched single-channel cluster
+    to me when an enrollment exists`).
     """
     recordings = await repo.list_recordings_for_meeting(meeting_id)
     chunks = await repo.list_chunks_for_meeting(meeting_id)
@@ -99,6 +112,19 @@ async def apply_speaker_attribution(
                 },
             )
 
+        # Slice-13 voice enrollment post-processing — applies only to the
+        # single-channel path with both an enrollment repo and a user id.
+        # Dual-channel path skips this entirely (chunks are already correctly
+        # labelled me / counterparty by the ASR pipeline).
+        reassigned = await _maybe_rename_enrolled_cluster(
+            meeting_id=meeting_id,
+            strategy=strategy,
+            chunks=reassigned,
+            voice_enrollment_repo=voice_enrollment_repo,
+            current_user_id=current_user_id,
+            match_threshold=match_threshold,
+        )
+
     updates: list[tuple[str, str]] = [
         (new.id, new.speaker)
         for original, new in zip(chunks, reassigned)
@@ -124,6 +150,96 @@ async def apply_speaker_attribution(
         is_diarization_slow=is_slow,
         latency_budget_ms=budget_ms,
     )
+
+
+async def _maybe_rename_enrolled_cluster(
+    *,
+    meeting_id: str,
+    strategy: SingleChannelStrategy,
+    chunks: list[TranscriptChunk],
+    voice_enrollment_repo: VoiceEnrollmentRepository | None,
+    current_user_id: str | None,
+    match_threshold: float,
+) -> list[TranscriptChunk]:
+    """When the user has a voice enrollment, rewrite the matching cluster's
+    chunks to `speaker = "me"`. Skipped cleanly (no DB write, no error) for
+    any of the no-rename branches in the spec:
+    - voice_enrollment_repo is None
+    - current_user_id is None
+    - no enrollment row for the user
+    - strategy did not expose cluster embeddings (test stub or older provider)
+    - matcher returns None (no cluster above threshold)
+    """
+    if voice_enrollment_repo is None or current_user_id is None:
+        return chunks
+
+    enrollment = await voice_enrollment_repo.get_for_user(current_user_id)
+    if enrollment is None:
+        return chunks
+
+    cluster_embeddings = strategy.cluster_embeddings()
+    if not cluster_embeddings:
+        logger.info(
+            "voice_enrollment_skipped_no_embeddings",
+            extra={"meeting_id": meeting_id, "user_id": current_user_id},
+        )
+        return chunks
+
+    matched_cluster_id = VoiceEnrollmentMatcher().find_me_cluster(
+        enrolled_embedding=enrollment.embedding,
+        cluster_embeddings=cluster_embeddings,
+        threshold=match_threshold,
+    )
+    if matched_cluster_id is None:
+        logger.info(
+            "voice_enrollment_no_match",
+            extra={
+                "meeting_id": meeting_id,
+                "user_id": current_user_id,
+                "cluster_count": len(cluster_embeddings),
+                "threshold": match_threshold,
+            },
+        )
+        return chunks
+
+    matched_label = f"speaker_cluster_{matched_cluster_id}"
+    renamed: list[TranscriptChunk] = []
+    for chunk in chunks:
+        if chunk.speaker == matched_label:
+            renamed.append(_copy_chunk_with_me(chunk))
+        else:
+            renamed.append(chunk)
+
+    logger.info(
+        "voice_enrollment_renamed_cluster",
+        extra={
+            "meeting_id": meeting_id,
+            "user_id": current_user_id,
+            "matched_cluster_id": matched_cluster_id,
+        },
+    )
+    return renamed
+
+
+def _copy_chunk_with_me(chunk: TranscriptChunk) -> TranscriptChunk:
+    """Return a detached copy of `chunk` with `speaker = 'me'`.
+
+    Mirrors the immutability contract from `_copy_chunk_with_speaker` in
+    the speaker module but is kept inline here so finalize doesn't depend
+    on a private helper crossing module boundaries.
+    """
+    copy = TranscriptChunk(
+        id=chunk.id,
+        meeting_id=chunk.meeting_id,
+        speaker="me",
+        text=chunk.text,
+        started_at=chunk.started_at,
+        ended_at=chunk.ended_at,
+        asr_provider_used=chunk.asr_provider_used,
+        confidence=chunk.confidence,
+        created_at=chunk.created_at,
+    )
+    return copy
 
 
 def _latency_budget_ms(recordings: list[Recording]) -> int:

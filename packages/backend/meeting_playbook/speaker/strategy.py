@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import is_dataclass, replace
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from meeting_playbook.sessions.models import Recording, TranscriptChunk
 from meeting_playbook.speaker.diarization import (
@@ -149,6 +149,12 @@ class SingleChannelStrategy:
     ) -> None:
         self.provider = provider
         self.overlap_threshold_ms = overlap_threshold_ms
+        # Slice-13: after each successful `assign_speakers` call, the most
+        # recent diarize output (if the provider exposes one) is copied here
+        # so callers like `apply_speaker_attribution` can join per-cluster
+        # embeddings with the voice-enrollment matcher. None when the
+        # provider does not expose embeddings (e.g. test stubs).
+        self.last_diarize_output: Any | None = None
 
     def assign_speakers(
         self,
@@ -161,6 +167,11 @@ class SingleChannelStrategy:
             )
         recording = recordings[0]
         segments = self.provider.diarize(Path(recording.file_path))
+        # Provider may expose its raw pipeline output for downstream consumers
+        # (voice enrollment matching). Use getattr so stub providers without
+        # this attribute still work — they simply leave `last_diarize_output`
+        # at None and downstream skips the rename step.
+        self.last_diarize_output = getattr(self.provider, "last_diarize_output", None)
 
         # Recording.started_at is added in slice-16; fall back to created_at
         # in the slice-12 era so this strategy works against the current schema.
@@ -173,6 +184,17 @@ class SingleChannelStrategy:
             label = self._best_label(segments, chunk_start_ms, chunk_end_ms)
             result.append(_copy_chunk_with_speaker(chunk, label))
         return result
+
+    def cluster_embeddings(self) -> dict[int, Any] | None:
+        """Convenience accessor that delegates to
+        `provider.cluster_embeddings()` when the provider supports it.
+        Returns `None` for providers without embedding exposure (e.g. test
+        stubs), letting `apply_speaker_attribution` skip the rename safely.
+        """
+        getter = getattr(self.provider, "cluster_embeddings", None)
+        if getter is None:
+            return None
+        return getter()
 
     def _best_label(
         self,

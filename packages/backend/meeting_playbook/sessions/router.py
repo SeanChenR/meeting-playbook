@@ -504,9 +504,30 @@ async def meeting_session_endpoint(
         )
         from meeting_playbook.speaker.finalize import apply_speaker_attribution
         from meeting_playbook.speaker.strategy import InvalidSpeakerConfiguration
+        from meeting_playbook.voice_enrollment.repository import (
+            VoiceEnrollmentRepository,
+        )
+
+        # Slice-13: pass user_id + voice_enrollment_repo so single-channel
+        # finalize can auto-rename the matching cluster to `me` when an
+        # enrollment exists. Dual-channel path short-circuits inside
+        # `apply_speaker_attribution` (the helper checks strategy type
+        # before consulting the repo). Match threshold + enable flag come
+        # from Settings (slice-13 task 1.2).
+        from meeting_playbook.config import get_settings as _get_settings
+
+        voice_repo = VoiceEnrollmentRepository(session)
+        ve_settings = _get_settings()
+        voice_repo_arg = voice_repo if ve_settings.voice_enrollment_enabled else None
 
         try:
-            await apply_speaker_attribution(meeting_id=meeting_id, repo=session_repo)
+            await apply_speaker_attribution(
+                meeting_id=meeting_id,
+                repo=session_repo,
+                voice_enrollment_repo=voice_repo_arg,
+                current_user_id=user_id,
+                match_threshold=ve_settings.voice_enrollment_match_threshold,
+            )
             await session.commit()
         except (InvalidSpeakerConfiguration, DiarizationProviderUnavailable) as exc:
             logger.warning(

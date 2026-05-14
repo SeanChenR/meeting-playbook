@@ -372,6 +372,25 @@
       "fallback": "Save failed, please try again"
     }
   },
+  "settings": {
+    "voice": {
+      "heading": "Voice enrollment",
+      "subhead": "Record a 30-second self-introduction. In single-channel meetings, the system will automatically label matching speech as 'me'.",
+      "permissionHint": "Your browser will ask for microphone permission on first record.",
+      "startRecording": "Start recording",
+      "stopRecording": "Stop recording",
+      "recording": "Recording {{seconds}}s / 30s",
+      "preview": "Preview",
+      "rerecord": "Re-record",
+      "save": "Save",
+      "saving": "Uploading…",
+      "saved": "Voice sample saved",
+      "missingRecording": "Please record a sample before saving.",
+      "permissionDenied": "Microphone permission denied. Enable it in browser settings and retry.",
+      "previouslyEnrolled": "Voice already enrolled (last updated {{timestamp}})",
+      "reRecordToOverwrite": "Re-record to overwrite"
+    }
+  },
   "errors": {
     "common": {
       "unknown": "An unknown error occurred",
@@ -404,6 +423,12 @@
       "quota": "Vertex API quota exhausted",
       "auth": "Vertex authentication failed; check GOOGLE_APPLICATION_CREDENTIALS",
       "unknown": "Tactical advice temporarily unavailable"
+    },
+    "voice_enrollment": {
+      "unsupported_format": "Unsupported file format; only audio/wav is accepted",
+      "too_large": "File exceeds the 5MB size limit",
+      "too_long": "Recording exceeds the 30-second limit",
+      "invalid_sample": "Sample validation failed: please record a single speaker for up to 30 seconds in a quiet environment"
     },
     "summary": {
       "busy": "Previous generation still running",

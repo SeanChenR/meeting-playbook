@@ -271,3 +271,195 @@ async def test_dual_channel_result_has_no_latency_budget() -> None:
 
     assert result.is_diarization_slow is False
     assert result.latency_budget_ms == 0
+
+
+# ───── Slice 13: voice enrollment auto-me rename ────────────────────────
+
+
+import numpy as np  # noqa: E402
+
+from meeting_playbook.voice_enrollment.matcher import _ENROLLMENT_DTYPE  # noqa: E402
+
+
+class _EmbeddingsStubProvider:
+    """Diarization stub that also exposes `cluster_embeddings()` so the
+    SingleChannelStrategy can pass embeddings to the voice-enrollment matcher.
+    """
+
+    def __init__(
+        self,
+        *,
+        segments: list[DiarizationSegment],
+        cluster_to_embedding: dict[int, np.ndarray] | None,
+    ) -> None:
+        self._segments = segments
+        self._cluster_to_embedding = cluster_to_embedding
+        self.last_diarize_output = object()  # opaque sentinel — non-None
+
+    def diarize(self, wav_path: Path) -> list[DiarizationSegment]:
+        return list(self._segments)
+
+    def cluster_embeddings(self) -> dict[int, np.ndarray] | None:
+        return self._cluster_to_embedding
+
+
+class _FakeEnrollmentRepo:
+    def __init__(self, *, embedding_for_user: dict[str, bytes]) -> None:
+        self._by_user = embedding_for_user
+
+    async def get_for_user(self, user_id: str):  # type: ignore[no-untyped-def]
+        if user_id not in self._by_user:
+            return None
+        return type(
+            "_FakeEnrollment",
+            (),
+            {
+                "user_id": user_id,
+                "sample_wav_path": f"/tmp/{user_id}.wav",
+                "embedding": self._by_user[user_id],
+                "created_at": _BASE_TS,
+            },
+        )()
+
+
+def _enrolled_bytes(values: list[float]) -> bytes:
+    return np.asarray(values, dtype=_ENROLLMENT_DTYPE).tobytes()
+
+
+def _cluster_vec(values: list[float]) -> np.ndarray:
+    return np.asarray(values, dtype=np.float32)
+
+
+async def test_voice_enrollment_renames_matched_cluster_to_me() -> None:
+    """Spec scenario (a): user has enrollment, cluster 2 matches above
+    threshold → chunk 2's speaker rewritten to `me`; clusters 1 and 3 keep
+    their `speaker_cluster_*` labels.
+    """
+    chunks = [
+        _chunk(1, speaker="speaker_cluster_1", offset_ms=0),
+        _chunk(2, speaker="speaker_cluster_2", offset_ms=1000),
+        _chunk(3, speaker="speaker_cluster_3", offset_ms=2000),
+    ]
+    repo = _FakeRepo(recordings=[_recording("me")], chunks=chunks)
+    # cluster 2 matches the enrolled vector; 1 and 3 are orthogonal.
+    provider = _EmbeddingsStubProvider(
+        segments=[
+            DiarizationSegment(start_ms=0, end_ms=500, cluster_id=1),
+            DiarizationSegment(start_ms=1000, end_ms=1500, cluster_id=2),
+            DiarizationSegment(start_ms=2000, end_ms=2500, cluster_id=3),
+        ],
+        cluster_to_embedding={
+            1: _cluster_vec([0.0, 1.0, 0.0]),
+            2: _cluster_vec([1.0, 0.0, 0.0]),  # ≈ enrolled
+            3: _cluster_vec([0.0, 0.0, 1.0]),
+        },
+    )
+    enroll_repo = _FakeEnrollmentRepo(embedding_for_user={"u_a": _enrolled_bytes([1.0, 0.0, 0.0])})
+
+    await apply_speaker_attribution(
+        meeting_id="m_t",
+        repo=repo,
+        single_channel_provider=provider,
+        voice_enrollment_repo=enroll_repo,  # type: ignore[arg-type]
+        current_user_id="u_a",
+    )
+
+    # The initial chunks already carried `speaker_cluster_1/2/3` (test setup
+    # mimics chunks freshly written by the strategy and then revisited at
+    # rename time). The strategy re-computes the same cluster labels, so
+    # only the cluster-2 → `me` rename is an actual DB update.
+    by_id = dict(repo.updates)
+    assert by_id == {"chunk_2": "me"}
+
+
+async def test_no_enrollment_keeps_cluster_labels_untouched() -> None:
+    """Spec scenario (b): user has no `voice_enrollment` row → cluster
+    labels remain as `speaker_cluster_*`."""
+    chunks = [
+        _chunk(1, speaker="speaker_cluster_1", offset_ms=0),
+        _chunk(2, speaker="speaker_cluster_2", offset_ms=1000),
+    ]
+    repo = _FakeRepo(recordings=[_recording("me")], chunks=chunks)
+    provider = _EmbeddingsStubProvider(
+        segments=[
+            DiarizationSegment(start_ms=0, end_ms=500, cluster_id=1),
+            DiarizationSegment(start_ms=1000, end_ms=1500, cluster_id=2),
+        ],
+        cluster_to_embedding={
+            1: _cluster_vec([1.0, 0.0, 0.0]),
+            2: _cluster_vec([0.0, 1.0, 0.0]),
+        },
+    )
+    enroll_repo = _FakeEnrollmentRepo(embedding_for_user={})  # u_b has no row
+
+    await apply_speaker_attribution(
+        meeting_id="m_t",
+        repo=repo,
+        single_channel_provider=provider,
+        voice_enrollment_repo=enroll_repo,  # type: ignore[arg-type]
+        current_user_id="u_b",
+    )
+
+    # No rename to `me` should have happened — only the strategy's initial
+    # `speaker_cluster_*` assignments are present.
+    me_renames = [(cid, sp) for cid, sp in repo.updates if sp == "me"]
+    assert me_renames == []
+
+
+async def test_enrollment_exists_but_no_cluster_passes_threshold() -> None:
+    """Spec scenario (c): enrollment exists but every cluster's similarity
+    falls below the match threshold → no rename."""
+    chunks = [
+        _chunk(1, speaker="speaker_cluster_1", offset_ms=0),
+        _chunk(2, speaker="speaker_cluster_2", offset_ms=1000),
+    ]
+    repo = _FakeRepo(recordings=[_recording("me")], chunks=chunks)
+    provider = _EmbeddingsStubProvider(
+        segments=[
+            DiarizationSegment(start_ms=0, end_ms=500, cluster_id=1),
+            DiarizationSegment(start_ms=1000, end_ms=1500, cluster_id=2),
+        ],
+        cluster_to_embedding={
+            # Both orthogonal to the enrolled vector — cosine 0.0 each.
+            1: _cluster_vec([0.0, 1.0, 0.0]),
+            2: _cluster_vec([0.0, 0.0, 1.0]),
+        },
+    )
+    enroll_repo = _FakeEnrollmentRepo(embedding_for_user={"u_a": _enrolled_bytes([1.0, 0.0, 0.0])})
+
+    await apply_speaker_attribution(
+        meeting_id="m_t",
+        repo=repo,
+        single_channel_provider=provider,
+        voice_enrollment_repo=enroll_repo,  # type: ignore[arg-type]
+        current_user_id="u_a",
+        match_threshold=0.5,
+    )
+
+    me_renames = [(cid, sp) for cid, sp in repo.updates if sp == "me"]
+    assert me_renames == []
+
+
+async def test_dual_channel_session_ignores_enrollment_completely() -> None:
+    """Spec scenario (d): dual-channel session does NOT consult voice
+    enrollment even when a row exists for the user."""
+    chunks = [
+        _chunk(1, speaker="me", offset_ms=0),
+        _chunk(2, speaker="counterparty", offset_ms=1000),
+    ]
+    repo = _FakeRepo(
+        recordings=[_recording("me"), _recording("counterparty")],
+        chunks=chunks,
+    )
+    enroll_repo = _FakeEnrollmentRepo(embedding_for_user={"u_a": _enrolled_bytes([1.0, 0.0, 0.0])})
+
+    result = await apply_speaker_attribution(
+        meeting_id="m_t",
+        repo=repo,
+        voice_enrollment_repo=enroll_repo,  # type: ignore[arg-type]
+        current_user_id="u_a",
+    )
+
+    assert result.chunks_updated == 0
+    assert result.strategy_name == "DualChannelStrategy"
+    assert repo.updates == []

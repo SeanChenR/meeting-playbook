@@ -113,9 +113,9 @@ Client → server messages:
 
 Server → client messages:
 - `{"type": "meeting_started", "meeting_id": "<id>"}` — sent immediately after the server accepts a `start_meeting` message and transitions the meeting to `in_progress`
-- `{"type": "transcript_chunk", "meeting_id": "<id>", "speaker": "me"|"counterparty", "text": "<string>", "started_at": "<iso8601>", "ended_at": "<iso8601>", "asr_provider_used": "<string>", "confidence": <float|null>}` — one per ~10-second audio chunk per stream; `speaker` value reflects the source stream
-- `{"type": "silence_warning", "meeting_id": "<id>", "stream": "me"|"counterparty", "since": "<iso8601>"}` — emitted when one stream has been silent for more than 30 seconds; the `stream` field identifies which stream is silent so the client can update only that capture indicator
-- `{"type": "stream_stopped", "meeting_id": "<id>", "stream": "me"|"counterparty", "reason": "<string>"}` — emitted when one capture stream fails mid-session and stops; the WebSocket SHALL remain open until both streams have stopped
+- `{"type": "transcript_chunk", "meeting_id": "<id>", "speaker": "<speaker_label>", "text": "<string>", "started_at": "<iso8601>", "ended_at": "<iso8601>", "asr_provider_used": "<string>", "confidence": <float|null>}` — one per ~10-second audio chunk per stream. The `speaker` value SHALL be one of: `"me"`, `"counterparty"`, `"speaker_cluster_<N>"` where `<N>` is a 1-based integer assigned by `SingleChannelStrategy`, or `"speaker_cluster_unknown"` when no diarization segment overlaps the chunk window. Dual-channel sessions SHALL produce only `"me"` and `"counterparty"` values. Single-channel sessions SHALL produce only `"speaker_cluster_*"` values when the current user has NO voice enrollment row; when an enrollment exists and a single-channel cluster matches the enrolled embedding above threshold, the matching cluster's chunks MAY carry `"me"` in place of `"speaker_cluster_<N>"` (the matching is applied at finalize time per the `voice-enrollment` capability).
+- `{"type": "silence_warning", "meeting_id": "<id>", "stream": "me"|"counterparty", "since": "<iso8601>"}` — emitted when one stream has been silent for more than 30 seconds; the `stream` field identifies which stream is silent so the client can update only that capture indicator. This frame SHALL NOT be emitted in single-channel sessions.
+- `{"type": "stream_stopped", "meeting_id": "<id>", "stream": "me"|"counterparty", "reason": "<string>"}` — emitted when one capture stream fails mid-session and stops; the WebSocket SHALL remain open until both streams have stopped. This frame SHALL NOT be emitted in single-channel sessions.
 - `{"type": "advice_chunk", "request_id": "<uuid>", "token": "<string>"}` — emitted per Vertex Flash SDK chunk during a streaming advice request; multiple frames make up one advice reply
 - `{"type": "advice_done", "request_id": "<uuid>"}` — terminal frame for a successful advice stream; the client uses it to flip the corresponding card from `streaming` to `done` and re-enable the Get Advice button
 - `{"type": "advisor_failed", "request_id": "<uuid>", "error_code": "<code>", "message": "<string>"}` — emitted when the advisor coroutine raises; `error_code` is one of `advisor.timeout`, `advisor.quota`, `advisor.auth`, `advisor.unknown`. Receiving this frame MUST NOT cause the WebSocket to close — the meeting session continues, only the failing advice card is marked
@@ -123,6 +123,8 @@ Server → client messages:
 - `{"type": "error", "error_code": "<code>", "message": "<string>"}` — emitted when an unrecoverable failure occurs; the connection SHALL be closed by the server immediately afterward
 
 Unknown message types from the client SHALL cause the server to respond with `{"type": "error", "error_code": "session.unknown_message"}` and close the connection.
+
+The server SHALL select the speaker attribution strategy at session finalize time by calling `select_strategy(recordings)` on the meeting's persisted recordings, then `assign_speakers(...)` to determine the `speaker` value written to each `transcript_chunk` row before the chunk is emitted to the client. For single-channel sessions where a `voice_enrollment` row exists for the current user, the finalize step SHALL additionally consult `VoiceEnrollmentMatcher` and rename the matching cluster's chunks from `"speaker_cluster_<N>"` to `"me"` before the meeting transitions to `completed`. A session whose recording configuration is neither dual-channel (`{me, counterparty}`) nor single-channel (exactly one recording) SHALL cause the server to emit `{"type": "error", "error_code": "session.invalid_speaker_configuration"}` and close the connection.
 
 #### Scenario: First client message must be start_meeting matching the path id
 
@@ -135,6 +137,18 @@ Unknown message types from the client SHALL cause the server to respond with `{"
 - **GIVEN** an authenticated owner connects, sends `start_meeting`, both streams capture three audio chunks each, the user sends `end_meeting`
 - **WHEN** the session runs to completion
 - **THEN** the server SHALL emit `meeting_started` first, then six `transcript_chunk` messages (three with `speaker = "me"`, three with `speaker = "counterparty"`) ordered by their `started_at` timestamps, then `meeting_ended`, then close the connection
+
+#### Scenario: Successful single-channel session without enrollment emits speaker_cluster labels
+
+- **GIVEN** an authenticated owner with NO `voice_enrollment` row connects, sends `start_meeting`, only the microphone stream captures audio over a five-minute session containing two speakers, the user sends `end_meeting`
+- **WHEN** the session runs to completion and the diarization pass produces two clusters
+- **THEN** every `transcript_chunk` server message SHALL carry `speaker` matching the regex `^speaker_cluster_(\d+|unknown)$`; no message SHALL carry `speaker = "me"` or `speaker = "counterparty"`
+
+#### Scenario: Single-channel session with enrollment renames the matching cluster to me
+
+- **GIVEN** an authenticated owner WITH a `voice_enrollment` row connects, sends `start_meeting`, only the microphone stream captures audio in a five-minute session containing two speakers (one of whom is the enrolled user), the user sends `end_meeting`
+- **WHEN** the session runs to completion, the diarization pass produces two clusters, and the matcher identifies cluster 1 as the enrolled user above threshold
+- **THEN** every `transcript_chunk` row originating from cluster 1 SHALL carry `speaker = "me"` in DB; the other cluster's chunks SHALL retain `speaker = "speaker_cluster_<N>"`; no chunk SHALL carry `speaker = "counterparty"`
 
 #### Scenario: silence_warning carries the affected stream
 
@@ -160,6 +174,12 @@ Unknown message types from the client SHALL cause the server to respond with `{"
 - **WHEN** the client sends `{"type": "end_meeting", ...}`
 - **THEN** the server SHALL cancel the in-flight advice task within 1 second; no further `advice_chunk` or `advice_done` SHALL be emitted for that `request_id`; the normal `meeting_ended` finalization SHALL proceed
 
+#### Scenario: Invalid recording configuration aborts session finalize with explicit error
+
+- **GIVEN** a meeting session about to finalize whose recordings contain three rows (neither dual-channel nor single-channel)
+- **WHEN** the server invokes `select_strategy(recordings)` and receives `InvalidSpeakerConfiguration`
+- **THEN** the server SHALL emit `{"type": "error", "error_code": "session.invalid_speaker_configuration"}` and close the connection without emitting `meeting_ended`
+
 ##### Example: minimum required keys per server-side message type
 
 | `type`              | Required keys                                                                                              |
@@ -176,42 +196,66 @@ Unknown message types from the client SHALL cause the server to respond with `{"
 
 
 <!-- @trace
-source: slice-08-tactical-advisor
-updated: 2026-05-10
+source: slice-13-voice-enrollment
+updated: 2026-05-15
 code:
-  - packages/web/src/locales/zh-TW.json
-  - packages/backend/meeting_playbook/meetings/dependencies.py
-  - packages/backend/meeting_playbook/advisor/__init__.py
-  - packages/backend/meeting_playbook/advisor/base.py
-  - .env.example
-  - packages/web/src/routes/meetings/detail.tsx
-  - packages/backend/meeting_playbook/advisor/prompts.py
   - packages/backend/meeting_playbook/config.py
-  - packages/web/src/hooks/use-meeting-session.ts
-  - packages/backend/meeting_playbook/advisor/dependencies.py
+  - packages/backend/meeting_playbook/voice_enrollment/router.py
+  - packages/backend/meeting_playbook/voice_enrollment/repository.py
+  - .spectra.yaml
+  - packages/backend/meeting_playbook/voice_enrollment/__init__.py
+  - packages/backend/uv.lock
+  - packages/backend/alembic.ini
   - packages/backend/meeting_playbook/sessions/repository.py
-  - packages/backend/meeting_playbook/sessions/router.py
-  - packages/backend/meeting_playbook/playbook_generation/generator.py
-  - packages/web/src/lib/session-ws.ts
+  - packages/backend/meeting_playbook/voice_enrollment/matcher.py
+  - docs/adr/README.md
+  - packages/web/src/lib/wav-encoder.ts
+  - packages/web/src/route-tree.tsx
+  - packages/web/src/locales/zh-TW.json
+  - packages/backend/meeting_playbook/speaker/diarization.py
+  - packages/backend/meeting_playbook/speaker/pyannote_provider.py
+  - CONTEXT.md
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/transcript-pane.tsx
+  - docs/adr/0029-hybrid-speaker-attribution.md
   - packages/web/src/locales/en.json
-  - docs/adr/0028-qwen3-asr-replaces-vibevoice.md
+  - packages/backend/meeting_playbook/speaker/strategy.py
   - packages/backend/meeting_playbook/sessions/messages.py
-  - packages/backend/meeting_playbook/advisor/vertex_advisor.py
-  - docs/agents/advisor.md
-  - packages/web/src/components/advisor-pane.tsx
+  - packages/backend/meeting_playbook/speaker/__init__.py
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - packages/web/src/lib/voice-enrollment-api.ts
+  - packages/backend/alembic/versions/0010_relax_chunk_speaker_check.py
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/pyproject.toml
+  - packages/web/src/routes/settings/voice.tsx
+  - packages/backend/meeting_playbook/voice_enrollment/embedding.py
+  - packages/backend/alembic/versions/0009_create_voice_enrollment.py
+  - .env.example
+  - README.md
+  - packages/backend/meeting_playbook/voice_enrollment/models.py
 tests:
-  - packages/backend/tests/advisor/test_vertex_advisor.py
-  - packages/backend/tests/meetings/test_dependencies.py
-  - packages/backend/tests/sessions/test_repository.py
-  - packages/web/src/components/advisor-pane.test.tsx
-  - packages/backend/tests/advisor/test_prompts.py
-  - packages/web/src/hooks/use-meeting-session.test.tsx
+  - packages/backend/tests/voice_enrollment/test_repository.py
+  - packages/backend/tests/voice_enrollment/test_matcher.py
+  - packages/backend/tests/speaker/test_diarization_protocol.py
+  - packages/backend/tests/voice_enrollment/__init__.py
+  - packages/web/src/lib/wav-encoder.test.ts
+  - packages/backend/scripts/test_pyannote.py
+  - packages/backend/tests/conftest.py
+  - packages/backend/tests/speaker/test_finalize.py
+  - packages/web/src/components/transcript-pane.test.tsx
+  - packages/backend/tests/test_alembic_voice_enrollment.py
+  - packages/backend/tests/speaker/test_pyannote_provider.py
+  - packages/backend/tests/speaker/test_strategy_protocol.py
+  - packages/backend/tests/speaker/__init__.py
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/backend/tests/speaker/test_dual_channel_strategy.py
+  - packages/web/src/routes/settings/voice.test.tsx
   - packages/backend/tests/sessions/test_messages.py
-  - packages/backend/tests/advisor/__init__.py
-  - packages/backend/tests/advisor/test_dependencies.py
-  - packages/backend/tests/sessions/test_router_advice.py
-  - packages/web/src/lib/session-ws.test.ts
-  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/backend/tests/speaker/test_single_channel_strategy.py
+  - packages/backend/tests/speaker/test_select_strategy.py
+  - packages/backend/tests/voice_enrollment/test_embedding.py
+  - packages/backend/tests/voice_enrollment/test_router.py
+  - packages/backend/tests/integration/__init__.py
 -->
 
 ---

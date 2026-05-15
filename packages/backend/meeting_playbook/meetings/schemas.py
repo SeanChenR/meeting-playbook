@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MeetingStatus = Literal["scheduled", "in_progress", "completed"]
 
@@ -124,6 +124,25 @@ class MeetingPatch(BaseModel):
         return {k: v for k, v in self.model_dump().items() if v is not None}
 
 
+class RecordingSummary(BaseModel):
+    """Slice-16: minimal recording row shape the mini-player needs to
+    locate + anchor playback.
+
+    Just the fields a frontend audio player cares about — `id` for URL
+    construction, `stream` to pick me vs counterparty, `started_at` as
+    the wall-clock anchor for chunk-seek math, `deleted_at` to gate
+    the play affordance behind retention.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    meeting_id: str
+    stream: str
+    started_at: datetime
+    deleted_at: datetime | None
+
+
 class MeetingDetailRead(MeetingRead):
     """Single-meeting GET response — adds slice-11 derived flags.
 
@@ -134,7 +153,10 @@ class MeetingDetailRead(MeetingRead):
 
     `recordings_available`: at least one recording row has `deleted_at IS NULL`.
     `rerun_asr_pending`: the in-flight rerun registry reports the meeting.
+    `recordings` (slice-16): the meeting's recording rows in a shape suitable
+    for the mini-player to construct `/api/.../recordings/<id>/audio` URLs.
     """
 
     recordings_available: bool
     rerun_asr_pending: bool
+    recordings: list[RecordingSummary] = []

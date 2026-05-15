@@ -25,6 +25,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   isRerunPending,
@@ -33,9 +34,15 @@ import {
 } from "../lib/rerun-api";
 import type { TranscriptChunkMessage } from "../lib/session-ws";
 import { paneEnter } from "../lib/motion-presets";
+import { _resolveClusterColor } from "../lib/transcript-color-schemes";
+import { useClusterSpeakerLabels } from "../hooks/use-cluster-speaker-labels";
+import { miniPlayerStore } from "../hooks/use-mini-player";
+import { useTranscriptColorPref } from "../hooks/use-transcript-color-pref";
 import { cn } from "../lib/utils";
 import { NumberTicker } from "./magicui/number-ticker";
 import { Pane } from "./pane";
+import { SpeakerColorPopover } from "./speaker-color-popover";
+import { TranscriptChunkRow as ChunkBody } from "./transcript-chunk-row";
 import { Skeleton } from "./ui/skeleton";
 
 export type ContrastLevel = "subtle" | "strong";
@@ -80,41 +87,11 @@ function _formatTime(iso: string): string {
   }
 }
 
-// Stable distinct hues for speaker_cluster_N. Cycling through 6 well-spaced
-// hues keeps adjacent clusters visually distinct even when pyannote returns
-// many speakers; clusters > 6 reuse hues but in a different brightness band.
-const _CLUSTER_HUES = [300, 150, 30, 240, 90, 0];
-
-function _chunkBackground(speaker: TranscriptChunkMessage["speaker"]): string {
-  if (speaker === "me") {
-    return `color-mix(in oklch, var(--color-me-soft) calc(var(--me-tint-alpha) * 1000%), transparent)`;
-  }
-  if (speaker === "counterparty") {
-    return `color-mix(in oklch, var(--color-them-soft) calc(var(--them-tint-alpha) * 1000%), transparent)`;
-  }
-  const match = _CLUSTER_LABEL_RE.exec(speaker);
-  if (match) {
-    if (match[1] === "unknown") {
-      return `color-mix(in oklch, var(--color-muted) calc(var(--them-tint-alpha) * 1000%), transparent)`;
-    }
-    const n = Number.parseInt(match[1], 10);
-    const hue = _CLUSTER_HUES[(n - 1) % _CLUSTER_HUES.length];
-    return `color-mix(in oklch, oklch(0.93 0.06 ${hue}) calc(var(--them-tint-alpha) * 1000%), transparent)`;
-  }
-  return "transparent";
-}
-
-function _speakerAccent(speaker: TranscriptChunkMessage["speaker"]): string {
-  if (speaker === "me") return "var(--color-me)";
-  if (speaker === "counterparty") return "var(--color-them)";
-  const match = _CLUSTER_LABEL_RE.exec(speaker);
-  if (match && match[1] !== "unknown") {
-    const n = Number.parseInt(match[1], 10);
-    const hue = _CLUSTER_HUES[(n - 1) % _CLUSTER_HUES.length];
-    return `oklch(0.55 0.18 ${hue})`;
-  }
-  return "var(--color-muted-foreground)";
-}
+// Slice-16: cluster color resolution moved to lib/transcript-color-schemes.ts
+// so the user can pick a palette (default / vivid / pastel / high-contrast /
+// grayscale) and override individual cluster colors. The pure resolver
+// returns both `accent` and `background`; the helpers below preserve the
+// previous two-call shape for incremental refactoring.
 
 export function TranscriptPane({
   chunks,
@@ -195,6 +172,7 @@ export function TranscriptPane({
                 chunk={chunk}
                 meDisplayName={meDisplayName}
                 counterpartyDisplayName={counterpartyDisplayName}
+                meetingId={meetingId}
               />
             ))}
           </ol>
@@ -208,15 +186,40 @@ function TranscriptChunkRow({
   chunk,
   meDisplayName,
   counterpartyDisplayName,
+  meetingId,
 }: {
   chunk: TranscriptChunkMessage;
   meDisplayName: string;
   counterpartyDisplayName: string;
+  meetingId?: string;
 }) {
   const { t } = useTranslation();
   const isMe = chunk.speaker === "me";
-  const speakerColor = _speakerAccent(chunk.speaker);
-  const background = _chunkBackground(chunk.speaker);
+  const { pref } = useTranscriptColorPref();
+  const { accent: speakerColor, background } = _resolveClusterColor(chunk.speaker, pref);
+
+  // Slice-16 task 10.5/10.8: cluster speakers expose a chunk action
+  // menu (Play / Edit text / Edit color / Rename speaker) via the body.
+  const clusterMatch = _CLUSTER_LABEL_RE.exec(chunk.speaker);
+  const clusterN =
+    clusterMatch && clusterMatch[1] !== "unknown"
+      ? Number.parseInt(clusterMatch[1] as string, 10)
+      : null;
+  const speakerNameRef = useRef<HTMLSpanElement | null>(null);
+  const [colorPopoverOpen, setColorPopoverOpen] = useState(false);
+
+  // Slice-16 task 10.3: per-meeting cluster label override.
+  const { labels, setLabel } = useClusterSpeakerLabels(meetingId ?? "");
+  const overrideLabel = clusterN !== null && labels[clusterN] ? labels[clusterN] : null;
+  const speakerLabel =
+    overrideLabel ?? _speakerLabel(chunk, meDisplayName, counterpartyDisplayName, t);
+
+  // Chunk-id key: prefer real chunk.id (REST replay carries the DB
+  // `tc_xxx` id; WS live frames may also carry one). Fall back to a
+  // composite key so React can still key-stable on live frames before
+  // they're persisted.
+  const chunkId = chunk.id ?? `${chunk.started_at}-${chunk.speaker}`;
+  const hasDbId = typeof chunk.id === "string" && chunk.id.length > 0;
 
   return (
     <li
@@ -227,17 +230,11 @@ function TranscriptChunkRow({
           borderLeftStyle: "solid",
           borderLeftWidth: "3px",
           borderLeftColor: speakerColor,
-          // CSS custom property — happy-dom's value validator rejects
-          // `color-mix()` on the standard `background-color` property and
-          // drops it silently, which would also drop the cue from the rendered
-          // HTML. Routing through a CSS variable preserves the value end-to-end.
           "--chunk-bg": background,
         } as React.CSSProperties
       }
       className={cn(
         "rounded-r-md bg-(--chunk-bg) px-3 py-2.5 text-sm",
-        // Back-compat tokens for slice-7-era selectors that match on
-        // arbitrary-value border classes.
         isMe ? "border-l-(--color-muted-foreground)" : "border-l-(--color-primary)",
       )}
     >
@@ -249,22 +246,34 @@ function TranscriptChunkRow({
           style={{ background: speakerColor }}
         />
         <span
+          ref={speakerNameRef}
           data-testid="speaker-name"
           className="text-sm font-semibold"
           style={{ color: speakerColor }}
         >
-          {_speakerLabel(chunk, meDisplayName, counterpartyDisplayName, t)}
+          {speakerLabel}
         </span>
+        {clusterN !== null && (
+          <SpeakerColorPopover
+            clusterN={clusterN}
+            open={colorPopoverOpen}
+            onOpenChange={setColorPopoverOpen}
+            anchorRef={speakerNameRef}
+          />
+        )}
         <span className="font-mono text-xs text-(--color-muted-foreground)">
           {_formatTime(chunk.started_at)}
         </span>
       </div>
-      <p
-        className="break-words whitespace-pre-wrap text-(--color-foreground)"
-        style={{ lineHeight: 1.6 }}
-      >
-        {chunk.text}
-      </p>
+      <ChunkBody
+        meetingId={meetingId ?? ""}
+        chunkId={chunkId}
+        text={chunk.text}
+        clusterN={clusterN}
+        onPlay={(id) => miniPlayerStore.seekToChunk(id)}
+        onEditColor={() => setColorPopoverOpen(true)}
+        onRenameCommit={(n, label) => setLabel(n, label)}
+      />
     </li>
   );
 }

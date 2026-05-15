@@ -132,6 +132,13 @@ class Settings(BaseSettings):
     # inputs can stay under the byte budget while exceeding wall time.
     offline_upload_max_duration_seconds: int = 10_800
 
+    # Slice 16 — audio playback Range cap.
+    # Single Range request body is capped here (default 2 MiB ≈ 64 seconds of
+    # 16 kHz mono 16-bit PCM). Browsers chase up with a follow-up Range when
+    # they need more, so this caps server-side memory + bandwidth per response
+    # without preventing full-file playback.
+    audio_range_max_bytes: int = 2_097_152
+
     # Backend service URL (gateway forwards /api/* here)
     backend_url: str = "http://localhost:8000"
 

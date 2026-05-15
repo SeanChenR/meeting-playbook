@@ -79,8 +79,12 @@ async def test_recording_has_source_and_started_at_at_head(
     assert by_name["started_at"].data_type == "timestamp with time zone", (
         f"started_at type must be TIMESTAMPTZ; got {by_name['started_at'].data_type!r}"
     )
-    assert by_name["started_at"].is_nullable == "YES", (
-        f"started_at must be nullable; got {by_name['started_at'].is_nullable!r}"
+    # Slice-14 introduced `started_at` as nullable; slice-16 migration
+    # 0014 backfills then tightens to NOT NULL. After HEAD, the column
+    # is required — see test_alembic_recording_started_at.py for the
+    # backfill round-trip coverage.
+    assert by_name["started_at"].is_nullable == "NO", (
+        f"started_at must be NOT NULL after slice-16; got {by_name['started_at'].is_nullable!r}"
     )
 
 
@@ -174,8 +178,13 @@ async def test_pre_0011_recording_rows_backfill_as_live(
                 assert r.source == "live", (
                     f"row {r.id} MUST back-fill to source='live'; got {r.source!r}"
                 )
-                assert r.started_at is None, (
-                    f"row {r.id} MUST have started_at IS NULL post-migration; got {r.started_at!r}"
+                # Slice-14 added `started_at` as nullable and inserted rows
+                # left it NULL. Slice-16 migration 0014 now back-fills any
+                # NULL value to that row's `created_at` and tightens to
+                # NOT NULL — so after HEAD the value MUST be non-null and
+                # equal to created_at for these pre-0011 rows.
+                assert r.started_at is not None, (
+                    f"row {r.id} MUST have started_at back-filled post-0014; got NULL"
                 )
 
             # Cleanup so the seeded rows don't leak into other tests' counts.

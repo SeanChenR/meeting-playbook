@@ -17,6 +17,14 @@ export type Stream = "me" | "counterparty";
 
 export type TranscriptChunkMessage = {
   type: "transcript_chunk";
+  /**
+   * DB row id (`tc_xxx`) when the chunk came from REST replay
+   * (`rowToMessage`) or when the WebSocket frame carried one. Absent
+   * for live-capture frames that haven't been persisted yet — slice-16
+   * chunk edit / play actions therefore SHOULD only mount on chunks
+   * with a real id.
+   */
+  id?: string;
   meeting_id: string;
   speaker: Stream;
   text: string;

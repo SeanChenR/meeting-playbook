@@ -53,17 +53,30 @@ const _editSchema = z
 type EditFormValues = z.infer<typeof _editSchema>;
 
 function _toDatetimeLocal(value: string | null | undefined): string {
-  // `datetime-local` wants `yyyy-MM-ddTHH:mm` (no timezone). Project
-  // serves ISO 8601 UTC; slice off the seconds + Z so the input
-  // populates cleanly. Empty when value is missing.
+  // `datetime-local` wants `yyyy-MM-ddTHH:mm` (no timezone). The backend
+  // stores UTC; the input must show the user's LOCAL equivalent.
+  //
+  // Slice-16 polish bugfix: the previous implementation `.slice(0, 16)`
+  // stripped the `Z` and showed UTC time as if it were local — so a
+  // meeting recorded at 18:34 UTC showed as 18:34 local (off by the
+  // user's TZ offset), and saving without editing would re-interpret
+  // the UTC string AS local → silent 8-hour shift on every save round
+  // trip in GMT+8.
   if (!value) return "";
-  return value.slice(0, 16);
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
 }
 
 function _toIso(value: string): string | undefined {
   // `datetime-local` value comes back without a timezone; assume the
   // user typed local time and serialise as UTC (matching what the
-  // backend stores).
+  // backend stores). `new Date(localString)` already interprets the
+  // string as local time, so `.toISOString()` produces the correct UTC.
   if (!value) return undefined;
   return new Date(value).toISOString();
 }

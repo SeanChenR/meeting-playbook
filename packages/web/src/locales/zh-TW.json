@@ -226,6 +226,7 @@
       "statusLabel": "狀態",
       "asrProviderLabel": "ASR 引擎",
       "createdAtLabel": "建立時間",
+      "scheduledWindowLabel": "會議時間",
       "deleteButton": "刪除 Meeting",
       "deleteDialogTitle": "確定要刪除這個 Meeting？",
       "deleteDialogDescription": "刪除後無法復原。所屬的逐字稿、playbook 與錄音也會一併移除。",
@@ -409,6 +410,63 @@
       "reRecordToOverwrite": "重新錄製覆蓋"
     }
   },
+  "transcript": {
+    "chunk": {
+      "edit": {
+        "startEdit": "編輯",
+        "save": "儲存",
+        "cancel": "取消",
+        "placeholder": "修正逐字稿…",
+        "errors": {
+          "invalidText": "文字內容無效（不可空白或超過 10000 字元）",
+          "immutableField": "僅可編輯文字，其他欄位不可變更"
+        }
+      },
+      "actions": {
+        "open": "操作",
+        "play": "播放此段",
+        "editText": "編輯文字",
+        "editColor": "編輯顏色",
+        "renameSpeaker": "重新命名講者"
+      },
+      "rename": {
+        "save": "儲存",
+        "cancel": "取消",
+        "placeholder": "輸入講者名稱（1–50 字）",
+        "invalidLength": "名稱必須是 1–50 字元"
+      }
+    },
+    "color": {
+      "popoverTitle": "講者顏色",
+      "swatch": "預設色票",
+      "customColor": "自訂顏色",
+      "grayscaleHint": "灰階調色盤無法為單一講者覆寫顏色，只能切換配色方案",
+      "resetToScheme": "重設為調色盤",
+      "scheme": {
+        "default": "預設",
+        "vivid": "鮮明",
+        "pastel": "粉彩",
+        "highContrast": "高對比",
+        "grayscale": "灰階"
+      }
+    }
+  },
+  "meeting": {
+    "detail": {
+      "audioPlayer": {
+        "play": "播放",
+        "pause": "暫停",
+        "prev": "上一段",
+        "next": "下一段",
+        "speed": "速度",
+        "seekBar": "進度",
+        "currentTime": "目前",
+        "duration": "總長",
+        "chunkExpired": "錄音已過 30 天保留期",
+        "playbackError": "音訊播放錯誤"
+      }
+    }
+  },
   "offline_ingest": {
     "dialog": {
       "heading": "上傳會議音檔",
@@ -479,6 +537,20 @@
       "conditions_not_met": "會議狀態已改變，無法接受上傳",
       "not_found": "找不到此會議",
       "network": "上傳過程網路錯誤，請重試"
+    },
+    "transcript_edit": {
+      "invalid_text": "文字內容無效（不可空白或超過 10000 字元）",
+      "immutable_field": "僅可編輯文字，其他欄位不可變更",
+      "chunk_not_found": "找不到此 transcript 片段",
+      "forbidden": "您沒有權限編輯此 transcript"
+    },
+    "audio_playback": {
+      "expired": "錄音已過 30 天保留期",
+      "malformed_range": "音訊 Range 請求格式錯誤",
+      "range_not_satisfiable": "音訊 Range 請求超出檔案範圍",
+      "recording_not_found": "找不到此錄音",
+      "forbidden": "您沒有權限播放此錄音",
+      "unsupported_format": "錄音檔格式不支援"
     },
     "summary": {
       "busy": "上一個生成尚未完成",

@@ -34,6 +34,7 @@ from meeting_playbook.meetings.schemas import (
     MeetingDetailRead,
     MeetingPatch,
     MeetingRead,
+    RecordingSummary,
 )
 from meeting_playbook.rerun import runtime as rerun_runtime
 from meeting_playbook.sessions.models import Recording
@@ -84,17 +85,15 @@ async def get_meeting(
             detail={"error_code": "meeting.not_found", "message": "Meeting not found"},
         )
 
-    # Slice-11 derived flags — computed server-side per-request, not persisted.
-    recordings_available = bool(
-        await session.scalar(
-            select(Recording.id)
-            .where(
-                Recording.meeting_id == meeting_id,
-                Recording.deleted_at.is_(None),
-            )
-            .limit(1)
-        )
+    # Slice-11 derived flags + slice-16 recordings list. We pull all
+    # recording rows once so the audio player can locate the me-stream
+    # WAV without a second round-trip.
+    all_recordings = (
+        (await session.execute(select(Recording).where(Recording.meeting_id == meeting_id)))
+        .scalars()
+        .all()
     )
+    recordings_available = any(r.deleted_at is None for r in all_recordings)
     rerun_asr_pending = rerun_runtime.is_pending(meeting_id)
 
     base = MeetingRead.model_validate(meeting).model_dump()
@@ -102,6 +101,7 @@ async def get_meeting(
         **base,
         recordings_available=recordings_available,
         rerun_asr_pending=rerun_asr_pending,
+        recordings=[RecordingSummary.model_validate(r) for r in all_recordings],
     )
 
 
@@ -170,21 +170,20 @@ async def patch_meeting(
                 detail={"error_code": "meeting.not_found", "message": "Meeting not found"},
             )
 
-    recordings_available = bool(
-        await session.scalar(
-            select(Recording.id)
-            .where(
-                Recording.meeting_id == meeting_id,
-                Recording.deleted_at.is_(None),
-            )
-            .limit(1)
-        )
+    # Slice-16: load full recording list so PATCH responses keep the
+    # same shape as GET, including the recordings array.
+    all_recordings = (
+        (await session.execute(select(Recording).where(Recording.meeting_id == meeting_id)))
+        .scalars()
+        .all()
     )
+    recordings_available = any(r.deleted_at is None for r in all_recordings)
     base = MeetingRead.model_validate(target).model_dump()
     return MeetingDetailRead(
         **base,
         recordings_available=recordings_available,
         rerun_asr_pending=rerun_runtime.is_pending(meeting_id),
+        recordings=[RecordingSummary.model_validate(r) for r in all_recordings],
     )
 
 

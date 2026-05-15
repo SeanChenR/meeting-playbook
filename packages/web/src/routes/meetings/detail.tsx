@@ -33,6 +33,8 @@ import { CaptureIndicator } from "../../components/capture-indicator";
 import { HeadphonesHint } from "../../components/headphones-hint";
 import { LayoutSwitcher } from "../../components/layout-switcher";
 import { Upload } from "lucide-react";
+import { MeetingAudioMiniPlayer } from "../../components/meeting-audio-mini-player";
+import { miniPlayerStore } from "../../hooks/use-mini-player";
 import { MeetingEditForm } from "../../components/meeting-edit-form";
 import { MetadataCard } from "../../components/metadata-card";
 import { UploadDialog } from "../../components/offline-ingest/UploadDialog";
@@ -139,6 +141,25 @@ export function MeetingDetail() {
   );
   const sessionChunks =
     liveChunks.length > 0 ? liveChunks : (historyQuery.data ?? []).map(rowToMessage);
+
+  // Slice-16 task 10.7: populate the mini-player store whenever the
+  // meeting's chunks + recordings are loaded. `chunks_sorted` and
+  // `recordings` drive `seekToChunk` + `pickMeetingRecording` so the
+  // bottom player can play the whole me-stream WAV and chunk action
+  // menu "Play this chunk" can compute seek offsets.
+  useEffect(() => {
+    if (!meetingId || meeting === null) return;
+    miniPlayerStore.setContext({
+      meeting_id: meetingId,
+      chunks: sessionChunks.map((c, idx) => ({
+        id: c.id ?? `${c.started_at}-${c.speaker}-${idx}`,
+        speaker: c.speaker,
+        started_at: c.started_at,
+        ended_at: c.ended_at,
+      })),
+      recordings: meeting.recordings ?? [],
+    });
+  }, [meetingId, meeting, sessionChunks]);
   const sessionError =
     session.state.phase === "error" ? localizedErrorMessage(session.state.errorCode, t) : null;
   const startDisabled =
@@ -283,6 +304,12 @@ export function MeetingDetail() {
           />
         )}
       </div>
+
+      {/* Slice-16: sticky bottom mini-player for chunk-level audio playback.
+          Mounted once at the page root so it survives tab switching between
+          Workspace and Summary, and uses the module-scoped store so
+          TranscriptChunkRow ▶ clicks update without prop drilling. */}
+      {meeting && <MeetingAudioMiniPlayer meetingId={meetingId} />}
 
       <AlertDialog
         open={confirmOpen}

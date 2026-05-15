@@ -127,8 +127,11 @@ async def _seed_meeting_with_recordings(
         await conn.execute(
             text(
                 """
-                INSERT INTO recording (id, meeting_id, stream, file_path, bytes, created_at)
-                VALUES ('r_me_' || :mid, :mid, 'me', :fp, 100, now())
+                INSERT INTO recording (
+                    id, meeting_id, stream, file_path, bytes,
+                    created_at, started_at
+                )
+                VALUES ('r_me_' || :mid, :mid, 'me', :fp, 100, now(), now())
                 """
             ),
             {"mid": meeting_id, "fp": str(me_wav)},
@@ -136,8 +139,11 @@ async def _seed_meeting_with_recordings(
         await conn.execute(
             text(
                 """
-                INSERT INTO recording (id, meeting_id, stream, file_path, bytes, created_at)
-                VALUES ('r_cp_' || :mid, :mid, 'counterparty', :fp, 100, now())
+                INSERT INTO recording (
+                    id, meeting_id, stream, file_path, bytes,
+                    created_at, started_at
+                )
+                VALUES ('r_cp_' || :mid, :mid, 'counterparty', :fp, 100, now(), now())
                 """
             ),
             {"mid": meeting_id, "fp": str(cp_wav)},

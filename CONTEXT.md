@@ -31,6 +31,9 @@ Three lifecycle phases of one meeting:
 | **Voice enrollment sample (聲紋樣本)** | A one-time 30-second WAV the user records via `/settings/voice`; its pyannote-derived embedding lets `Single-channel mode` automatically rename the matching speaker cluster to `me` at session finalize (per ADR-0029 + slice 13) |
 | **Recording window** | The 30-day retention window for raw WAV audio files; older recordings are auto-deleted but transcripts are preserved |
 | **Meeting** | A single timeboxed event with one playbook, one set of audio recordings, one transcript, and (post-completion) one summary |
+| **Mini-player** | Sticky-bottom audio control bar on the meeting detail page that plays a transcript chunk's underlying audio slice; six playback speeds, persists to `localStorage.miniPlayerRate` (slice-16) |
+| **Transcript chunk edit** | User-initiated correction of an ASR chunk's text via `PATCH /api/meetings/{id}/transcript_chunks/{cid}`; speaker / timestamps / asr_provider_used remain immutable. `text_edited_at` stamps each successful edit (slice-16) |
+| **Transcript color scheme** | One of five hard-coded palettes (default / vivid / pastel / high-contrast / grayscale) the user can apply to `speaker_cluster_<N>` rendering; per-cluster overrides land in `localStorage`. `me` and `counterparty` keep their semantic colours and are not customisable (slice-16) |
 
 ## Boundaries
 - **Single user.** No team / sharing / multi-tenant.

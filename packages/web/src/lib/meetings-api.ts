@@ -33,13 +33,26 @@ export interface Meeting {
   scheduled_end_at: string | null;
 }
 
+export interface RecordingSummary {
+  id: string;
+  meeting_id: string;
+  stream: string;
+  started_at: string;
+  deleted_at: string | null;
+}
+
 /**
  * Slice-11: GET /api/meetings/{id} returns this superset (mirrors backend
  * `MeetingDetailRead`). The list endpoint still returns plain `Meeting`.
+ *
+ * Slice-16 task 10.7: `recordings` carries the meeting's recording rows
+ * so the audio mini-player can construct `/api/.../audio` URLs and
+ * compute chunk-relative seek offsets.
  */
 export interface MeetingDetail extends Meeting {
   recordings_available: boolean;
   rerun_asr_pending: boolean;
+  recordings?: RecordingSummary[];
 }
 
 export interface MeetingPatchPayload {

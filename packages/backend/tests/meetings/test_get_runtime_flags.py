@@ -105,10 +105,12 @@ async def _seed_recording(
             text(
                 """
                 INSERT INTO recording (
-                    id, meeting_id, stream, file_path, bytes, created_at, deleted_at, source
+                    id, meeting_id, stream, file_path, bytes,
+                    created_at, started_at, deleted_at, source
                 )
                 VALUES (
-                    'r_' || :mid || '_' || :stream, :mid, :stream, :fp, 100, now(),
+                    'r_' || :mid || '_' || :stream, :mid, :stream, :fp, 100,
+                    now(), now(),
                     CASE WHEN :del THEN now() ELSE NULL END,
                     :source
                 )

@@ -29,6 +29,8 @@ bun.lockb
 .claude/skills/framer-motion-animator/
 .claude/skills/frontend-design/
 .claude/skills/shadcn/
+# Sub-agent isolated worktrees (Agent tool isolation: "worktree")
+.claude/worktrees/
 .agents/
 skills-lock.json
 

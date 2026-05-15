@@ -70,10 +70,13 @@ async def _insert_recording(
             text(
                 """
                 INSERT INTO recording (
-                    id, meeting_id, stream, file_path, bytes, created_at, source
+                    id, meeting_id, stream, file_path, bytes,
+                    created_at, started_at, source
                 )
                 VALUES (:rid, :mid, :stream, :fp, 100,
-                    now() - (:age || ' days')::interval, :source)
+                    now() - (:age || ' days')::interval,
+                    now() - (:age || ' days')::interval,
+                    :source)
                 """
             ),
             {

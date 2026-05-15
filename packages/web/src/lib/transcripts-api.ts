@@ -65,6 +65,11 @@ export function rowToMessage(row: TranscriptChunkRow): TranscriptChunkMessage {
   const speaker = row.speaker === "system" ? "counterparty" : row.speaker;
   return {
     type: "transcript_chunk",
+    // Slice-16: thread the DB row id through so chunk-edit / play
+    // actions can target the right `transcript_chunk` row. Without
+    // this `rowToMessage` strips the id and downstream PATCH requests
+    // return 404 (transcript_edit.chunk_not_found).
+    id: row.id,
     meeting_id: row.meeting_id,
     speaker,
     text: row.text,

@@ -100,6 +100,7 @@ async def _seed_single_channel_meeting(
             file_path=str(wav_path),
             bytes=wav_bytes,
             created_at=base,
+            started_at=base,
         )
         s.add(rec)
         await s.flush()
@@ -159,6 +160,7 @@ async def _seed_dual_channel_meeting(db_url: str, *, user_id: str, meeting_id: s
                     file_path=f"/tmp/{meeting_id}_{stream}.wav",
                     bytes=64_000,
                     created_at=base,
+                    started_at=base,
                 )
             )
         await s.flush()

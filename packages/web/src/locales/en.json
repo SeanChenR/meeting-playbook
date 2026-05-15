@@ -178,6 +178,7 @@
       "statusLabel": "Status",
       "asrProviderLabel": "ASR provider",
       "createdAtLabel": "Created at",
+      "scheduledWindowLabel": "Scheduled",
       "deleteButton": "Delete meeting",
       "deleteDialogTitle": "Delete this meeting?",
       "deleteDialogDescription": "This cannot be undone. The associated transcripts, playbook, and recordings will also be removed.",
@@ -226,6 +227,7 @@
       "statusLabel": "Status",
       "asrProviderLabel": "ASR provider",
       "createdAtLabel": "Created at",
+      "scheduledWindowLabel": "Scheduled",
       "deleteButton": "Delete meeting",
       "deleteDialogTitle": "Delete this meeting?",
       "deleteDialogDescription": "This cannot be undone. The associated transcripts, playbook, and recordings will also be removed.",
@@ -409,6 +411,63 @@
       "reRecordToOverwrite": "Re-record to overwrite"
     }
   },
+  "transcript": {
+    "chunk": {
+      "edit": {
+        "startEdit": "Edit",
+        "save": "Save",
+        "cancel": "Cancel",
+        "placeholder": "Fix transcript text…",
+        "errors": {
+          "invalidText": "Text is invalid (must not be empty or longer than 10000 chars)",
+          "immutableField": "Only the text field is editable"
+        }
+      },
+      "actions": {
+        "open": "Actions",
+        "play": "Play this chunk",
+        "editText": "Edit text",
+        "editColor": "Edit color",
+        "renameSpeaker": "Rename speaker"
+      },
+      "rename": {
+        "save": "Save",
+        "cancel": "Cancel",
+        "placeholder": "Enter speaker name (1–50 chars)",
+        "invalidLength": "Name must be 1–50 characters"
+      }
+    },
+    "color": {
+      "popoverTitle": "Speaker color",
+      "swatch": "Preset swatches",
+      "customColor": "Custom color",
+      "grayscaleHint": "Grayscale palette does not support per-speaker overrides; switch schemes to recolor",
+      "resetToScheme": "Reset to scheme",
+      "scheme": {
+        "default": "Default",
+        "vivid": "Vivid",
+        "pastel": "Pastel",
+        "highContrast": "High contrast",
+        "grayscale": "Grayscale"
+      }
+    }
+  },
+  "meeting": {
+    "detail": {
+      "audioPlayer": {
+        "play": "Play",
+        "pause": "Pause",
+        "prev": "Previous",
+        "next": "Next",
+        "speed": "Speed",
+        "seekBar": "Progress",
+        "currentTime": "Current",
+        "duration": "Duration",
+        "chunkExpired": "Recording exceeded the 30-day retention window",
+        "playbackError": "Audio playback error"
+      }
+    }
+  },
   "offline_ingest": {
     "dialog": {
       "heading": "Upload meeting audio",
@@ -468,6 +527,20 @@
       "too_large": "File exceeds the 5MB size limit",
       "too_long": "Recording exceeds the 30-second limit",
       "invalid_sample": "Sample validation failed: please record a single speaker for up to 30 seconds in a quiet environment"
+    },
+    "transcript_edit": {
+      "invalid_text": "Text is invalid (must not be empty or longer than 10000 chars)",
+      "immutable_field": "Only the text field is editable",
+      "chunk_not_found": "Transcript chunk not found",
+      "forbidden": "You don't have permission to edit this transcript"
+    },
+    "audio_playback": {
+      "expired": "Recording exceeded the 30-day retention window",
+      "malformed_range": "Audio Range header is malformed",
+      "range_not_satisfiable": "Audio Range request out of bounds",
+      "recording_not_found": "Recording not found",
+      "forbidden": "You don't have permission to play this recording",
+      "unsupported_format": "Recording format is not supported"
     },
     "offline_ingest": {
       "unsupported_format": "Unsupported audio format; only wav / mp3 / m4a / aac / flac / ogg are accepted",

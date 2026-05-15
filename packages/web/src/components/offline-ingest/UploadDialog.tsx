@@ -136,6 +136,11 @@ export function UploadDialog({
           onCompleted: () => {
             toast.success(t("offline_ingest.dialog.completed"));
             queryClient.invalidateQueries({ queryKey: ["meeting", meeting.id] });
+            // Slice-16 task 10.x bug fix: also invalidate the transcripts
+            // query so the new chunks appear in the transcript pane
+            // immediately. Without this the user has to reload the page
+            // to see the freshly-ingested transcript.
+            queryClient.invalidateQueries({ queryKey: ["transcripts", meeting.id] });
             onClose();
           },
         });

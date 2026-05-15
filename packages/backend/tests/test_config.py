@@ -97,3 +97,21 @@ def test_recording_retention_days_zero_is_valid(monkeypatch):
 
     settings = Settings(_env_file=None)
     assert settings.recording_retention_days == 0
+
+
+def test_audio_range_max_bytes_default(monkeypatch):
+    """Default cap on a single Range request body is 2 MiB (slice-16 task 1.2)."""
+    _set_required(monkeypatch)
+    monkeypatch.delenv("AUDIO_RANGE_MAX_BYTES", raising=False)
+
+    settings = Settings(_env_file=None)
+    assert settings.audio_range_max_bytes == 2_097_152
+
+
+def test_audio_range_max_bytes_env_override(monkeypatch):
+    """Env override (1 MiB) takes effect (slice-16 task 1.2)."""
+    _set_required(monkeypatch)
+    monkeypatch.setenv("AUDIO_RANGE_MAX_BYTES", "1048576")
+
+    settings = Settings(_env_file=None)
+    assert settings.audio_range_max_bytes == 1_048_576

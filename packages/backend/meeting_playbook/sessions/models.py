@@ -27,6 +27,11 @@ class TranscriptChunk(Base):
     asr_provider_used: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    # Slice-16: PATCH /api/meetings/.../transcript_chunks stamps this on
+    # successful text edit. NULL = chunk text untouched since ASR wrote it.
+    text_edited_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True, default=None
+    )
 
 
 class Recording(Base):
@@ -51,9 +56,8 @@ class Recording(Base):
     # at the DB layer (`recording_source_check`); the only valid values are
     # 'live' and 'offline'. Defaults to 'live' so existing rows back-fill.
     source: Mapped[str] = mapped_column(Text, nullable=False, default="live")
-    # Slice-14: wall-clock moment audio capture began. Offline ingest writes
-    # the user-supplied "actual_started_at"; live capture leaves NULL until a
-    # future slice back-fills it from session start.
-    started_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True, default=None
-    )
+    # Slice-14 added this nullable; slice-16 migration 0014 backfills any
+    # remaining NULL rows from `created_at` and tightens to NOT NULL. The
+    # AudioRangeServer uses this as the wall-clock anchor for computing
+    # byte offsets relative to a chunk's `started_at`.
+    started_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)

@@ -157,6 +157,10 @@ class AudioCaptureService:
         self._buffer = bytearray()
         self._closed = False
         self._stop_requested: asyncio.Event = asyncio.Event()
+        # Slice-16: wall-clock anchor for byte-offset computation in the
+        # audio playback endpoint. Set on `__aenter__` (when the stream
+        # task spins up), read by sessions/router.py during finalize.
+        self._first_sample_ts: datetime | None = None
 
     @property
     def wav_path(self) -> Path:
@@ -164,9 +168,19 @@ class AudioCaptureService:
 
     async def __aenter__(self) -> AudioCaptureService:
         self.wav_path.parent.mkdir(parents=True, exist_ok=True)
+        # Slice-16: capture wall-clock now as the recording's anchor —
+        # close enough to the first sample for byte-offset math.
+        self._first_sample_ts = datetime.now(UTC)
         self._stream_task = self._factory(self._raw_queue)
         self._consumer_task = asyncio.create_task(self._consume())
         return self
+
+    @property
+    def first_sample_ts(self) -> datetime | None:
+        """Wall-clock anchor for the WAV file's first sample, or None
+        when the service has not entered its context yet.
+        """
+        return self._first_sample_ts
 
     async def stop(self) -> None:
         """Request graceful shutdown.

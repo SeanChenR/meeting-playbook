@@ -489,6 +489,11 @@ async def meeting_session_endpoint(
                         stream=stream_label,
                         file_path=str(wav_path),
                         bytes_size=wav_bytes,
+                        # Slice-16: `AudioCaptureService.first_sample_ts`
+                        # carries the wall-clock anchor; scripted test
+                        # captures may not expose it — `insert_recording`
+                        # falls back to `now()` when this is None.
+                        started_at=getattr(cap, "first_sample_ts", None),
                     )
         # Commit so apply_speaker_attribution can read the recordings back.
         await session.commit()

@@ -94,14 +94,22 @@ class SessionRepository:
         stream: str,
         file_path: str,
         bytes_size: int,
+        started_at: datetime | None = None,
     ) -> Recording:
+        # Slice-16: `recording.started_at` is NOT NULL — used by the
+        # AudioRangeServer to anchor byte offsets to wall-clock. Callers
+        # SHOULD pass the audio capture's first-sample timestamp; falling
+        # back to now() preserves test ergonomics while still satisfying
+        # the migration constraint.
+        now = datetime.now(UTC)
         rec = Recording(
             id=f"rec_{secrets.token_urlsafe(16)}",
             meeting_id=meeting_id,
             stream=stream,
             file_path=file_path,
             bytes=bytes_size,
-            created_at=datetime.now(UTC),
+            created_at=now,
+            started_at=started_at or now,
         )
         self._session.add(rec)
         await self._session.flush()

@@ -81,12 +81,21 @@ export function MetadataCard({
   startDisabled = false,
 }: MetadataCardProps) {
   const { t, i18n } = useTranslation();
-  const createdAt = new Date(meeting.created_at).toLocaleString(i18n.language, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // Slice-16 polish: show the scheduled start → end window instead of
+  // `created_at` (was confusing — created_at is the row-insert timestamp,
+  // not when the meeting actually happens).
+  const _fmtTime = (iso: string | null | undefined): string => {
+    if (!iso) return "";
+    return new Date(iso).toLocaleString(i18n.language, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+  const scheduledStart = _fmtTime(meeting.scheduled_start_at);
+  const scheduledEnd = _fmtTime(meeting.scheduled_end_at);
+  const scheduledWindow = scheduledEnd ? `${scheduledStart} – ${scheduledEnd}` : scheduledStart;
   const showEndButton = phase === "in_progress";
 
   return (
@@ -108,7 +117,7 @@ export function MetadataCard({
                 {t(`meetings.status.${meeting.status}`)}
               </Badge>
               <span className="text-xs text-(--color-muted-foreground)">
-                {t("meetings.detail.createdAtLabel")} · {createdAt}
+                {t("meetings.detail.scheduledWindowLabel")} · {scheduledWindow}
               </span>
             </div>
 

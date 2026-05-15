@@ -138,6 +138,7 @@ async def _seed_single_channel_meeting(db_url: str, *, user_id: str, meeting_id:
             file_path=f"/tmp/{meeting_id}_mic.wav",
             bytes=128_000,
             created_at=base,
+            started_at=base,
         )
         s.add(rec)
         await s.flush()

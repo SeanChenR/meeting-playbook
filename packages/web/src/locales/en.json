@@ -414,7 +414,14 @@
     "tags": {
       "title": "Tags",
       "subtitle": "Per-user labels for filtering meetings across the list, kanban, and calendar views.",
-      "empty": "No tags yet. Create one by adding it to a meeting.",
+      "empty": "No tags yet. Click \"+ Add tag\" above to create one.",
+      "create": {
+        "cta": "+ Add tag",
+        "namePlaceholder": "Tag name (1–30 chars)",
+        "submit": "Create",
+        "cancel": "Cancel",
+        "emptyName": "Tag name cannot be empty"
+      },
       "meetingCount_one": "{{count}} meeting",
       "meetingCount_other": "{{count}} meetings",
       "renameAction": "Rename",

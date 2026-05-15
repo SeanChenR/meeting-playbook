@@ -26,6 +26,7 @@ import { localizedErrorMessage } from "../../lib/i18n-errors";
 import {
   ApiError,
   type Tag,
+  useCreateTagMutation,
   useDeleteTagMutation,
   useTagsListQuery,
   useUpdateTagMutation,
@@ -48,12 +49,38 @@ interface DeleteDialogState {
 export function SettingsTags() {
   const { t } = useTranslation();
   const tagsQuery = useTagsListQuery({ withMeetingCount: true });
+  const createMutation = useCreateTagMutation();
   const updateMutation = useUpdateTagMutation();
   const deleteMutation = useDeleteTagMutation();
 
   const [rename, setRename] = useState<RenameState | null>(null);
   const [recolorOpen, setRecolorOpen] = useState<RecolorOpen>({ tagId: null });
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ tag: null });
+
+  // Slice-17 polish: inline "+ 新增標籤" form. Hidden until the user
+  // clicks the CTA; collapses again on submit / cancel.
+  const [createForm, setCreateForm] = useState<{
+    name: string;
+    color: string;
+    error: string | null;
+  } | null>(null);
+
+  async function _submitCreate() {
+    if (!createForm) return;
+    const trimmed = createForm.name.trim();
+    if (trimmed.length === 0) {
+      setCreateForm({ ...createForm, error: t("settings.tags.create.emptyName") });
+      return;
+    }
+    try {
+      await createMutation.mutateAsync({ name: trimmed, color: createForm.color });
+      setCreateForm(null);
+    } catch (err) {
+      const code = err instanceof ApiError ? err.errorCode : undefined;
+      const message = code ? localizedErrorMessage(code, t) : t("errors.common.unknown");
+      setCreateForm({ ...createForm, error: message });
+    }
+  }
 
   const tags = tagsQuery.data ?? [];
 
@@ -95,12 +122,98 @@ export function SettingsTags() {
 
   return (
     <ProtectedShell>
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-(--color-foreground)">
-          {t("settings.tags.title")}
-        </h1>
-        <p className="text-sm text-(--color-muted-foreground)">{t("settings.tags.subtitle")}</p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-(--color-foreground)">
+            {t("settings.tags.title")}
+          </h1>
+          <p className="text-sm text-(--color-muted-foreground)">{t("settings.tags.subtitle")}</p>
+        </div>
+        {createForm === null && (
+          <Button
+            type="button"
+            data-testid="settings-tags-create-cta"
+            onClick={() =>
+              setCreateForm({
+                name: "",
+                color: TAG_PALETTE[0] ?? "",
+                error: null,
+              })
+            }
+          >
+            {t("settings.tags.create.cta")}
+          </Button>
+        )}
       </header>
+
+      {createForm !== null && (
+        <Card data-testid="settings-tags-create-form">
+          <CardContent className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                data-testid="settings-tags-create-name"
+                autoFocus
+                value={createForm.name}
+                placeholder={t("settings.tags.create.namePlaceholder")}
+                maxLength={30}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, name: e.target.value, error: null })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void _submitCreate();
+                  } else if (e.key === "Escape") {
+                    setCreateForm(null);
+                  }
+                }}
+                className="flex-1 min-w-[200px]"
+              />
+              <div className="flex gap-1.5">
+                {TAG_PALETTE.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    data-testid={`settings-tags-create-color-${color}`}
+                    onClick={() => setCreateForm({ ...createForm, color, error: null })}
+                    aria-label={color}
+                    style={{ background: color }}
+                    className={
+                      createForm.color === color
+                        ? "size-6 rounded-full border-2 border-(--color-foreground) transition-transform"
+                        : "size-6 rounded-full border border-(--color-border) transition-transform hover:scale-110"
+                    }
+                  />
+                ))}
+              </div>
+              <Button
+                type="button"
+                data-testid="settings-tags-create-submit"
+                disabled={createForm.name.trim().length === 0}
+                onClick={() => void _submitCreate()}
+              >
+                {t("settings.tags.create.submit")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                data-testid="settings-tags-create-cancel"
+                onClick={() => setCreateForm(null)}
+              >
+                {t("settings.tags.create.cancel")}
+              </Button>
+            </div>
+            {createForm.error && (
+              <p
+                data-testid="settings-tags-create-error"
+                className="text-xs text-(--color-destructive)"
+              >
+                {createForm.error}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="divide-y divide-(--color-border) p-0">

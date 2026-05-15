@@ -413,7 +413,14 @@
     "tags": {
       "title": "標籤管理",
       "subtitle": "為會議建立分類標籤，便於在列表、看板與行事曆視圖中過濾。",
-      "empty": "尚無標籤，先到會議頁掛上一個吧。",
+      "empty": "尚無標籤，點上方「+ 新增標籤」開始建立。",
+      "create": {
+        "cta": "+ 新增標籤",
+        "namePlaceholder": "輸入標籤名稱（1–30 字元）",
+        "submit": "建立",
+        "cancel": "取消",
+        "emptyName": "標籤名稱不可為空"
+      },
       "meetingCount_one": "{{count}} 個會議",
       "meetingCount_other": "{{count}} 個會議",
       "renameAction": "重新命名",

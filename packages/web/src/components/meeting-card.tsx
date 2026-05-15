@@ -14,6 +14,7 @@ import { Calendar as CalendarIcon, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "./ui/badge";
 import { TagChip } from "./tags/tag-chip";
+import { TagPicker } from "./tags/tag-picker";
 import type { Meeting, MeetingStatus } from "../lib/meetings-api";
 
 const STATUS_COLOR: Record<MeetingStatus, string> = {
@@ -115,28 +116,49 @@ export function MeetingCard({ meeting, showUploadShortcut = false }: MeetingCard
     </Link>
   );
 
-  if (!showUploadShortcut) return cardLink;
-
+  // Slice-17: every card carries a hover-only "+ tag" picker so the
+  // user can attach / detach tags without entering the detail page.
+  // Wrap the Link in a positioned group so the picker can sit absolutely
+  // at the top-right without nesting inside <Link> (invalid HTML).
   return (
     <div className="group relative">
       {cardLink}
-      <button
-        type="button"
-        data-testid="meeting-card-upload-shortcut"
-        onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          navigate({
-            to: "/meetings/$id",
-            params: { id: meeting.id },
-            search: { action: "upload" } as never,
-          });
-        }}
-        className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1 rounded-md border border-(--color-primary)/40 bg-(--color-card) px-2.5 py-1 text-xs font-medium text-(--color-primary) opacity-0 shadow-sm transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-(--color-primary)/10"
+      <div
+        data-testid="meeting-card-tag-shortcut"
+        // Stop bubbling clicks reaching the underlying Link (TagPicker's
+        // popover lives in the same DOM tree).
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="absolute right-3 top-3 z-10 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
       >
-        <Upload className="size-3" aria-hidden />
-        {t("meetings.kanban.uploadShortcut")}
-      </button>
+        <TagPicker
+          meetingId={meeting.id}
+          currentTags={(meeting.tags ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            color: t.color,
+          }))}
+        />
+      </div>
+      {showUploadShortcut && (
+        <button
+          type="button"
+          data-testid="meeting-card-upload-shortcut"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            navigate({
+              to: "/meetings/$id",
+              params: { id: meeting.id },
+              search: { action: "upload" } as never,
+            });
+          }}
+          className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1 rounded-md border border-(--color-primary)/40 bg-(--color-card) px-2.5 py-1 text-xs font-medium text-(--color-primary) opacity-0 shadow-sm transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-(--color-primary)/10"
+        >
+          <Upload className="size-3" aria-hidden />
+          {t("meetings.kanban.uploadShortcut")}
+        </button>
+      )}
     </div>
   );
 }

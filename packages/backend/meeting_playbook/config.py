@@ -115,6 +115,23 @@ class Settings(BaseSettings):
     # if a `voice_enrollment` row exists for the current user.
     voice_enrollment_enabled: bool = True
 
+    # Slice 14 — offline ingest (離線匯入).
+    # Staging + final WAV directory for files uploaded via the tus protocol.
+    # Each tus session writes a `{upload_id}.partial` file here while in
+    # flight; on completion the canonical 16kHz mono WAV is written to
+    # `{meeting_id}/source.wav` under this same root.
+    offline_upload_dir: str = "~/MeetingPlaybook/offline_uploads"
+
+    # Maximum upload size in bytes (default 500 MiB). Enforced at tus
+    # creation (`Upload-Length` header) and advertised via `Tus-Max-Size`
+    # on OPTIONS responses so clients can refuse over-budget files locally.
+    offline_upload_max_bytes: int = 524_288_000
+
+    # Maximum transcoded duration in seconds (default 3 hours). Enforced
+    # post-transcode by reading the canonical WAV header — high-bitrate
+    # inputs can stay under the byte budget while exceeding wall time.
+    offline_upload_max_duration_seconds: int = 10_800
+
     # Backend service URL (gateway forwards /api/* here)
     backend_url: str = "http://localhost:8000"
 

@@ -1,6 +1,7 @@
 {
   "common": {
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "retry": "Retry"
   },
   "theme": {
     "toggle": {
@@ -391,6 +392,32 @@
       "reRecordToOverwrite": "Re-record to overwrite"
     }
   },
+  "offline_ingest": {
+    "banner": {
+      "heading": "This meeting is over — upload audio to get a transcript",
+      "subhead": "Accepts wav / mp3 / m4a / aac / flac / ogg, up to 3 hours / 500MB.",
+      "cta": "Upload audio"
+    },
+    "dialog": {
+      "heading": "Upload meeting audio",
+      "close": "Close",
+      "fileLabel": "Audio file",
+      "dropzoneHint": "Drag an audio file here or click to select",
+      "dropzoneFormats": "Accepts wav / mp3 / m4a / aac / flac / ogg",
+      "dropzoneActive": "Release to select",
+      "selectedFile": "{{name}} ({{size}})",
+      "clearFile": "Remove",
+      "actualStartedAtLabel": "Actual start time",
+      "actualStartedAtHint": "Defaults to the meeting's scheduled start.",
+      "startButton": "Start upload",
+      "cancel": "Cancel",
+      "uploading": "Uploading… {{percent}}%",
+      "transcoding": "Transcoding…",
+      "asrRunning": "Transcribing ({{processed}} / {{total}})",
+      "completed": "Done — transcript is ready",
+      "errorHeading": "Upload failed"
+    }
+  },
   "errors": {
     "common": {
       "unknown": "An unknown error occurred",
@@ -429,6 +456,17 @@
       "too_large": "File exceeds the 5MB size limit",
       "too_long": "Recording exceeds the 30-second limit",
       "invalid_sample": "Sample validation failed: please record a single speaker for up to 30 seconds in a quiet environment"
+    },
+    "offline_ingest": {
+      "unsupported_format": "Unsupported audio format; only wav / mp3 / m4a / aac / flac / ogg are accepted",
+      "too_large": "File exceeds the 500MB size limit",
+      "too_long": "Audio exceeds the 3-hour duration limit",
+      "invalid_started_at": "'Actual start time' is invalid or set in the future",
+      "transcode_failed": "Audio transcode failed; please verify the file is not corrupted",
+      "busy": "An offline ingest is already in progress for this meeting",
+      "conditions_not_met": "Meeting state changed; offline upload is no longer accepted",
+      "not_found": "Meeting not found",
+      "network": "Network error during upload; please retry"
     },
     "summary": {
       "busy": "Previous generation still running",

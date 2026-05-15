@@ -80,10 +80,40 @@ function _formatTime(iso: string): string {
   }
 }
 
+// Stable distinct hues for speaker_cluster_N. Cycling through 6 well-spaced
+// hues keeps adjacent clusters visually distinct even when pyannote returns
+// many speakers; clusters > 6 reuse hues but in a different brightness band.
+const _CLUSTER_HUES = [300, 150, 30, 240, 90, 0];
+
 function _chunkBackground(speaker: TranscriptChunkMessage["speaker"]): string {
-  const tintVar = speaker === "me" ? "--me-tint-alpha" : "--them-tint-alpha";
-  const softVar = speaker === "me" ? "--color-me-soft" : "--color-them-soft";
-  return `color-mix(in oklch, var(${softVar}) calc(var(${tintVar}) * 1000%), transparent)`;
+  if (speaker === "me") {
+    return `color-mix(in oklch, var(--color-me-soft) calc(var(--me-tint-alpha) * 1000%), transparent)`;
+  }
+  if (speaker === "counterparty") {
+    return `color-mix(in oklch, var(--color-them-soft) calc(var(--them-tint-alpha) * 1000%), transparent)`;
+  }
+  const match = _CLUSTER_LABEL_RE.exec(speaker);
+  if (match) {
+    if (match[1] === "unknown") {
+      return `color-mix(in oklch, var(--color-muted) calc(var(--them-tint-alpha) * 1000%), transparent)`;
+    }
+    const n = Number.parseInt(match[1], 10);
+    const hue = _CLUSTER_HUES[(n - 1) % _CLUSTER_HUES.length];
+    return `color-mix(in oklch, oklch(0.93 0.06 ${hue}) calc(var(--them-tint-alpha) * 1000%), transparent)`;
+  }
+  return "transparent";
+}
+
+function _speakerAccent(speaker: TranscriptChunkMessage["speaker"]): string {
+  if (speaker === "me") return "var(--color-me)";
+  if (speaker === "counterparty") return "var(--color-them)";
+  const match = _CLUSTER_LABEL_RE.exec(speaker);
+  if (match && match[1] !== "unknown") {
+    const n = Number.parseInt(match[1], 10);
+    const hue = _CLUSTER_HUES[(n - 1) % _CLUSTER_HUES.length];
+    return `oklch(0.55 0.18 ${hue})`;
+  }
+  return "var(--color-muted-foreground)";
 }
 
 export function TranscriptPane({
@@ -185,7 +215,7 @@ function TranscriptChunkRow({
 }) {
   const { t } = useTranslation();
   const isMe = chunk.speaker === "me";
-  const speakerColor = isMe ? "var(--color-me)" : "var(--color-them)";
+  const speakerColor = _speakerAccent(chunk.speaker);
   const background = _chunkBackground(chunk.speaker);
 
   return (

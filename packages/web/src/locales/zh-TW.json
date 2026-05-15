@@ -1,6 +1,7 @@
 {
   "common": {
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "retry": "重試"
   },
   "theme": {
     "toggle": {
@@ -391,6 +392,32 @@
       "reRecordToOverwrite": "重新錄製覆蓋"
     }
   },
+  "offline_ingest": {
+    "banner": {
+      "heading": "這場會議已結束 — 上傳音檔取得逐字稿",
+      "subhead": "支援 wav / mp3 / m4a / aac / flac / ogg，上限 3 小時 / 500MB。",
+      "cta": "上傳音檔"
+    },
+    "dialog": {
+      "heading": "上傳會議音檔",
+      "close": "關閉",
+      "fileLabel": "音檔",
+      "dropzoneHint": "拖放音檔到此或點擊選檔",
+      "dropzoneFormats": "支援 wav / mp3 / m4a / aac / flac / ogg",
+      "dropzoneActive": "放開以選取檔案",
+      "selectedFile": "{{name}}（{{size}}）",
+      "clearFile": "移除",
+      "actualStartedAtLabel": "實際開始時間",
+      "actualStartedAtHint": "預設為會議排定的開始時間。",
+      "startButton": "開始上傳",
+      "cancel": "取消",
+      "uploading": "上傳中… {{percent}}%",
+      "transcoding": "轉碼中…",
+      "asrRunning": "辨識中 ({{processed}} / {{total}})",
+      "completed": "完成 — 逐字稿準備好了",
+      "errorHeading": "上傳失敗"
+    }
+  },
   "errors": {
     "common": {
       "unknown": "發生未知錯誤",
@@ -429,6 +456,17 @@
       "too_large": "檔案超過 5MB 上限",
       "too_long": "錄音超過 30 秒上限",
       "invalid_sample": "樣本驗證失敗：請在安靜環境錄製 30 秒以內單人講話"
+    },
+    "offline_ingest": {
+      "unsupported_format": "音檔格式不支援，僅接受 wav / mp3 / m4a / aac / flac / ogg",
+      "too_large": "檔案超過 500MB 上限",
+      "too_long": "音檔超過 3 小時上限",
+      "invalid_started_at": "「實際開始時間」格式無效或設在未來",
+      "transcode_failed": "音檔轉碼失敗，請確認檔案完整",
+      "busy": "已有一份上傳任務進行中，請稍後再試",
+      "conditions_not_met": "會議狀態已改變，無法接受上傳",
+      "not_found": "找不到此會議",
+      "network": "上傳過程網路錯誤，請重試"
     },
     "summary": {
       "busy": "上一個生成尚未完成",

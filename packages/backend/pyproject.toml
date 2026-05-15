@@ -43,3 +43,15 @@ select = ["E", "F", "I", "B", "UP", "RUF", "SIM", "C4"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+# TestClient runs FastAPI handlers in a worker thread via anyio's blocking
+# portal. Without `concurrency = thread`, every handler-side line shows up
+# as missing in pytest-cov reports even though the test exercises it.
+concurrency = ["thread"]
+# Force the legacy C tracer. coverage 7.13 + Python 3.13 ships
+# `sys.monitoring`-based tracking that miscounts inside `async def`
+# bodies called from anyio's blocking portal (`TestClient` worker thread).
+# The `pytrace` core uses the older `sys.settrace` path which tracks the
+# bodies correctly.
+core = "pytrace"

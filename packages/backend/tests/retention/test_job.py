@@ -63,16 +63,17 @@ async def _insert_recording(
     stream: str,
     file_path: Path,
     age_days: float,
+    source: str = "live",
 ) -> None:
     async with engine.begin() as conn:
         await conn.execute(
             text(
                 """
                 INSERT INTO recording (
-                    id, meeting_id, stream, file_path, bytes, created_at
+                    id, meeting_id, stream, file_path, bytes, created_at, source
                 )
                 VALUES (:rid, :mid, :stream, :fp, 100,
-                    now() - (:age || ' days')::interval)
+                    now() - (:age || ' days')::interval, :source)
                 """
             ),
             {
@@ -81,6 +82,7 @@ async def _insert_recording(
                 "stream": stream,
                 "fp": str(file_path),
                 "age": str(age_days),
+                "source": source,
             },
         )
 
@@ -245,3 +247,49 @@ async def test_cleanup_never_touches_transcript_chunk_or_chat_message(
         ).scalar_one()
     assert tc_count == 1, "cleanup must NOT touch transcript_chunk rows"
     assert cm_count == 1, "cleanup must NOT touch chat_message rows"
+
+
+@pytest.mark.asyncio
+async def test_cleanup_treats_offline_source_recordings_identically(
+    migrated_engine: AsyncEngine, tmp_path: Path
+) -> None:
+    """Slice-14 regression: `source = 'offline'` rows obey the same 30-day
+    retention clock as `source = 'live'` rows. The cleanup query MUST NOT
+    filter on `source`.
+    """
+    Session = async_sessionmaker(migrated_engine, expire_on_commit=False)
+
+    await _seed(migrated_engine, user_id="u_off_ret", meeting_id="m_off_ret")
+    wav = tmp_path / "rec_offline_31d.wav"
+    wav.write_bytes(b"\x00" * 100)
+    await _insert_recording(
+        migrated_engine,
+        rec_id="r_off_31d",
+        meeting_id="m_off_ret",
+        stream="me",
+        file_path=wav,
+        age_days=31,
+        source="offline",
+    )
+
+    now = datetime.now(UTC)
+    deleted_count = await cleanup(
+        now=now, retention_days=30, recordings_dir=tmp_path, session_factory=Session
+    )
+
+    assert deleted_count == 1, (
+        f"offline-source recording past retention MUST be unlinked; got {deleted_count}"
+    )
+    assert not wav.exists(), "offline-source WAV file MUST be removed from disk"
+
+    async with migrated_engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text("SELECT source, deleted_at FROM recording WHERE id = 'r_off_31d'")
+            )
+        ).first()
+    assert row is not None
+    assert row.source == "offline"
+    assert row.deleted_at is not None, (
+        "offline-source row's deleted_at MUST be stamped after cleanup"
+    )

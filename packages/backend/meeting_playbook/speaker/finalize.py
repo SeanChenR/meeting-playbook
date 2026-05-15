@@ -93,7 +93,14 @@ async def apply_speaker_attribution(
     strategy = select_strategy(recordings, single_channel_provider=single_channel_provider)
 
     start_ns = time.monotonic_ns()
-    reassigned = strategy.assign_speakers(recordings, chunks)
+    # `strategy.assign_speakers` is synchronous and, for SingleChannelStrategy,
+    # calls into pyannote.audio — a CPU/GPU-bound ML pipeline that takes
+    # ~30-60s on the slice-12 multi-speaker fixture. Running it directly on
+    # the asyncio event loop blocks every concurrent HTTP request (incl. the
+    # progress-polling endpoint), so we offload to a worker thread.
+    import anyio  # local import keeps finalize import-light
+
+    reassigned = await anyio.to_thread.run_sync(strategy.assign_speakers, recordings, chunks)
     elapsed_ms = (time.monotonic_ns() - start_ns) // 1_000_000
 
     budget_ms = 0

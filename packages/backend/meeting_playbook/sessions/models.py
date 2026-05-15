@@ -47,3 +47,13 @@ class Recording(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True, default=None
     )
+    # Slice-14: distinguishes live capture from offline ingest. CHECK enforced
+    # at the DB layer (`recording_source_check`); the only valid values are
+    # 'live' and 'offline'. Defaults to 'live' so existing rows back-fill.
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="live")
+    # Slice-14: wall-clock moment audio capture began. Offline ingest writes
+    # the user-supplied "actual_started_at"; live capture leaves NULL until a
+    # future slice back-fills it from session start.
+    started_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True, default=None
+    )

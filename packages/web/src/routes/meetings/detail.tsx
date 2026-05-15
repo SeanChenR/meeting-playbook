@@ -33,6 +33,8 @@ import { CaptureIndicator } from "../../components/capture-indicator";
 import { HeadphonesHint } from "../../components/headphones-hint";
 import { LayoutSwitcher } from "../../components/layout-switcher";
 import { MetadataCard } from "../../components/metadata-card";
+import { UploadBanner } from "../../components/offline-ingest/UploadBanner";
+import { UploadDialog } from "../../components/offline-ingest/UploadDialog";
 import { PlaybookPane } from "../../components/playbook-pane";
 import { ProtectedShell } from "../../components/protected-shell";
 import { RerunButton } from "../../components/rerun-button";
@@ -64,6 +66,7 @@ export function MeetingDetail() {
   const query = useQuery({ ...meetingQueryOptions(meetingId), enabled: !!meetingId });
   const deleteMutation = useDeleteMeetingMutation();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [offlineIngestOpen, setOfflineIngestOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [layout, setLayout] = useDetailLayout();
 
@@ -192,6 +195,17 @@ export function MeetingDetail() {
               />
             }
             rerunSlot={<RerunButton meeting={meeting} />}
+          />
+        )}
+
+        {meeting && (
+          <UploadBanner meeting={meeting} onUploadClick={() => setOfflineIngestOpen(true)} />
+        )}
+        {meeting && (
+          <UploadDialog
+            meeting={meeting}
+            open={offlineIngestOpen}
+            onClose={() => setOfflineIngestOpen(false)}
           />
         )}
 

@@ -98,21 +98,29 @@ async def _seed_recording(
     stream: str,
     file_path: Path,
     deleted: bool = False,
+    source: str = "live",
 ) -> None:
     async with engine.begin() as conn:
         await conn.execute(
             text(
                 """
                 INSERT INTO recording (
-                    id, meeting_id, stream, file_path, bytes, created_at, deleted_at
+                    id, meeting_id, stream, file_path, bytes, created_at, deleted_at, source
                 )
                 VALUES (
                     'r_' || :mid || '_' || :stream, :mid, :stream, :fp, 100, now(),
-                    CASE WHEN :del THEN now() ELSE NULL END
+                    CASE WHEN :del THEN now() ELSE NULL END,
+                    :source
                 )
                 """
             ),
-            {"mid": meeting_id, "stream": stream, "fp": str(file_path), "del": deleted},
+            {
+                "mid": meeting_id,
+                "stream": stream,
+                "fp": str(file_path),
+                "del": deleted,
+                "source": source,
+            },
         )
 
 
@@ -232,3 +240,33 @@ async def test_rerun_pending_flips_true_then_false(
     assert resp_after.status_code == 200, resp_after.text
     body_after = resp_after.json()
     assert body_after["rerun_asr_pending"] is False
+
+
+# ─── Scenario (e, slice-14) — offline-only recording counts as available ───
+
+
+@pytest.mark.asyncio
+async def test_meeting_with_only_offline_recording_reports_available_true(
+    api_client: AsyncClient, migrated_engine: AsyncEngine, tmp_path: Path
+):
+    """Slice-14 regression: a `completed` meeting whose only recording is
+    `source = 'offline'` SHALL report `recordings_available: true`. The
+    derived field MUST NOT filter on `source`.
+    """
+    await _seed_user(migrated_engine, "u_off_avail")
+    await _seed_meeting(migrated_engine, user_id="u_off_avail", meeting_id="m_off_avail")
+    me_wav = tmp_path / "offline.wav"
+    me_wav.write_bytes(b"\x00")
+    await _seed_recording(
+        migrated_engine,
+        meeting_id="m_off_avail",
+        stream="me",
+        file_path=me_wav,
+        source="offline",
+    )
+
+    resp = await api_client.get("/api/meetings/m_off_avail", headers={"X-User-Id": "u_off_avail"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["recordings_available"] is True
+    assert body["rerun_asr_pending"] is False

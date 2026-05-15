@@ -215,26 +215,26 @@ class TagRepository:
         if tag is None:
             raise LookupError(f"tag {tag_id!r} not owned by {user_id!r}")
 
-        # Idempotency: if the pair already exists, return it without inserting.
-        existing = await self._session.scalar(
-            select(MeetingTag).where(
-                MeetingTag.meeting_id == meeting_id,
-                MeetingTag.tag_id == tag_id,
-            )
-        )
-        if existing is not None:
-            return existing
-
         # Lock the meeting's junction rows so a concurrent attach sees the
         # same count. PostgreSQL: `FOR UPDATE` is sufficient on the existing
         # rows; even if there are zero rows the predicate locks the empty set
         # — adequate when there are no other concurrent writers (single-user
         # project, per design.md).
+        #
+        # Slice-17 review feedback: idempotency check moved INSIDE the lock
+        # so two concurrent attaches with the same (meeting_id, tag_id) cannot
+        # both pass an outside-lock check and then race to INSERT (PK
+        # violation). After acquiring the lock we already have the full
+        # junction-row set, so check membership against it without a second
+        # query.
         locked = await self._session.execute(
-            select(MeetingTag.tag_id).where(MeetingTag.meeting_id == meeting_id).with_for_update()
+            select(MeetingTag).where(MeetingTag.meeting_id == meeting_id).with_for_update()
         )
-        current_tag_ids = [row[0] for row in locked.all()]
-        current_count = len(current_tag_ids)
+        existing_rows = list(locked.scalars().all())
+        for row in existing_rows:
+            if row.tag_id == tag_id:
+                return row  # idempotent — pair already attached
+        current_count = len(existing_rows)
         if current_count >= _MAX_TAGS_PER_MEETING:
             raise TagLimitExceeded(current_count=current_count)
 

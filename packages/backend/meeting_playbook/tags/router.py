@@ -37,6 +37,7 @@ from meeting_playbook.tags.repository import (
     TagLimitExceeded,
     TagNameTaken,
     TagRepository,
+    TagWithMeta,
 )
 
 
@@ -71,7 +72,7 @@ def _meeting_not_found() -> HTTPException:
     )
 
 
-def _serialize_tag(tag, *, include_count: bool = False) -> dict:
+def _serialize_tag(tag: TagWithMeta, *, include_count: bool = False) -> dict:
     """Serialize a `TagWithMeta` from the repository."""
     payload = {
         "id": tag.id,

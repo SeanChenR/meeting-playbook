@@ -30,11 +30,8 @@ export function MeetingsViewTabs({ value }: MeetingsViewTabsProps) {
     // searchStr so TanStack Router doesn't strip unknown keys via the
     // route's search validator (the meetings list / calendar routes have
     // no strict schema yet).
-    const params = new URLSearchParams(
-      (location.searchStr ?? "").startsWith("?")
-        ? (location.searchStr ?? "").slice(1)
-        : (location.searchStr ?? ""),
-    );
+    // `URLSearchParams` strips a leading `?` itself, no need to slice.
+    const params = new URLSearchParams(location.searchStr ?? "");
     const searchObj: Record<string, string> = {};
     params.forEach((v, k) => {
       searchObj[k] = v;

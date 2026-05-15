@@ -96,7 +96,7 @@ tests:
 The backend SHALL provide `packages/backend/meeting_playbook/retention/job.py` exporting an async function `cleanup(now: datetime, *, retention_days: int, recordings_dir: Path) -> int` that returns the count of WAV files actually deleted. The function SHALL:
 
 1. Open a fresh `AsyncSession` via the application-wide session factory.
-2. Select all `recording` rows where `created_at < (now - timedelta(days=retention_days)) AND deleted_at IS NULL`.
+2. Select all `recording` rows where `created_at < (now - timedelta(days=retention_days)) AND deleted_at IS NULL`. The selection SHALL NOT filter on `source`; both `source = 'live'` and `source = 'offline'` recordings SHALL be eligible for retention cleanup on the same 30-day clock.
 3. For each matched row: attempt `Path(rec.file_path).unlink()` (skip if file already missing); on success, set `rec.deleted_at = now`. On `OSError` (permission / FS issues), log a warning, skip this row, do NOT set `deleted_at` (next sweep retries).
 4. Commit all `deleted_at` updates in a single transaction.
 5. Return the count of files actually unlinked or already-missing-but-now-marked.
@@ -121,70 +121,58 @@ The function SHALL be idempotent: running it twice in succession with the same `
 - **WHEN** the cleanup transaction commits
 - **THEN** the meeting's `transcript_chunk` and `chat_message` rows SHALL be untouched (same row count + content as before)
 
+#### Scenario: Offline-ingested recording is cleaned up on the same 30-day clock as live recordings
+
+- **GIVEN** an offline-ingested recording row with `source = "offline"`, `created_at = now - 31 days`, `deleted_at IS NULL`, and the file present on disk
+- **WHEN** `cleanup(now=now, retention_days=30, ...)` runs
+- **THEN** the offline WAV file SHALL be deleted from disk AND the row's `deleted_at` SHALL equal `now`; the `source` value SHALL NOT affect cleanup eligibility
+
 
 <!-- @trace
-source: slice-11-asr-and-retention
-updated: 2026-05-12
+source: slice-14-offline-ingest
+updated: 2026-05-15
 code:
-  - packages/web/src/locales/en.json
-  - packages/backend/meeting_playbook/meetings/models.py
-  - packages/backend/alembic/versions/0007_add_recording_deleted_at.py
-  - packages/backend/meeting_playbook/sessions/models.py
-  - .env.example
-  - packages/backend/meeting_playbook/sessions/dependencies.py
-  - packages/web/src/components/asr-provider-selector.tsx
-  - packages/web/src/lib/meetings-api.ts
-  - packages/web/src/components/transcript-pane.tsx
-  - packages/backend/alembic/versions/0008_asr_default_qwen3.py
-  - packages/backend/meeting_playbook/server.py
-  - packages/web/src/routes/meetings/detail.tsx
-  - packages/web/src/components/recording-badge.tsx
-  - packages/backend/meeting_playbook/asr/qwen3_provider.py
-  - packages/backend/meeting_playbook/rerun/runtime.py
-  - packages/backend/uv.lock
-  - packages/backend/meeting_playbook/rerun/__init__.py
-  - packages/backend/meeting_playbook/config.py
-  - packages/backend/meeting_playbook/meetings/router.py
-  - packages/backend/meeting_playbook/asr/factory.py
-  - packages/backend/meeting_playbook/meetings/repository.py
-  - packages/web/src/locales/zh-TW.json
-  - docs/adr/0028-qwen3-asr-replaces-vibevoice.md
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
   - packages/backend/pyproject.toml
-  - packages/web/src/components/rerun-button.tsx
-  - packages/backend/meeting_playbook/asr/transliteration.py
-  - packages/backend/meeting_playbook/meetings/schemas.py
-  - packages/web/src/lib/rerun-api.ts
-  - scripts/spike_qwen3_asr.py
-  - packages/backend/meeting_playbook/retention/__init__.py
-  - packages/backend/meeting_playbook/retention/runtime.py
-  - packages/backend/meeting_playbook/sessions/router.py
-  - packages/backend/meeting_playbook/retention/job.py
+  - CONTEXT.md
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - bun.lock
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - .env.example
+  - packages/web/src/components/offline-ingest/UploadBanner.tsx
+  - packages/backend/meeting_playbook/config.py
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/src/locales/en.json
+  - packages/web/src/locales/zh-TW.json
+  - packages/backend/meeting_playbook/sessions/models.py
 tests:
-  - packages/web/src/components/transcript-pane.test.tsx
-  - packages/backend/tests/rerun/__init__.py
-  - packages/backend/tests/rerun/test_endpoints.py
-  - packages/backend/tests/meetings/test_get_runtime_flags.py
-  - packages/backend/tests/asr/test_qwen3_provider.py
-  - packages/backend/tests/meetings/test_integration_round_trip.py
-  - packages/backend/tests/sessions/test_router_summary_spawn.py
-  - packages/web/src/components/rerun-button.test.tsx
-  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
   - packages/backend/tests/retention/test_job.py
-  - packages/backend/tests/meetings/test_repository.py
-  - packages/backend/tests/asr/test_transliteration.py
-  - packages/backend/tests/retention/__init__.py
-  - packages/backend/tests/rerun/test_runtime.py
-  - packages/backend/tests/retention/test_runtime.py
-  - packages/backend/tests/asr/test_factory.py
-  - packages/backend/tests/sessions/test_router_advice.py
-  - packages/web/src/components/transcript-pane-rerun.test.tsx
-  - packages/backend/tests/meetings/test_endpoints.py
-  - packages/backend/tests/sessions/test_router.py
-  - packages/backend/tests/test_alembic_meeting.py
-  - packages/backend/tests/test_alembic_meeting_asr_default_qwen3.py
-  - packages/backend/tests/test_alembic_recording_deleted_at.py
-  - packages/backend/tests/test_config.py
-  - packages/web/src/components/recording-badge.test.tsx
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/web/src/components/offline-ingest/UploadBanner.test.tsx
 -->
 
 ---

@@ -814,7 +814,7 @@ tests:
 
 The GET single-meeting response payload SHALL gain two derived boolean fields, computed server-side and never persisted to the meeting row:
 
-- **`recordings_available: bool`** — `true` when at least one row in `recording` for this `meeting_id` has `deleted_at IS NULL`; `false` otherwise (including when no recording rows exist at all, e.g. for `scheduled` meetings that never ran).
+- **`recordings_available: bool`** — `true` when at least one row in `recording` for this `meeting_id` has `deleted_at IS NULL`; `false` otherwise (including when no recording rows exist at all, e.g. for `scheduled` meetings that never ran). The `source` value (`live` or `offline`) SHALL NOT affect this computation — offline-ingested recordings are counted identically to live-captured ones for the purpose of `recordings_available`.
 - **`rerun_asr_pending: bool`** — `true` when the in-flight re-run registry (`packages/backend/meeting_playbook/asr/rerun_runtime.py`) reports `is_pending(meeting_id)`; `false` otherwise.
 
 Both fields SHALL be present on every GET response (no conditional omission); the OpenAPI / Pydantic response model SHALL declare them as required boolean fields.
@@ -845,69 +845,58 @@ Both fields SHALL be present on every GET response (no conditional omission); th
 - **AND WHEN** the task completes and pops the registry entry; a subsequent GET fires
 - **THEN** the response body SHALL contain `"rerun_asr_pending": false`
 
+#### Scenario: Offline-ingested recording counts toward recordings_available
+
+- **GIVEN** a `completed` meeting whose only recording row has `source = "offline"`, `stream = "me"`, and `deleted_at IS NULL`
+- **WHEN** GET `/api/meetings/{id}` is called
+- **THEN** the response body SHALL contain `"recordings_available": true` AND `"rerun_asr_pending": false`
+
+
 <!-- @trace
-source: slice-11-asr-and-retention
-updated: 2026-05-12
+source: slice-14-offline-ingest
+updated: 2026-05-15
 code:
-  - packages/web/src/locales/en.json
-  - packages/backend/meeting_playbook/meetings/models.py
-  - packages/backend/alembic/versions/0007_add_recording_deleted_at.py
-  - packages/backend/meeting_playbook/sessions/models.py
-  - .env.example
-  - packages/backend/meeting_playbook/sessions/dependencies.py
-  - packages/web/src/components/asr-provider-selector.tsx
-  - packages/web/src/lib/meetings-api.ts
-  - packages/web/src/components/transcript-pane.tsx
-  - packages/backend/alembic/versions/0008_asr_default_qwen3.py
-  - packages/backend/meeting_playbook/server.py
-  - packages/web/src/routes/meetings/detail.tsx
-  - packages/web/src/components/recording-badge.tsx
-  - packages/backend/meeting_playbook/asr/qwen3_provider.py
-  - packages/backend/meeting_playbook/rerun/runtime.py
-  - packages/backend/uv.lock
-  - packages/backend/meeting_playbook/rerun/__init__.py
-  - packages/backend/meeting_playbook/config.py
-  - packages/backend/meeting_playbook/meetings/router.py
-  - packages/backend/meeting_playbook/asr/factory.py
-  - packages/backend/meeting_playbook/meetings/repository.py
-  - packages/web/src/locales/zh-TW.json
-  - docs/adr/0028-qwen3-asr-replaces-vibevoice.md
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
   - packages/backend/pyproject.toml
-  - packages/web/src/components/rerun-button.tsx
-  - packages/backend/meeting_playbook/asr/transliteration.py
-  - packages/backend/meeting_playbook/meetings/schemas.py
-  - packages/web/src/lib/rerun-api.ts
-  - scripts/spike_qwen3_asr.py
-  - packages/backend/meeting_playbook/retention/__init__.py
-  - packages/backend/meeting_playbook/retention/runtime.py
-  - packages/backend/meeting_playbook/sessions/router.py
-  - packages/backend/meeting_playbook/retention/job.py
+  - CONTEXT.md
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - bun.lock
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - .env.example
+  - packages/web/src/components/offline-ingest/UploadBanner.tsx
+  - packages/backend/meeting_playbook/config.py
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/src/locales/en.json
+  - packages/web/src/locales/zh-TW.json
+  - packages/backend/meeting_playbook/sessions/models.py
 tests:
-  - packages/web/src/components/transcript-pane.test.tsx
-  - packages/backend/tests/rerun/__init__.py
-  - packages/backend/tests/rerun/test_endpoints.py
-  - packages/backend/tests/meetings/test_get_runtime_flags.py
-  - packages/backend/tests/asr/test_qwen3_provider.py
-  - packages/backend/tests/meetings/test_integration_round_trip.py
-  - packages/backend/tests/sessions/test_router_summary_spawn.py
-  - packages/web/src/components/rerun-button.test.tsx
-  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
   - packages/backend/tests/retention/test_job.py
-  - packages/backend/tests/meetings/test_repository.py
-  - packages/backend/tests/asr/test_transliteration.py
-  - packages/backend/tests/retention/__init__.py
-  - packages/backend/tests/rerun/test_runtime.py
-  - packages/backend/tests/retention/test_runtime.py
-  - packages/backend/tests/asr/test_factory.py
-  - packages/backend/tests/sessions/test_router_advice.py
-  - packages/web/src/components/transcript-pane-rerun.test.tsx
-  - packages/backend/tests/meetings/test_endpoints.py
-  - packages/backend/tests/sessions/test_router.py
-  - packages/backend/tests/test_alembic_meeting.py
-  - packages/backend/tests/test_alembic_meeting_asr_default_qwen3.py
-  - packages/backend/tests/test_alembic_recording_deleted_at.py
-  - packages/backend/tests/test_config.py
-  - packages/web/src/components/recording-badge.test.tsx
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/web/src/components/offline-ingest/UploadBanner.test.tsx
 -->
 
 ---

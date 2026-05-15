@@ -15,7 +15,10 @@
     "back": "Back",
     "backToList": "Back to list",
     "home": "Home",
-    "meetings": "Meetings"
+    "meetings": "Meetings",
+    "settings": "Settings",
+    "settingsTags": "Tags",
+    "settingsVoice": "Voice"
   },
   "auth": {
     "shell": {

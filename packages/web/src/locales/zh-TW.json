@@ -15,7 +15,10 @@
     "back": "返回",
     "backToList": "返回列表",
     "home": "首頁",
-    "meetings": "會議"
+    "meetings": "會議",
+    "settings": "設定",
+    "settingsTags": "標籤",
+    "settingsVoice": "聲紋"
   },
   "auth": {
     "shell": {

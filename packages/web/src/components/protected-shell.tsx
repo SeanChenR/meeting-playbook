@@ -1,4 +1,5 @@
 import { LogOut } from "./animate-ui/icons/log-out";
+import { ChevronDown, Mic, Tag as TagIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,6 +9,12 @@ import { LocaleToggle } from "./locale-toggle";
 import { ThemeToggle } from "./theme-toggle";
 import { Avatar } from "./ui/avatar";
 import { Button } from "./ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 export interface ProtectedShellProps {
   children: ReactNode;
@@ -96,6 +103,40 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
             >
               {t("nav.meetings")}
             </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  data-testid="navbar-settings-trigger"
+                  className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground) focus:outline-none focus-visible:outline-2 focus-visible:outline-(--color-primary)"
+                >
+                  {t("nav.settings")}
+                  <ChevronDown className="size-3.5" aria-hidden />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/settings/tags"
+                    data-testid="navbar-settings-tags-link"
+                    className="flex w-full cursor-pointer items-center gap-2"
+                  >
+                    <TagIcon className="size-3.5" aria-hidden />
+                    {t("nav.settingsTags")}
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    to="/settings/voice"
+                    data-testid="navbar-settings-voice-link"
+                    className="flex w-full cursor-pointer items-center gap-2"
+                  >
+                    <Mic className="size-3.5" aria-hidden />
+                    {t("nav.settingsVoice")}
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </nav>
           <div className="ml-auto flex items-center gap-1">
             <LocaleToggle />

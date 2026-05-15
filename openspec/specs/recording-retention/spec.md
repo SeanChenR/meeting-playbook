@@ -361,3 +361,284 @@ tests:
   - packages/backend/tests/test_config.py
   - packages/web/src/components/recording-badge.test.tsx
 -->
+
+---
+### Requirement: GET /api/meetings/{id}/recordings/{recording_id}/audio returns 410 Gone when the recording is retention-expired
+
+The audio playback endpoint defined in the `audio-playback` capability SHALL consult `recording.deleted_at` on every request and SHALL respond with HTTP 410 Gone and `error_code = "audio_playback.expired"` whenever `recording.deleted_at IS NOT NULL`. The response body SHALL be a JSON object `{"error_code": "audio_playback.expired", "message": "<localized message>"}`. The endpoint MUST NOT stream any bytes of the on-disk WAV file when the recording is expired; even if the file still exists on disk (e.g. partial retention failure) the 410 response SHALL be authoritative. The retention sweep job's own behavior is unchanged: `cleanup` SHALL continue to set `deleted_at = now()` on rows whose WAV files are deleted, and the daily 24-hour cadence SHALL remain.
+
+#### Scenario: Expired recording returns 410 even when the WAV file still exists on disk
+
+- **GIVEN** a `recording` row with `deleted_at = "2026-04-01T00:00:00Z"` whose `file_path` still references a WAV file present on disk (retention's `unlink` previously failed)
+- **WHEN** an authenticated owner sends `GET /api/meetings/{id}/recordings/{recording_id}/audio` with header `Range: bytes=0-1023`
+- **THEN** the response SHALL be HTTP 410 with body containing `"error_code": "audio_playback.expired"`; no bytes from the WAV file SHALL be streamed to the client
+
+#### Scenario: Non-expired recording is served normally
+
+- **GIVEN** a `recording` row with `deleted_at IS NULL`
+- **WHEN** an authenticated owner sends `GET /api/meetings/{id}/recordings/{recording_id}/audio` with header `Range: bytes=0-1023`
+- **THEN** the response SHALL be HTTP 206 Partial Content (per the `audio-playback` capability)
+
+
+<!-- @trace
+source: slice-16-transcript-edit-and-playback
+updated: 2026-05-15
+code:
+  - packages/web/src/hooks/use-mini-player.ts
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/web/src/lib/meetings-bucket.ts
+  - packages/web/src/lib/meetings-api.ts
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - bun.lock
+  - packages/web/src/hooks/use-cluster-speaker-labels.ts
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/backend/meeting_playbook/config.py
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - CONTEXT.md
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - packages/backend/meeting_playbook/audio_playback/wav_header.py
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/backend/alembic/versions/0015_chunk_text_edited_at.py
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/backend/alembic/versions/0012_meeting_start_not_null.py
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/backend/meeting_playbook/audio_playback/range_server.py
+  - packages/backend/meeting_playbook/audio_playback/__init__.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/meeting-edit-form.tsx
+  - packages/web/src/lib/transcript-color-schemes.ts
+  - .env.example
+  - packages/web/src/lib/transcript-edit-api.ts
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/lib/transcripts-api.ts
+  - packages/backend/alembic/versions/0014_recording_started_at.py
+  - packages/web/src/components/speaker-color-popover.tsx
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/web/src/components/metadata-card.tsx
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/hooks/use-transcript-color-pref.ts
+  - packages/web/src/components/ui/dialog.tsx
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/pyproject.toml
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/transcript_edit/__init__.py
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/components/chunk-action-menu.tsx
+  - packages/web/src/components/transcript-chunk-row.tsx
+  - packages/web/src/lib/session-ws.ts
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/transcript_edit/router.py
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/backend/meeting_playbook/sessions/repository.py
+tests:
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/backend/tests/audio_playback/test_range_server.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/web/src/routes/meetings/calendar.test.tsx
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/web/src/components/meeting-edit-form.test.tsx
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/web/src/hooks/use-mini-player.test.tsx
+  - packages/web/src/lib/transcript-color-schemes.test.ts
+  - packages/web/src/components/chunk-action-menu.test.tsx
+  - packages/backend/tests/integration/test_audio_playback_e2e.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/web/src/components/speaker-color-popover.test.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.test.tsx
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/backend/tests/retention/test_job.py
+  - packages/backend/tests/test_alembic_transcript_chunk_text_edited_at.py
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/test_config.py
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
+  - packages/web/src/routes/meetings/list.test.tsx
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/audio_playback/test_wav_header.py
+  - packages/backend/tests/audio_playback/test_router.py
+  - packages/backend/tests/audio_playback/__init__.py
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/backend/tests/test_alembic_recording_started_at.py
+  - packages/backend/tests/transcript_edit/test_router.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/web/src/components/meeting-card.test.tsx
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/web/src/components/transcript-chunk-row.test.tsx
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/backend/tests/test_alembic_meeting_scheduled_not_null.py
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/backend/tests/transcript_edit/__init__.py
+  - packages/web/src/hooks/use-transcript-color-pref.test.tsx
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/integration/test_single_channel_e2e.py
+-->
+
+---
+### Requirement: Retention expiration surfaces in the frontend via disabled play affordances
+
+The frontend SHALL, on every meeting detail page load, read each `recording.deleted_at` from the meeting payload. For every transcript chunk row whose mapped recording (per the `audio-playback` capability's `useChunkAudioSource` rule) has `deleted_at IS NOT NULL`, the row's ▶ play button SHALL be rendered with the `disabled` attribute and SHALL display a localized tooltip explaining the expiration. The tooltip text SHALL be: (zh-TW) `"錄音已過 30 天保留期"`; (en) `"Recording exceeded the 30-day retention window"`. The tooltip strings SHALL exist in both `packages/web/src/locales/zh-TW.json` and `packages/web/src/locales/en.json` under the key `meeting.detail.audioPlayer.chunkExpired`. The mini-player SHALL NOT accept a play action targeting an expired chunk; if a race condition causes the mini-player to receive an expired-recording URL, the resulting HTTP 410 response from the backend SHALL be caught and SHALL flip the affected chunk row to the disabled state.
+
+#### Scenario: Frontend renders disabled play button when the chunk's recording is expired
+
+- **GIVEN** a meeting whose payload contains a `recording` with `deleted_at = "2026-04-01T00:00:00Z"` and a chunk row mapped to that recording, with the UI in zh-TW
+- **WHEN** the user hovers over the chunk row
+- **THEN** the ▶ button SHALL have the `disabled` attribute and the tooltip text SHALL be `"錄音已過 30 天保留期"`
+
+#### Scenario: Backend 410 response during a race causes the row to become disabled
+
+- **GIVEN** a meeting page rendered while `recording.deleted_at` was still `NULL`, but the retention job has just expired the recording between page-load and play-click
+- **WHEN** the user clicks ▶ and the mini-player issues `GET /api/meetings/{id}/recordings/{recording_id}/audio`, receiving HTTP 410 `audio_playback.expired`
+- **THEN** the mini-player SHALL surface a localized error toast (zh-TW: `"錄音已過 30 天保留期，無法播放"`; en: `"Recording has expired and cannot be played"`); the affected chunk row SHALL be re-rendered with its ▶ button in the disabled state with the standard expired tooltip
+
+<!-- @trace
+source: slice-16-transcript-edit-and-playback
+updated: 2026-05-15
+code:
+  - packages/web/src/hooks/use-mini-player.ts
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/web/src/lib/meetings-bucket.ts
+  - packages/web/src/lib/meetings-api.ts
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - bun.lock
+  - packages/web/src/hooks/use-cluster-speaker-labels.ts
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/backend/meeting_playbook/config.py
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - CONTEXT.md
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - packages/backend/meeting_playbook/audio_playback/wav_header.py
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/backend/alembic/versions/0015_chunk_text_edited_at.py
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/backend/alembic/versions/0012_meeting_start_not_null.py
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/backend/meeting_playbook/audio_playback/range_server.py
+  - packages/backend/meeting_playbook/audio_playback/__init__.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/meeting-edit-form.tsx
+  - packages/web/src/lib/transcript-color-schemes.ts
+  - .env.example
+  - packages/web/src/lib/transcript-edit-api.ts
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/lib/transcripts-api.ts
+  - packages/backend/alembic/versions/0014_recording_started_at.py
+  - packages/web/src/components/speaker-color-popover.tsx
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/web/src/components/metadata-card.tsx
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/hooks/use-transcript-color-pref.ts
+  - packages/web/src/components/ui/dialog.tsx
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/pyproject.toml
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/transcript_edit/__init__.py
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/components/chunk-action-menu.tsx
+  - packages/web/src/components/transcript-chunk-row.tsx
+  - packages/web/src/lib/session-ws.ts
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/transcript_edit/router.py
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/backend/meeting_playbook/sessions/repository.py
+tests:
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/backend/tests/audio_playback/test_range_server.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/web/src/routes/meetings/calendar.test.tsx
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/web/src/components/meeting-edit-form.test.tsx
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/web/src/hooks/use-mini-player.test.tsx
+  - packages/web/src/lib/transcript-color-schemes.test.ts
+  - packages/web/src/components/chunk-action-menu.test.tsx
+  - packages/backend/tests/integration/test_audio_playback_e2e.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/web/src/components/speaker-color-popover.test.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.test.tsx
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/backend/tests/retention/test_job.py
+  - packages/backend/tests/test_alembic_transcript_chunk_text_edited_at.py
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/test_config.py
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
+  - packages/web/src/routes/meetings/list.test.tsx
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/audio_playback/test_wav_header.py
+  - packages/backend/tests/audio_playback/test_router.py
+  - packages/backend/tests/audio_playback/__init__.py
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/backend/tests/test_alembic_recording_started_at.py
+  - packages/backend/tests/transcript_edit/test_router.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/web/src/components/meeting-card.test.tsx
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/web/src/components/transcript-chunk-row.test.tsx
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/backend/tests/test_alembic_meeting_scheduled_not_null.py
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/backend/tests/transcript_edit/__init__.py
+  - packages/web/src/hooks/use-transcript-color-pref.test.tsx
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/integration/test_single_channel_e2e.py
+-->

@@ -263,18 +263,20 @@ tests:
 
 The session SHALL persist each capture stream's audio as a separate mono WAV file under `{RECORDINGS_DIR}/{meeting_id}/`: the microphone stream at `me.wav` and the BlackHole stream at `counterparty.wav`. Each file MUST contain its stream's full captured content (16 kHz, mono, 16-bit PCM) and SHALL be finalized by the time the server emits `meeting_ended`. The directory SHALL be created on demand if it does not exist. The default value of `RECORDINGS_DIR` is `~/MeetingPlaybook/recordings`; deployments override via the `RECORDINGS_DIR` environment variable.
 
-For each stream that produced any audio (even partial, after a `stream_stopped`) the session SHALL persist exactly one `recording` row whose `meeting_id` matches the session, `stream` equals `"me"` or `"counterparty"`, `file_path` equals the absolute on-disk WAV path for that stream, and `bytes` equals the WAV file size on disk for that stream. A stream that produced zero bytes SHALL NOT cause a `recording` row to be written.
+For each stream that produced any audio (even partial, after a `stream_stopped`) the session SHALL persist exactly one `recording` row whose `meeting_id` matches the session, `stream` equals `"me"` or `"counterparty"`, `file_path` equals the absolute on-disk WAV path for that stream, `bytes` equals the WAV file size on disk for that stream, and `started_at` equals the wall-clock UTC timestamp of the first sample written into that stream's WAV. A stream that produced zero bytes SHALL NOT cause a `recording` row to be written.
+
+The `recording.started_at` column SHALL be `TIMESTAMPTZ NOT NULL`. The Alembic migration `0009_add_recording_started_at` SHALL add the column to the existing `recording` table; the up step SHALL first add the column as nullable, then backfill `started_at = created_at` for every existing row, then alter the column to `NOT NULL`. The down step SHALL drop the column. The migration MUST be reversible (up → down → up round-trip is a no-op against schema).
 
 #### Scenario: Both WAV files exist after a successful dual-stream session
 
 - **WHEN** a dual-stream meeting session ends successfully
-- **THEN** both `{RECORDINGS_DIR}/{meeting_id}/me.wav` and `{RECORDINGS_DIR}/{meeting_id}/counterparty.wav` SHALL exist on disk, and exactly two `recording` rows SHALL exist (one with `stream = "me"`, one with `stream = "counterparty"`), each with `bytes` matching their on-disk file sizes
+- **THEN** both `{RECORDINGS_DIR}/{meeting_id}/me.wav` and `{RECORDINGS_DIR}/{meeting_id}/counterparty.wav` SHALL exist on disk, and exactly two `recording` rows SHALL exist (one with `stream = "me"`, one with `stream = "counterparty"`), each with `bytes` matching their on-disk file sizes, and each with `started_at` populated with the UTC timestamp of that stream's first captured sample
 
 #### Scenario: One stream stopping mid-session still finalizes its partial WAV
 
 - **GIVEN** the counterparty stream stops 90 seconds into a 5-minute session and the me stream completes normally
 - **WHEN** the user ends the meeting
-- **THEN** `{RECORDINGS_DIR}/{meeting_id}/counterparty.wav` SHALL contain approximately 90 seconds of audio (the partial capture), `me.wav` SHALL contain the full ~5 minutes, and two `recording` rows SHALL exist accordingly
+- **THEN** `{RECORDINGS_DIR}/{meeting_id}/counterparty.wav` SHALL contain approximately 90 seconds of audio (the partial capture), `me.wav` SHALL contain the full ~5 minutes, and two `recording` rows SHALL exist accordingly, each with its own `started_at` populated
 
 #### Scenario: Recordings directory is created on demand
 
@@ -282,95 +284,140 @@ For each stream that produced any audio (even partial, after a `stream_stopped`)
 - **WHEN** a meeting session starts
 - **THEN** the directory SHALL be created (recursively) before any audio data is written, and the session SHALL proceed normally
 
+#### Scenario: Migration backfills existing recording rows with started_at = created_at
+
+- **GIVEN** a database at revision `0008_asr_default_qwen3` containing 4 existing `recording` rows (no `started_at` column)
+- **WHEN** `alembic upgrade head` runs through `0009_add_recording_started_at`
+- **THEN** all 4 rows SHALL have a non-NULL `started_at` value equal to their pre-migration `created_at`; the `recording.started_at` column SHALL have `is_nullable = NO` after the migration completes
+
+#### Scenario: Migration down step drops the column
+
+- **GIVEN** a database currently at revision `0009_add_recording_started_at`
+- **WHEN** `alembic downgrade -1` runs
+- **THEN** the `recording` table SHALL no longer have a `started_at` column; all existing `recording` rows SHALL otherwise be unchanged
+
 
 <!-- @trace
-source: slice-07-dualstream-and-ui-bundle
-updated: 2026-05-10
+source: slice-16-transcript-edit-and-playback
+updated: 2026-05-15
 code:
-  - packages/web/src/routes/meetings/detail.tsx
-  - packages/backend/meeting_playbook/asr/whisper_provider.py
-  - packages/web/src/components/layout-switcher.tsx
-  - packages/backend/meeting_playbook/sessions/service.py
-  - docs/agents/audio.md
-  - packages/backend/alembic/versions/0004_add_meeting_scheduled_times.py
-  - packages/backend/meeting_playbook/asr/base.py
-  - packages/backend/meeting_playbook/meetings/schemas.py
-  - packages/backend/meeting_playbook/sessions/dependencies.py
-  - packages/backend/meeting_playbook/audio/devices.py
-  - packages/backend/meeting_playbook/calendar/router.py
-  - packages/web/package.json
-  - .env.example
-  - packages/web/src/components/playbook-pane.tsx
-  - packages/backend/meeting_playbook/meetings/models.py
-  - packages/backend/meeting_playbook/audio/capture.py
-  - docs/BLACKHOLE_SETUP.md
-  - packages/web/src/components/ui/alert.tsx
-  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/hooks/use-mini-player.ts
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/web/src/lib/meetings-bucket.ts
   - packages/web/src/lib/meetings-api.ts
-  - packages/web/src/index.css
-  - docs/agents/sessions.md
-  - packages/backend/meeting_playbook/calendar/client.py
+  - packages/backend/meeting_playbook/speaker/finalize.py
   - bun.lock
-  - packages/backend/meeting_playbook/meetings/router.py
-  - packages/web/src/components/headphones-hint.tsx
-  - packages/web/src/locales/zh-TW.json
-  - packages/web/src/lib/session-ws.ts
-  - packages/web/src/route-tree.tsx
-  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.ts
+  - packages/web/src/routes/meetings/detail.tsx
   - packages/backend/meeting_playbook/config.py
-  - packages/web/src/components/protected-shell.tsx
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - CONTEXT.md
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - packages/backend/meeting_playbook/audio_playback/wav_header.py
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/backend/alembic/versions/0015_chunk_text_edited_at.py
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/backend/alembic/versions/0012_meeting_start_not_null.py
+  - packages/backend/meeting_playbook/audio/capture.py
   - packages/backend/meeting_playbook/meetings/repository.py
-  - packages/web/src/hooks/use-detail-layout.ts
-  - packages/web/src/test-setup.ts
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/backend/meeting_playbook/audio_playback/range_server.py
+  - packages/backend/meeting_playbook/audio_playback/__init__.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/meeting-edit-form.tsx
+  - packages/web/src/lib/transcript-color-schemes.ts
+  - .env.example
+  - packages/web/src/lib/transcript-edit-api.ts
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/lib/transcripts-api.ts
+  - packages/backend/alembic/versions/0014_recording_started_at.py
+  - packages/web/src/components/speaker-color-popover.tsx
   - packages/web/src/routes/meetings/new.tsx
-  - packages/backend/meeting_playbook/playbooks/repository.py
-  - packages/web/src/lib/markdown-preview.tsx
-  - packages/web/vite.config.ts
-  - packages/web/src/hooks/use-meeting-session.ts
-  - packages/backend/meeting_playbook/sessions/messages.py
-  - packages/backend/meeting_playbook/sessions/repository.py
-  - packages/web/src/components/capture-indicator.tsx
+  - packages/web/src/components/metadata-card.tsx
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/hooks/use-transcript-color-pref.ts
+  - packages/web/src/components/ui/dialog.tsx
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/pyproject.toml
   - packages/web/src/lib/meetings-calendar-utils.ts
-  - packages/web/src/locales/en.json
+  - packages/web/package.json
   - packages/backend/meeting_playbook/sessions/router.py
-  - packages/web/src/routes/meetings/list.tsx
-  - packages/backend/meeting_playbook/playbook_generation/generator.py
-  - packages/web/src/routes/calendar/upcoming.tsx
+  - packages/backend/meeting_playbook/transcript_edit/__init__.py
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/components/chunk-action-menu.tsx
+  - packages/web/src/components/transcript-chunk-row.tsx
+  - packages/web/src/lib/session-ws.ts
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/transcript_edit/router.py
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/backend/meeting_playbook/sessions/repository.py
 tests:
-  - packages/backend/tests/meetings/test_endpoints.py
-  - packages/web/src/routes/calendar/upcoming.test.tsx
-  - packages/backend/tests/calendar/test_client.py
-  - packages/backend/tests/audio/test_capture_protocol.py
-  - packages/backend/tests/playbook_generation/test_generator.py
-  - packages/backend/tests/asr/test_whisper_provider.py
-  - packages/backend/tests/asr/fixtures/counterparty_short.wav
-  - packages/backend/tests/calendar/test_pick_counterparty.py
-  - packages/backend/tests/calendar/test_endpoints.py
-  - packages/backend/tests/sessions/test_service.py
-  - packages/web/src/components/layout-switcher.test.tsx
-  - packages/backend/tests/audio/test_devices.py
-  - packages/web/src/components/headphones-hint.test.tsx
-  - packages/backend/tests/asr/fixtures/README.md
-  - packages/backend/tests/sessions/test_repository.py
-  - packages/backend/tests/sessions/test_router.py
-  - packages/backend/tests/meetings/test_repository.py
-  - packages/backend/tests/sessions/test_messages.py
-  - packages/web/src/components/playbook-pane.test.tsx
-  - packages/web/src/lib/session-ws.test.ts
-  - packages/web/src/components/capture-indicator.test.tsx
-  - packages/web/src/hooks/use-meeting-session.test.tsx
-  - packages/backend/tests/asr/test_base.py
-  - packages/backend/tests/test_alembic_meeting_scheduled.py
-  - packages/backend/tests/test_preflight.py
-  - packages/backend/tests/audio/test_capture_integration.py
-  - packages/web/src/hooks/use-detail-layout.test.tsx
-  - packages/web/src/lib/markdown-preview.test.tsx
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/backend/tests/audio_playback/test_range_server.py
   - packages/backend/tests/test_alembic_meeting.py
-  - packages/web/src/routes/meetings/detail.test.tsx
-  - packages/backend/tests/conftest.py
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/web/src/routes/meetings/calendar.test.tsx
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/web/src/components/meeting-edit-form.test.tsx
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/web/src/hooks/use-mini-player.test.tsx
+  - packages/web/src/lib/transcript-color-schemes.test.ts
+  - packages/web/src/components/chunk-action-menu.test.tsx
+  - packages/backend/tests/integration/test_audio_playback_e2e.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/web/src/lib/tus-uploader.test.ts
   - packages/web/src/lib/meetings-calendar-utils.test.ts
-  - packages/web/src/components/protected-shell.test.tsx
-  - packages/web/src/components/transcript-pane.test.tsx
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/web/src/components/speaker-color-popover.test.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.test.tsx
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/backend/tests/retention/test_job.py
+  - packages/backend/tests/test_alembic_transcript_chunk_text_edited_at.py
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/test_config.py
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
+  - packages/web/src/routes/meetings/list.test.tsx
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/audio_playback/test_wav_header.py
+  - packages/backend/tests/audio_playback/test_router.py
+  - packages/backend/tests/audio_playback/__init__.py
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/backend/tests/test_alembic_recording_started_at.py
+  - packages/backend/tests/transcript_edit/test_router.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/web/src/components/meeting-card.test.tsx
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/web/src/components/transcript-chunk-row.test.tsx
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/backend/tests/test_alembic_meeting_scheduled_not_null.py
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/backend/tests/transcript_edit/__init__.py
+  - packages/web/src/hooks/use-transcript-color-pref.test.tsx
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/integration/test_single_channel_e2e.py
 -->
 
 ---
@@ -2186,4 +2233,144 @@ tests:
   - packages/web/src/components/capture-indicator.test.tsx
   - packages/web/src/components/locale-toggle.test.tsx
   - packages/web/src/components/auth-shell.test.tsx
+-->
+
+---
+### Requirement: transcript_chunk gains text_edited_at column tracking user edits
+
+The `transcript_chunk` table SHALL gain a column `text_edited_at TIMESTAMPTZ NULL` (default NULL). The Alembic migration `0010_add_transcript_chunk_text_edited_at` SHALL add the column. New rows created during ASR transcription SHALL have `text_edited_at IS NULL`. Whenever the user successfully invokes `PATCH /api/meetings/{id}/transcript_chunks/{chunk_id}` (per the `transcript-edit` capability) the row's `text_edited_at` SHALL be set to the server's current UTC time. The column SHALL never be modified by any code path other than the transcript edit endpoint.
+
+#### Scenario: Newly inserted ASR chunks have text_edited_at NULL
+
+- **GIVEN** an in-progress meeting session running ASR
+- **WHEN** the session writes a fresh `transcript_chunk` row
+- **THEN** the row's `text_edited_at` SHALL be NULL
+
+#### Scenario: Successful PATCH stamps text_edited_at with the server time
+
+- **GIVEN** a chunk `c_1` with `text_edited_at IS NULL`
+- **WHEN** the owner successfully PATCHes `c_1.text` to a new value
+- **THEN** the row's `text_edited_at` SHALL become non-NULL and equal the server time at the moment of the successful update; the row's `text` SHALL equal the new value
+
+<!-- @trace
+source: slice-16-transcript-edit-and-playback
+updated: 2026-05-15
+code:
+  - packages/web/src/hooks/use-mini-player.ts
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/web/src/lib/meetings-bucket.ts
+  - packages/web/src/lib/meetings-api.ts
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - bun.lock
+  - packages/web/src/hooks/use-cluster-speaker-labels.ts
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/backend/meeting_playbook/config.py
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - CONTEXT.md
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - packages/backend/meeting_playbook/audio_playback/wav_header.py
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/backend/alembic/versions/0015_chunk_text_edited_at.py
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/backend/alembic/versions/0012_meeting_start_not_null.py
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/backend/meeting_playbook/audio_playback/range_server.py
+  - packages/backend/meeting_playbook/audio_playback/__init__.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/meeting-edit-form.tsx
+  - packages/web/src/lib/transcript-color-schemes.ts
+  - .env.example
+  - packages/web/src/lib/transcript-edit-api.ts
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/lib/transcripts-api.ts
+  - packages/backend/alembic/versions/0014_recording_started_at.py
+  - packages/web/src/components/speaker-color-popover.tsx
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/web/src/components/metadata-card.tsx
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/hooks/use-transcript-color-pref.ts
+  - packages/web/src/components/ui/dialog.tsx
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/pyproject.toml
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/transcript_edit/__init__.py
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/components/chunk-action-menu.tsx
+  - packages/web/src/components/transcript-chunk-row.tsx
+  - packages/web/src/lib/session-ws.ts
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/transcript_edit/router.py
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/backend/meeting_playbook/sessions/repository.py
+tests:
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/backend/tests/audio_playback/test_range_server.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/web/src/routes/meetings/calendar.test.tsx
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/web/src/components/meeting-edit-form.test.tsx
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/web/src/hooks/use-mini-player.test.tsx
+  - packages/web/src/lib/transcript-color-schemes.test.ts
+  - packages/web/src/components/chunk-action-menu.test.tsx
+  - packages/backend/tests/integration/test_audio_playback_e2e.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/web/src/components/speaker-color-popover.test.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.test.tsx
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/backend/tests/retention/test_job.py
+  - packages/backend/tests/test_alembic_transcript_chunk_text_edited_at.py
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/test_config.py
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
+  - packages/web/src/routes/meetings/list.test.tsx
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/audio_playback/test_wav_header.py
+  - packages/backend/tests/audio_playback/test_router.py
+  - packages/backend/tests/audio_playback/__init__.py
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/backend/tests/test_alembic_recording_started_at.py
+  - packages/backend/tests/transcript_edit/test_router.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/web/src/components/meeting-card.test.tsx
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/web/src/components/transcript-chunk-row.test.tsx
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/backend/tests/test_alembic_meeting_scheduled_not_null.py
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/backend/tests/transcript_edit/__init__.py
+  - packages/web/src/hooks/use-transcript-color-pref.test.tsx
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/integration/test_single_channel_e2e.py
 -->

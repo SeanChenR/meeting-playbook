@@ -1563,3 +1563,157 @@ tests:
   - packages/web/src/routes/meetings/detail.test.tsx
   - packages/web/src/routes/meetings/new.test.tsx
 -->
+
+---
+### Requirement: Meeting detail page renders MeetingAudioMiniPlayer pinned to the bottom
+
+The meeting detail page (`packages/web/src/routes/meetings/detail.tsx`) SHALL render `<MeetingAudioMiniPlayer>` (defined in the `audio-playback` capability) as a persistent sticky bar at the bottom of the page in BOTH `columns` mode and `stack` mode. The mini-player SHALL NOT be placed inside any of the three panes (Playbook / Transcript / Advisor); it SHALL live in the page-level layout container below them. The mini-player SHALL remain visible regardless of which Tab is active when the Tabs UI is enabled (per the existing "Detail page wraps existing workspace in a Tabs UI" requirement). When no chunk has been selected for playback, the mini-player SHALL render in an idle state with the Play / Pause button disabled and the chunk-navigation buttons disabled; the Speed dropdown SHALL remain enabled so the user can pre-set their preferred speed before pressing ▶ on a chunk.
+
+The mini-player's presence SHALL NOT alter the 30/40/30 grid widths defined in the columns-mode requirement, nor the P-T-A vertical ordering defined in the stack-mode requirement. The mini-player's height SHALL be reserved in the page layout so the bottom-most content of the active pane is NOT occluded by the mini-player bar.
+
+#### Scenario: Mini-player renders in columns mode at the page bottom
+
+- **GIVEN** a meeting detail page in columns mode with a viewport wider than 1024px
+- **WHEN** the page renders
+- **THEN** the `<MeetingAudioMiniPlayer>` SHALL be present in the DOM below the three pane columns; its container SHALL have CSS `position: sticky; bottom: 0`; the three pane columns above SHALL retain the 30/40/30 widths
+
+#### Scenario: Mini-player renders in stack mode below the three stacked panes
+
+- **GIVEN** a meeting detail page in stack mode
+- **WHEN** the page renders
+- **THEN** the `<MeetingAudioMiniPlayer>` SHALL be the last element in the page layout; the Playbook → Transcript → Advisor vertical order above it SHALL be unchanged
+
+#### Scenario: Mini-player stays visible across Tab switches
+
+- **GIVEN** a meeting detail page using the Tabs UI with Workspace tab currently active
+- **WHEN** the user switches to the Summary tab
+- **THEN** the `<MeetingAudioMiniPlayer>` SHALL still be visible in the DOM at the page bottom; if a chunk was playing the playback SHALL continue uninterrupted
+
+#### Scenario: Idle mini-player has disabled play and navigation buttons
+
+- **GIVEN** a freshly loaded meeting detail page where the user has NOT clicked ▶ on any chunk
+- **WHEN** the page renders
+- **THEN** the mini-player's Play/Pause button SHALL have the `disabled` attribute; the Previous and Next chunk buttons SHALL be disabled; the Speed dropdown SHALL be enabled and SHALL show the user's persisted `localStorage.miniPlayerRate` value (defaulting to `1.0x`)
+
+<!-- @trace
+source: slice-16-transcript-edit-and-playback
+updated: 2026-05-15
+code:
+  - packages/web/src/hooks/use-mini-player.ts
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/web/src/lib/meetings-bucket.ts
+  - packages/web/src/lib/meetings-api.ts
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - bun.lock
+  - packages/web/src/hooks/use-cluster-speaker-labels.ts
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/backend/meeting_playbook/config.py
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - CONTEXT.md
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - packages/backend/meeting_playbook/audio_playback/wav_header.py
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/backend/alembic/versions/0015_chunk_text_edited_at.py
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/backend/alembic/versions/0012_meeting_start_not_null.py
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/backend/meeting_playbook/audio_playback/range_server.py
+  - packages/backend/meeting_playbook/audio_playback/__init__.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/meeting-edit-form.tsx
+  - packages/web/src/lib/transcript-color-schemes.ts
+  - .env.example
+  - packages/web/src/lib/transcript-edit-api.ts
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/lib/transcripts-api.ts
+  - packages/backend/alembic/versions/0014_recording_started_at.py
+  - packages/web/src/components/speaker-color-popover.tsx
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/web/src/components/metadata-card.tsx
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/hooks/use-transcript-color-pref.ts
+  - packages/web/src/components/ui/dialog.tsx
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/pyproject.toml
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/transcript_edit/__init__.py
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/components/chunk-action-menu.tsx
+  - packages/web/src/components/transcript-chunk-row.tsx
+  - packages/web/src/lib/session-ws.ts
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/transcript_edit/router.py
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/backend/meeting_playbook/sessions/repository.py
+tests:
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/backend/tests/audio_playback/test_range_server.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/web/src/routes/meetings/calendar.test.tsx
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/web/src/components/meeting-edit-form.test.tsx
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/web/src/hooks/use-mini-player.test.tsx
+  - packages/web/src/lib/transcript-color-schemes.test.ts
+  - packages/web/src/components/chunk-action-menu.test.tsx
+  - packages/backend/tests/integration/test_audio_playback_e2e.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/web/src/components/speaker-color-popover.test.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.test.tsx
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/backend/tests/retention/test_job.py
+  - packages/backend/tests/test_alembic_transcript_chunk_text_edited_at.py
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/test_config.py
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
+  - packages/web/src/routes/meetings/list.test.tsx
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/audio_playback/test_wav_header.py
+  - packages/backend/tests/audio_playback/test_router.py
+  - packages/backend/tests/audio_playback/__init__.py
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/backend/tests/test_alembic_recording_started_at.py
+  - packages/backend/tests/transcript_edit/test_router.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/web/src/components/meeting-card.test.tsx
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/web/src/components/transcript-chunk-row.test.tsx
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/backend/tests/test_alembic_meeting_scheduled_not_null.py
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/backend/tests/transcript_edit/__init__.py
+  - packages/web/src/hooks/use-transcript-color-pref.test.tsx
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/integration/test_single_channel_e2e.py
+-->

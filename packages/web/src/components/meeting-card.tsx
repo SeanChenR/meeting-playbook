@@ -13,6 +13,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Calendar as CalendarIcon, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "./ui/badge";
+import { TagChip } from "./tags/tag-chip";
 import type { Meeting, MeetingStatus } from "../lib/meetings-api";
 
 const STATUS_COLOR: Record<MeetingStatus, string> = {
@@ -93,6 +94,13 @@ export function MeetingCard({ meeting, showUploadShortcut = false }: MeetingCard
         </span>{" "}
         · {meeting.me_display_name}
       </p>
+      {(meeting.tags?.length ?? 0) > 0 && (
+        <div data-testid="meeting-card-tags" className="mt-2 flex flex-wrap gap-1">
+          {(meeting.tags ?? []).map((tag) => (
+            <TagChip key={tag.id} name={tag.name} color={tag.color} />
+          ))}
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-(--color-muted-foreground)">
         <span className="inline-flex items-center gap-1">
           <CalendarIcon className="size-3" aria-hidden />

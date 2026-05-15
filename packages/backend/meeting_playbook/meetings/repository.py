@@ -15,8 +15,9 @@ from __future__ import annotations
 import secrets
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from meeting_playbook.meetings.models import Meeting
 
@@ -89,17 +90,57 @@ class MeetingRepository:
         return meeting
 
     async def list_by_user(self, user_id: str) -> list[Meeting]:
+        # Slice-17: kept for callers that don't need the tag join (e.g. the
+        # rerun runtime). `list_for_user` is the slice-17 entry point that
+        # returns Meeting + tags via selectinload.
         result = await self._session.execute(
             select(Meeting).where(Meeting.user_id == user_id).order_by(Meeting.created_at.desc())
         )
         return list(result.scalars().all())
 
+    async def list_for_user(
+        self, user_id: str, *, tag_ids: list[str] | None = None
+    ) -> list[Meeting]:
+        """Slice-17: list user's meetings with tags pre-loaded.
+
+        - `tag_ids` is treated with AND semantics: a meeting is returned
+          ONLY when all listed tag ids are attached to it.
+        - Empty / None `tag_ids` is a no-op — every owned meeting comes back.
+        - Tag rows are eager-loaded via `selectinload(Meeting.tags)`, keeping
+          the query count flat regardless of N (slice-17 design Decision —
+          "N+1 prevention").
+        """
+        # Avoid circular import — `MeetingTag` lives in `tags.models` which
+        # imports from `meetings.models`. The tag models module registers
+        # `Meeting.tags` as a side effect, so it has to be imported here.
+        from meeting_playbook.tags.models import MeetingTag
+
+        stmt = (
+            select(Meeting)
+            .where(Meeting.user_id == user_id)
+            .options(selectinload(Meeting.tags))
+            .order_by(Meeting.created_at.desc())
+        )
+        if tag_ids:
+            subq = (
+                select(MeetingTag.meeting_id)
+                .where(MeetingTag.tag_id.in_(tag_ids))
+                .group_by(MeetingTag.meeting_id)
+                .having(func.count(func.distinct(MeetingTag.tag_id)) == len(tag_ids))
+            )
+            stmt = stmt.where(Meeting.id.in_(subq))
+
+        result = await self._session.execute(stmt)
+        return list(result.unique().scalars().all())
+
     async def get_for_user(self, *, user_id: str, meeting_id: str) -> Meeting | None:
         result = await self._session.execute(
-            select(Meeting).where(
+            select(Meeting)
+            .where(
                 Meeting.id == meeting_id,
                 Meeting.user_id == user_id,
             )
+            .options(selectinload(Meeting.tags))
         )
         return result.scalar_one_or_none()
 

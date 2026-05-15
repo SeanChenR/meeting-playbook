@@ -13,6 +13,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export type MeetingStatus = "scheduled" | "in_progress" | "completed";
 
+export interface MeetingTagSummary {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface Meeting {
   id: string;
   user_id: string;
@@ -31,6 +37,12 @@ export interface Meeting {
   // fallback. `scheduled_end_at` stays nullable.
   scheduled_start_at: string;
   scheduled_end_at: string | null;
+  // Slice-17: every list / detail payload includes the meeting's tags.
+  // Marked optional so legacy test fixtures that pre-date the tag system
+  // do not need to be back-filled; consumers should treat `undefined` as
+  // "no tags attached" (equivalent to an empty array). Backend always
+  // emits `[]` when no tags are attached.
+  tags?: MeetingTagSummary[];
 }
 
 export interface RecordingSummary {
@@ -96,8 +108,14 @@ async function _envelopeError(resp: Response): Promise<MeetingApiError> {
   return new MeetingApiError(resp.status, body.error_code, body.message ?? `HTTP ${resp.status}`);
 }
 
-export async function listMeetings(): Promise<Meeting[]> {
-  const resp = await fetch("/api/meetings");
+export async function listMeetings(options?: { tagIds?: string[] }): Promise<Meeting[]> {
+  const params = new URLSearchParams();
+  if (options?.tagIds && options.tagIds.length > 0) {
+    params.set("tag_ids", options.tagIds.join(","));
+  }
+  const qs = params.toString();
+  const url = qs.length > 0 ? `/api/meetings?${qs}` : "/api/meetings";
+  const resp = await fetch(url);
   if (!resp.ok) throw await _envelopeError(resp);
   return (await resp.json()) as Meeting[];
 }
@@ -147,10 +165,20 @@ export async function deleteMeeting(id: string): Promise<void> {
  * Mutations invalidate by these keys; pages just feed the query options into
  * `useQuery` and never compute keys themselves.
  */
-export function meetingsListQueryOptions() {
+export function meetingsListQueryOptions(options?: { tagIds?: string[] }) {
+  const tagIds = options?.tagIds ?? [];
+  // Preserve the historical `["meetings"]` key when no tag filter is active
+  // so existing `invalidateQueries({ queryKey: ["meetings"] })` calls and
+  // the slice-3 queries.test snapshot keep matching.
+  if (tagIds.length === 0) {
+    return {
+      queryKey: ["meetings"] as const,
+      queryFn: () => listMeetings(),
+    };
+  }
   return {
-    queryKey: ["meetings"] as const,
-    queryFn: listMeetings,
+    queryKey: ["meetings", { tagIds: tagIds.slice().sort() }] as const,
+    queryFn: () => listMeetings({ tagIds }),
   };
 }
 

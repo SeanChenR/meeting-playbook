@@ -14,6 +14,7 @@ import { MeetingsCalendar } from "./routes/meetings/calendar";
 import { MeetingsList } from "./routes/meetings/list";
 import { NewMeeting } from "./routes/meetings/new";
 import { UpcomingEvents } from "./routes/calendar/upcoming";
+import { SettingsTags } from "./routes/settings/tags";
 import { SettingsVoice } from "./routes/settings/voice";
 import { Signup } from "./routes/signup";
 import { TotpEnroll } from "./routes/totp/enroll";
@@ -102,6 +103,13 @@ const settingsVoiceRoute = createRoute({
   component: SettingsVoice,
 });
 
+// Slice-17: /settings/tags — tag CRUD management page.
+const settingsTagsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/tags",
+  component: SettingsTags,
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -115,4 +123,5 @@ export const routeTree = rootRoute.addChildren([
   meetingDetailRoute,
   calendarImportRoute,
   settingsVoiceRoute,
+  settingsTagsRoute,
 ]);

@@ -12,21 +12,34 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { Calendar as CalendarIcon } from "lucide-react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "../../components/animate-ui/icons/plus";
 import { MeetingsKanban } from "../../components/meetings-kanban";
 import { MeetingsViewTabs } from "../../components/meetings-view-tabs";
 import { ProtectedShell } from "../../components/protected-shell";
+import { TagFilter } from "../../components/tags/tag-filter";
 import { buttonVariants } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
 import { meetingsListQueryOptions, MeetingApiError } from "../../lib/meetings-api";
 
+function _parseTagIdsFromSearch(searchStr: string): string[] {
+  const params = new URLSearchParams(searchStr.startsWith("?") ? searchStr.slice(1) : searchStr);
+  const raw = params.get("tag_ids");
+  return raw ? raw.split(",").filter(Boolean) : [];
+}
+
 export function MeetingsList() {
   const { t } = useTranslation();
-  const query = useQuery(meetingsListQueryOptions());
+  const location = useLocation();
+  const tagIds = useMemo(
+    () => _parseTagIdsFromSearch(location.searchStr ?? ""),
+    [location.searchStr],
+  );
+  const query = useQuery(meetingsListQueryOptions({ tagIds }));
   const meetings = query.data ?? null;
   const error = query.isError
     ? query.error instanceof MeetingApiError && query.error.errorCode
@@ -58,6 +71,7 @@ export function MeetingsList() {
           <MeetingsViewTabs value="kanban" />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <TagFilter />
           <Link
             to="/calendar/import"
             className={buttonVariants({ variant: "secondary", size: "sm" })}

@@ -1,0 +1,200 @@
+/**
+ * TagPicker — slice-17 task 5.3.
+ *
+ * Popover with a search input + existing-tag list + inline-create row that
+ * appears when the search text matches no existing tag. Designed to be
+ * mounted in the meeting detail header so the user can attach / detach tags
+ * to that meeting.
+ *
+ * Behavior:
+ * - The trigger button shows a `+ 新增標籤 / + Add tag` label.
+ * - When opened: GET /api/tags is fetched (or read from the react-query
+ *   cache). Existing tags are listed; clicking one toggles its attached
+ *   state (attach if not present, detach if already in `currentTags`).
+ * - Typing in the search input filters the list; when the query is not a
+ *   trim()-case-insensitive match against any existing tag, an inline-create
+ *   row appears. Clicking it issues `POST /api/tags` then chains
+ *   `POST /api/meetings/{id}/tags` with the returned id.
+ *
+ * The popover is hand-rolled (no Radix popover dependency); a click outside
+ * + Escape close the panel.
+ */
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  type Tag,
+  useAttachTagMutation,
+  useCreateTagMutation,
+  useDetachTagMutation,
+  useTagsListQuery,
+} from "../../lib/tags-api";
+import { TAG_PALETTE } from "../../lib/tag-palette";
+import { cn } from "../../lib/utils";
+import { TagChip } from "./tag-chip";
+
+/** A slim tag shape — full `Tag` objects from the API are accepted too. */
+export interface TagPickerCurrentTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface TagPickerProps {
+  meetingId: string;
+  currentTags: TagPickerCurrentTag[];
+  onAttached?: (tag: Tag) => void;
+  onDetached?: (tagId: string) => void;
+}
+
+export function TagPicker({ meetingId, currentTags, onAttached, onDetached }: TagPickerProps) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const tagsQuery = useTagsListQuery();
+  const createMutation = useCreateTagMutation();
+  const attachMutation = useAttachTagMutation(meetingId);
+  const detachMutation = useDetachTagMutation(meetingId);
+
+  const attachedIds = useMemo(() => new Set(currentTags.map((t) => t.id)), [currentTags]);
+
+  const trimmedQuery = query.trim();
+  const all = tagsQuery.data ?? [];
+
+  const filtered = useMemo(() => {
+    if (!trimmedQuery) return all;
+    const needle = trimmedQuery.toLowerCase();
+    return all.filter((tag) => tag.name.toLowerCase().includes(needle));
+  }, [all, trimmedQuery]);
+
+  const exactMatch = useMemo(
+    () =>
+      trimmedQuery.length > 0 &&
+      all.some((tag) => tag.name.toLowerCase() === trimmedQuery.toLowerCase()),
+    [all, trimmedQuery],
+  );
+  const showCreateRow = trimmedQuery.length > 0 && !exactMatch;
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function _onDocClick(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function _onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", _onDocClick);
+    document.addEventListener("keydown", _onKey);
+    return () => {
+      document.removeEventListener("mousedown", _onDocClick);
+      document.removeEventListener("keydown", _onKey);
+    };
+  }, [open]);
+
+  async function _toggleAttach(tag: Tag) {
+    if (attachedIds.has(tag.id)) {
+      await detachMutation.mutateAsync(tag.id);
+      onDetached?.(tag.id);
+    } else {
+      await attachMutation.mutateAsync(tag.id);
+      onAttached?.(tag);
+    }
+  }
+
+  async function _createAndAttach() {
+    if (!trimmedQuery) return;
+    const created = await createMutation.mutateAsync({
+      name: trimmedQuery,
+      color: TAG_PALETTE[0],
+    });
+    await attachMutation.mutateAsync(created.id);
+    onAttached?.(created);
+    setQuery("");
+  }
+
+  return (
+    <div ref={containerRef} className="relative inline-block">
+      <button
+        type="button"
+        data-testid="tag-picker-trigger"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full border border-dashed border-(--color-border)",
+          "px-2.5 py-1 text-xs font-medium text-(--color-muted-foreground)",
+          "transition-colors hover:border-(--color-primary)/40 hover:text-(--color-foreground)",
+        )}
+      >
+        {t("tags.picker.trigger")}
+      </button>
+      {open && (
+        <div
+          data-testid="tag-picker-panel"
+          className={cn(
+            "absolute left-0 z-50 mt-1 w-64 rounded-md border border-(--color-border)",
+            "bg-(--color-card) p-2 shadow-md",
+          )}
+        >
+          <input
+            ref={inputRef}
+            data-testid="tag-picker-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("tags.picker.placeholder")}
+            className="mb-2 w-full rounded-sm border border-(--color-border) bg-(--color-card) px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-(--color-primary)/40"
+          />
+          <ul className="max-h-60 overflow-y-auto" role="listbox">
+            {filtered.length === 0 && !showCreateRow && (
+              <li className="px-2 py-1 text-xs text-(--color-muted-foreground)">
+                {t("tags.picker.noResults")}
+              </li>
+            )}
+            {filtered.map((tag) => {
+              const isAttached = attachedIds.has(tag.id);
+              return (
+                <li
+                  key={tag.id}
+                  data-testid={`tag-picker-row-${tag.id}`}
+                  data-attached={isAttached}
+                  role="option"
+                  aria-selected={isAttached}
+                  className="flex cursor-pointer items-center justify-between gap-2 rounded-sm px-2 py-1 hover:bg-(--color-muted)"
+                  onClick={() => {
+                    void _toggleAttach(tag);
+                  }}
+                >
+                  <TagChip name={tag.name} color={tag.color} />
+                  {isAttached && (
+                    <span className="text-xs text-(--color-primary)" aria-hidden>
+                      ✓
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+            {showCreateRow && (
+              <li
+                data-testid="tag-picker-create-row"
+                role="option"
+                className="cursor-pointer rounded-sm px-2 py-1 text-sm text-(--color-foreground) hover:bg-(--color-muted)"
+                onClick={() => {
+                  void _createAndAttach();
+                }}
+              >
+                {t("tags.picker.create", { query: trimmedQuery })}
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}

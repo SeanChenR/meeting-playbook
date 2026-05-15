@@ -34,6 +34,7 @@ Three lifecycle phases of one meeting:
 | **Mini-player** | Sticky-bottom audio control bar on the meeting detail page that plays a transcript chunk's underlying audio slice; six playback speeds, persists to `localStorage.miniPlayerRate` (slice-16) |
 | **Transcript chunk edit** | User-initiated correction of an ASR chunk's text via `PATCH /api/meetings/{id}/transcript_chunks/{cid}`; speaker / timestamps / asr_provider_used remain immutable. `text_edited_at` stamps each successful edit (slice-16) |
 | **Transcript color scheme** | One of five hard-coded palettes (default / vivid / pastel / high-contrast / grayscale) the user can apply to `speaker_cluster_<N>` rendering; per-cluster overrides land in `localStorage`. `me` and `counterparty` keep their semantic colours and are not customisable (slice-16) |
+| **Tag (標籤)** | Per-user 自訂的扁平分類標籤；可掛到 meeting 上做 list / kanban / calendar 過濾。Per-user case-insensitive 唯一；單一 meeting 最多 10 個；色票從 preset palette 挑（per slice-17）|
 
 ## Boundaries
 - **Single user.** No team / sharing / multi-tenant.

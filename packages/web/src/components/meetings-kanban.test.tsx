@@ -138,6 +138,27 @@ describe("MeetingsKanban", () => {
     expect(within(body).getByTestId("meeting-card-upload-shortcut")).toBeDefined();
   });
 
+  test("(slice-17) kanban cards render tag chips", async () => {
+    const future = new Date();
+    future.setDate(future.getDate() + 5);
+    const meetings: Meeting[] = [
+      _meeting({
+        id: "tagged",
+        status: "scheduled",
+        scheduled_start_at: future.toISOString(),
+        tags: [{ id: "tag_a", name: "客戶X", color: "#DDD6FE" }],
+      }),
+    ];
+
+    await renderWithRouter(<MeetingsKanban meetings={meetings} />, {
+      initialEntries: ["/meetings"],
+      path: "/meetings",
+    });
+    const body = screen.getByTestId("kanban-body-upcoming");
+    const tagsRow = within(body).getByTestId("meeting-card-tags");
+    expect(tagsRow.textContent).toContain("客戶X");
+  });
+
   test("(7.5e) completed column sorts by scheduled_start_at DESC", async () => {
     // Two completed meetings, A more recent than B. The component
     // sorts the `completed` bucket by scheduled_start_at DESC so A

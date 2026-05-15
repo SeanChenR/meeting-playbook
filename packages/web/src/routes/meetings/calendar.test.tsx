@@ -183,6 +183,18 @@ describe("MeetingsCalendar route", () => {
     expect(link?.getAttribute("href")).toBe("/meetings/m_unscheduled");
   });
 
+  test("(slice-17) header mounts the TagFilter", async () => {
+    fetchHandler = async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+
+    await renderWithRouter(<MeetingsCalendar />, {
+      initialEntries: ["/meetings/calendar"],
+      path: "/meetings/calendar",
+    });
+    const trigger = await screen.findByTestId("tag-filter-trigger");
+    expect(trigger).toBeDefined();
+  });
+
   test("(4.2) 新會議 link includes ?from=calendar", async () => {
     fetchHandler = async () =>
       new Response("[]", { status: 200, headers: { "content-type": "application/json" } });

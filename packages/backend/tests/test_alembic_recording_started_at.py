@@ -82,7 +82,7 @@ async def test_pre_0014_null_rows_are_backfilled_from_created_at(
 
     # Step back to the migration immediately before 0014 so we can
     # insert NULL `recording.started_at` rows.
-    await asyncio.to_thread(command.downgrade, cfg, "0012_meeting_start_not_null")
+    await asyncio.to_thread(command.downgrade, cfg, "0013_tag_system")
 
     # Seed: 1 user, 1 meeting, 4 recordings with started_at = NULL but
     # distinct created_at offsets.
@@ -211,7 +211,7 @@ async def test_downgrade_drops_not_null_then_reupgrade_succeeds(
     cfg = _alembic_config(test_database_url)
     async_url = _async_url(test_database_url)
 
-    await asyncio.to_thread(command.downgrade, cfg, "0012_meeting_start_not_null")
+    await asyncio.to_thread(command.downgrade, cfg, "0013_tag_system")
     try:
         engine = create_async_engine(async_url, future=True)
         try:

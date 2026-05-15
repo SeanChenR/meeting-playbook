@@ -8,7 +8,7 @@
  * is active.
  */
 
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
@@ -21,10 +21,28 @@ export interface MeetingsViewTabsProps {
 export function MeetingsViewTabs({ value }: MeetingsViewTabsProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleChange = (next: string) => {
     if (next === value) return;
-    navigate({ to: next === "calendar" ? "/meetings/calendar" : "/meetings" });
+    // Slice-17: preserve cross-view search params (notably `?tag_ids=`) so
+    // the TagFilter selection survives a tab switch. Re-parse from the raw
+    // searchStr so TanStack Router doesn't strip unknown keys via the
+    // route's search validator (the meetings list / calendar routes have
+    // no strict schema yet).
+    const params = new URLSearchParams(
+      (location.searchStr ?? "").startsWith("?")
+        ? (location.searchStr ?? "").slice(1)
+        : (location.searchStr ?? ""),
+    );
+    const searchObj: Record<string, string> = {};
+    params.forEach((v, k) => {
+      searchObj[k] = v;
+    });
+    navigate({
+      to: next === "calendar" ? "/meetings/calendar" : "/meetings",
+      search: () => searchObj,
+    } as never);
   };
 
   return (

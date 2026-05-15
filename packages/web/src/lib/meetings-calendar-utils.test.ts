@@ -25,24 +25,17 @@ const _meeting = (overrides: Partial<Meeting> = {}): Meeting => ({
 });
 
 describe("meetingToCalendarEvent", () => {
-  test("returns CalendarEvent when scheduled_start_at is set", () => {
+  test("returns CalendarEvent for any meeting (slice-15: start always present)", () => {
     const ev = meetingToCalendarEvent(_meeting());
-    expect(ev).not.toBeNull();
-    expect(ev!.id).toBe("m_t");
-    expect(ev!.title).toBe("Q3 review");
-    expect(ev!.start.toISOString()).toBe("2026-06-15T14:00:00.000Z");
-    expect(ev!.end.toISOString()).toBe("2026-06-15T15:00:00.000Z");
-  });
-
-  test("returns null when scheduled_start_at is null", () => {
-    const ev = meetingToCalendarEvent(_meeting({ scheduled_start_at: null }));
-    expect(ev).toBeNull();
+    expect(ev.id).toBe("m_t");
+    expect(ev.title).toBe("Q3 review");
+    expect(ev.start.toISOString()).toBe("2026-06-15T14:00:00.000Z");
+    expect(ev.end.toISOString()).toBe("2026-06-15T15:00:00.000Z");
   });
 
   test("defaults end to start + 30min when scheduled_end_at is null", () => {
     const ev = meetingToCalendarEvent(_meeting({ scheduled_end_at: null }));
-    expect(ev).not.toBeNull();
-    expect(ev!.end.getTime() - ev!.start.getTime()).toBe(30 * 60_000);
+    expect(ev.end.getTime() - ev.start.getTime()).toBe(30 * 60_000);
   });
 });
 

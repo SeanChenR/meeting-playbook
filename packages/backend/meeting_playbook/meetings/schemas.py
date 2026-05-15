@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 MeetingStatus = Literal["scheduled", "in_progress", "completed"]
 
@@ -22,7 +22,11 @@ class MeetingCreate(BaseModel):
     title: str = Field(min_length=1)
     counterparty_display_name: str = Field(min_length=1)
     me_display_name: str = Field(min_length=1)
-    scheduled_start_at: datetime | None = None
+    # Slice-15: scheduled_start_at became required for new meetings so the
+    # list / kanban / calendar views can drop their `?? created_at` fallback.
+    # `scheduled_end_at` remains optional; if provided it MUST be >=
+    # `scheduled_start_at` (enforced in `_validate_time_range` below).
+    scheduled_start_at: datetime
     scheduled_end_at: datetime | None = None
 
     @field_validator("title", "counterparty_display_name", "me_display_name", mode="before")
@@ -34,6 +38,12 @@ class MeetingCreate(BaseModel):
         if not stripped:
             raise ValueError("must not be empty")
         return stripped
+
+    @model_validator(mode="after")
+    def _validate_time_range(self) -> MeetingCreate:
+        if self.scheduled_end_at is not None and self.scheduled_end_at < self.scheduled_start_at:
+            raise ValueError("scheduled_end_at must be >= scheduled_start_at")
+        return self
 
 
 class MeetingRead(BaseModel):
@@ -48,16 +58,70 @@ class MeetingRead(BaseModel):
     created_at: datetime
     started_at: datetime | None
     ended_at: datetime | None
-    scheduled_start_at: datetime | None
+    # Slice-15: scheduled_start_at is now NOT NULL at the DB layer
+    # (migration 0012 back-filled pre-existing NULL rows from created_at).
+    scheduled_start_at: datetime
     scheduled_end_at: datetime | None
 
     model_config = {"from_attributes": True}
 
 
 class MeetingPatch(BaseModel):
-    """Slice-11 partial-update body. Only `asr_provider` is patchable today."""
+    """Slice-15 partial-update body.
 
+    All fields are optional — clients send only the keys they want to
+    change. Empty `{}` is accepted and treated as a no-op by the router.
+    String fields reuse `MeetingCreate._strip_and_require` semantics:
+    whitespace is stripped, and `""` after strip is rejected with 422.
+    Cross-field rule: if BOTH `scheduled_start_at` and `scheduled_end_at`
+    are present in the same body, `scheduled_end_at >= scheduled_start_at`
+    MUST hold. (When only one of the two is sent, the router merges it
+    with the persisted row for the cross-field check.)
+    """
+
+    title: str | None = Field(default=None, min_length=1)
+    counterparty_display_name: str | None = Field(default=None, min_length=1)
+    me_display_name: str | None = Field(default=None, min_length=1)
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
     asr_provider: str | None = Field(default=None, min_length=1)
+
+    @field_validator(
+        "title",
+        "counterparty_display_name",
+        "me_display_name",
+        "asr_provider",
+        mode="before",
+    )
+    @classmethod
+    def _strip_and_require_if_present(cls, v: object) -> object:
+        # Optional fields stay None when the client omits the key; only
+        # apply the strip + non-empty rule when the value is provided.
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError("must be a string")
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("must not be empty")
+        return stripped
+
+    @model_validator(mode="after")
+    def _validate_time_range_within_body(self) -> MeetingPatch:
+        if (
+            self.scheduled_start_at is not None
+            and self.scheduled_end_at is not None
+            and self.scheduled_end_at < self.scheduled_start_at
+        ):
+            raise ValueError("scheduled_end_at must be >= scheduled_start_at")
+        return self
+
+    def as_update_fields(self) -> dict[str, object]:
+        """Return the non-None fields as a dict ready for
+        `MeetingRepository.update_for_user(fields=...)`. Empty dict when
+        the caller sent an empty body (router treats as no-op).
+        """
+        return {k: v for k, v in self.model_dump().items() if v is not None}
 
 
 class MeetingDetailRead(MeetingRead):

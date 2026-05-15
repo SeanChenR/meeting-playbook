@@ -14,7 +14,7 @@ use; tests pin its surface contract here.
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import text
@@ -211,8 +211,11 @@ async def test_create_with_scheduled_times(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_create_without_scheduled_times_stays_null(db_session: AsyncSession):
-    """Slice-07: scheduled_start_at / scheduled_end_at default to NULL when omitted."""
+async def test_create_without_scheduled_times_falls_back_to_now(db_session: AsyncSession):
+    """Slice-15: scheduled_start_at became NOT NULL — when callers omit it,
+    the repository back-fills with `now()` so the schema invariant holds;
+    scheduled_end_at stays NULL because the column remained nullable.
+    """
     await _seed_user(db_session, user_id="user_no_sched")
 
     repo = MeetingRepository(db_session)
@@ -223,7 +226,7 @@ async def test_create_without_scheduled_times_stays_null(db_session: AsyncSessio
         me_display_name="Sean",
     )
 
-    assert created.scheduled_start_at is None
+    assert created.scheduled_start_at is not None
     assert created.scheduled_end_at is None
 
 
@@ -242,3 +245,153 @@ async def test_create_with_calendar_event_id(db_session: AsyncSession):
     )
 
     assert created.calendar_event_id == "gcal_evt_42"
+
+
+# ─── Slice-15: update_for_user ─────────────────────────────────────────
+
+
+def _count_update_statements(engine, listener_ref):
+    """Attach a SQLAlchemy `before_cursor_execute` listener that counts the
+    UPDATE statements issued against the `meeting` table. Returns the
+    counter list (mutable so the test reads it post-call).
+    """
+    from sqlalchemy import event
+
+    statements: list[str] = []
+
+    def _on_exec(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().upper().startswith("UPDATE MEETING"):
+            statements.append(statement)
+
+    # SQLAlchemy async engines wrap a sync engine; attach to the sync core.
+    sync_engine = getattr(engine, "sync_engine", engine)
+    event.listen(sync_engine, "before_cursor_execute", _on_exec)
+    listener_ref.append((sync_engine, _on_exec))
+    return statements
+
+
+def _detach_listener(listener_ref):
+    from sqlalchemy import event
+
+    for sync_engine, fn in listener_ref:
+        event.remove(sync_engine, "before_cursor_execute", fn)
+    listener_ref.clear()
+
+
+@pytest.mark.asyncio
+async def test_update_for_user_empty_fields_no_update(db_session: AsyncSession, migrated_engine):
+    """Slice-15: empty `fields` dict → no UPDATE, returns current row.
+
+    The repo should fall back to `get_for_user` and emit zero UPDATE
+    statements against the `meeting` table.
+    """
+    await _seed_user(db_session, user_id="user_u4u_empty")
+    repo = MeetingRepository(db_session)
+    created = await repo.create(
+        user_id="user_u4u_empty",
+        title="empty fields",
+        counterparty_display_name="C",
+        me_display_name="M",
+        scheduled_start_at=datetime(2026, 6, 15, 14, tzinfo=UTC),
+    )
+
+    listener_ref: list = []
+    statements = _count_update_statements(migrated_engine, listener_ref)
+    try:
+        result = await repo.update_for_user(
+            user_id="user_u4u_empty", meeting_id=created.id, fields={}
+        )
+    finally:
+        _detach_listener(listener_ref)
+
+    assert result is not None
+    assert result.id == created.id
+    assert statements == [], f"empty fields MUST NOT emit any UPDATE; got {statements}"
+
+
+@pytest.mark.asyncio
+async def test_update_for_user_multi_field_single_update(db_session: AsyncSession, migrated_engine):
+    """Slice-15: multiple fields MUST be written in exactly one UPDATE."""
+    await _seed_user(db_session, user_id="user_u4u_multi")
+    repo = MeetingRepository(db_session)
+    created = await repo.create(
+        user_id="user_u4u_multi",
+        title="before",
+        counterparty_display_name="C",
+        me_display_name="M",
+        scheduled_start_at=datetime(2026, 6, 15, 14, tzinfo=UTC),
+    )
+
+    listener_ref: list = []
+    statements = _count_update_statements(migrated_engine, listener_ref)
+    try:
+        result = await repo.update_for_user(
+            user_id="user_u4u_multi",
+            meeting_id=created.id,
+            fields={
+                "title": "after",
+                "counterparty_display_name": "新對方",
+                "scheduled_start_at": datetime(2026, 7, 1, 9, tzinfo=UTC),
+            },
+        )
+    finally:
+        _detach_listener(listener_ref)
+
+    assert result is not None
+    assert result.title == "after"
+    assert result.counterparty_display_name == "新對方"
+    assert len(statements) == 1, (
+        f"multi-field UPDATE MUST be a single statement; got {len(statements)}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_for_user_cross_user_returns_none(db_session: AsyncSession):
+    """Cross-user PATCH MUST return None and leave the row untouched."""
+    await _seed_user(db_session, user_id="user_owner")
+    await _seed_user(db_session, user_id="user_intruder")
+    repo = MeetingRepository(db_session)
+    created = await repo.create(
+        user_id="user_owner",
+        title="owned",
+        counterparty_display_name="C",
+        me_display_name="M",
+        scheduled_start_at=datetime(2026, 6, 15, 14, tzinfo=UTC),
+    )
+
+    result = await repo.update_for_user(
+        user_id="user_intruder",
+        meeting_id=created.id,
+        fields={"title": "stolen"},
+    )
+    assert result is None
+
+    # Row remains as-is.
+    owner_view = await repo.get_for_user(user_id="user_owner", meeting_id=created.id)
+    assert owner_view is not None
+    assert owner_view.title == "owned"
+
+
+@pytest.mark.asyncio
+async def test_update_asr_provider_for_user_still_works_via_delegation(
+    db_session: AsyncSession,
+):
+    """Slice-11 behaviour must not regress — `update_asr_provider_for_user`
+    delegates to `update_for_user` per slice-15 design and still flips the
+    column for the owner.
+    """
+    await _seed_user(db_session, user_id="user_asr")
+    repo = MeetingRepository(db_session)
+    created = await repo.create(
+        user_id="user_asr",
+        title="asr only",
+        counterparty_display_name="C",
+        me_display_name="M",
+        scheduled_start_at=datetime(2026, 6, 15, 14, tzinfo=UTC),
+    )
+
+    result = await repo.update_asr_provider_for_user(
+        user_id="user_asr", meeting_id=created.id, asr_provider="whisper"
+    )
+    assert result is not None
+    assert result.asr_provider == "whisper"

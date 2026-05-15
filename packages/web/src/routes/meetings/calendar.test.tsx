@@ -68,7 +68,7 @@ const UNSCHEDULED = {
   created_at: TODAY.toISOString(),
   started_at: null,
   ended_at: null,
-  scheduled_start_at: null,
+  scheduled_start_at: "2026-06-15T14:00:00Z",
   scheduled_end_at: null,
 };
 
@@ -146,7 +146,11 @@ describe("MeetingsCalendar route", () => {
     });
   });
 
-  test("(d) unscheduled meeting shows in the 未排程 sidebar", async () => {
+  // Slice-15 makes `scheduled_start_at` NOT NULL — the unscheduled
+  // sidebar is now dead code (no meeting can satisfy the filter). Tests
+  // (d) and (e) are skipped pending a follow-up slice that removes the
+  // sidebar feature itself.
+  test.skip("(d) unscheduled meeting shows in the 未排程 sidebar", async () => {
     fetchHandler = async () =>
       new Response(JSON.stringify([UNSCHEDULED]), {
         status: 200,
@@ -162,7 +166,7 @@ describe("MeetingsCalendar route", () => {
     expect(row.textContent ?? "").toContain("Floating idea");
   });
 
-  test("(e) sidebar 排定 link points to /meetings/<id>", async () => {
+  test.skip("(e) sidebar 排定 link points to /meetings/<id>", async () => {
     fetchHandler = async () =>
       new Response(JSON.stringify([UNSCHEDULED]), {
         status: 200,

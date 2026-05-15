@@ -116,11 +116,13 @@ describe("MeetingsList route", () => {
     await renderWithRouter(<MeetingsList />, { initialEntries: ["/meetings"], path: "/meetings" });
 
     // Slice meetings-ux-revamp: auto-fill grid replaced with MeetingsKanban.
+    // Slice-15: bucket keys renamed from upcoming/future/past to
+    // needs_recording/upcoming/completed.
     const kanban = await screen.findByTestId("meetings-kanban");
     expect(kanban.style.gridTemplateColumns).toContain("minmax(280px");
+    expect(screen.getByTestId("kanban-column-needs_recording")).toBeDefined();
     expect(screen.getByTestId("kanban-column-upcoming")).toBeDefined();
-    expect(screen.getByTestId("kanban-column-future")).toBeDefined();
-    expect(screen.getByTestId("kanban-column-past")).toBeDefined();
+    expect(screen.getByTestId("kanban-column-completed")).toBeDefined();
   });
 
   test("(b) cards apply hover-shadow + transition utility classes", async () => {

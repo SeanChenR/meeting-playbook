@@ -15,7 +15,7 @@ from __future__ import annotations
 import secrets
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_playbook.meetings.models import Meeting
@@ -61,10 +61,15 @@ class MeetingRepository:
         # Slice-11: default flipped from "whisper" → "qwen3" (matches the
         # ORM model default + migration 0008 column DEFAULT).
         asr_provider: str = "qwen3",
+        # Slice-15: scheduled_start_at became required at the DB layer
+        # (migration 0012). Callers that omit it (e.g. legacy code paths,
+        # tests) fall back to `now()` — matching the back-fill rule used
+        # for pre-existing rows so the column never sees NULL.
         scheduled_start_at: datetime | None = None,
         scheduled_end_at: datetime | None = None,
         calendar_event_id: str | None = None,
     ) -> Meeting:
+        now = datetime.now(UTC)
         meeting = Meeting(
             id=f"m_{secrets.token_urlsafe(16)}",
             user_id=user_id,
@@ -74,8 +79,8 @@ class MeetingRepository:
             status="scheduled",
             asr_provider=asr_provider,
             calendar_event_id=calendar_event_id,
-            created_at=datetime.now(UTC),
-            scheduled_start_at=scheduled_start_at,
+            created_at=now,
+            scheduled_start_at=scheduled_start_at if scheduled_start_at is not None else now,
             scheduled_end_at=scheduled_end_at,
         )
         self._session.add(meeting)
@@ -98,23 +103,62 @@ class MeetingRepository:
         )
         return result.scalar_one_or_none()
 
+    async def update_for_user(
+        self,
+        *,
+        user_id: str,
+        meeting_id: str,
+        fields: dict[str, object],
+    ) -> Meeting | None:
+        """Slice-15: write any subset of mutable meeting fields in a single
+        UPDATE, scoped to the owning user.
+
+        Behaviour (per spec
+        `MeetingRepository.update_for_user writes any subset of mutable
+        meeting fields in a single UPDATE`):
+        - Empty `fields` → no UPDATE, return current row (or None when
+          the meeting does not belong to `user_id`).
+        - Non-empty `fields` → exactly one UPDATE statement that filters
+          by `(id, user_id)`; cross-user calls return None and emit zero
+          UPDATE statements (because the WHERE clause is empty-result).
+        - Returns the refreshed `Meeting` on success, `None` when the row
+          does not exist or is owned by a different user.
+
+        The set of writable column names is restricted at the router /
+        Pydantic layer (`MeetingPatch`) — this method trusts its caller.
+        """
+        if not fields:
+            return await self.get_for_user(user_id=user_id, meeting_id=meeting_id)
+
+        result = await self._session.execute(
+            update(Meeting)
+            .where(Meeting.id == meeting_id, Meeting.user_id == user_id)
+            .values(**fields)
+            .returning(Meeting.id)
+        )
+        if result.scalar_one_or_none() is None:
+            return None
+
+        await self._session.commit()
+        return await self.get_for_user(user_id=user_id, meeting_id=meeting_id)
+
     async def update_asr_provider_for_user(
         self, *, user_id: str, meeting_id: str, asr_provider: str
     ) -> Meeting | None:
         """Slice-11: allow the user to flip the meeting's stored ASR engine.
 
-        Returns the updated row (or None if the meeting doesn't exist /
-        isn't owned by `user_id`). The change takes effect for the NEXT
-        WS connect; live sessions keep the providers they resolved at
+        Slice-15 update: now delegates to `update_for_user` so all mutable
+        column writes flow through a single UPDATE path. Behaviour unchanged
+        — returns the refreshed row or None when the meeting is not
+        owned by `user_id`. The change takes effect for the NEXT WS
+        connect; live sessions keep the providers they resolved at
         connect time (per slice-11 design Decision 1).
         """
-        meeting = await self.get_for_user(user_id=user_id, meeting_id=meeting_id)
-        if meeting is None:
-            return None
-        meeting.asr_provider = asr_provider
-        await self._session.commit()
-        await self._session.refresh(meeting)
-        return meeting
+        return await self.update_for_user(
+            user_id=user_id,
+            meeting_id=meeting_id,
+            fields={"asr_provider": asr_provider},
+        )
 
     async def get_by_id(self, meeting_id: str) -> Meeting | None:
         """Bypasses ownership check — for trusted background callers only.

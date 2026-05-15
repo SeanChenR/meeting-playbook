@@ -112,15 +112,22 @@ async def patch_meeting(
     user_id: Annotated[str, Depends(get_user_id_dependency)],
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
 ) -> MeetingDetailRead:
-    """Slice-11: partial update. Only `asr_provider` is patchable today.
+    """Slice-15: partial update of any subset of `title`,
+    `scheduled_start_at`, `scheduled_end_at`, `counterparty_display_name`,
+    `me_display_name`, and `asr_provider`.
 
     Returns the same `MeetingDetailRead` shape as GET so the client can
-    swap the cache row in place. The change does NOT affect any live
-    WebSocket session for this meeting (per design Decision 1).
+    swap the cache row in place. ASR provider changes do NOT affect any
+    live WebSocket session for this meeting (per slice-11 design
+    Decision 1). Cross-field validation: when only one of the two
+    scheduled timestamps is sent, the router merges the body with the
+    persisted row before re-checking `scheduled_end_at >= scheduled_start_at`.
     """
-    if body.asr_provider is None:
+    repo = MeetingRepository(session)
+    fields = body.as_update_fields()
+
+    if not fields:
         # No-op body — return current state as a 200 (idempotent).
-        repo = MeetingRepository(session)
         meeting = await repo.get_for_user(user_id=user_id, meeting_id=meeting_id)
         if meeting is None:
             raise HTTPException(
@@ -129,10 +136,34 @@ async def patch_meeting(
             )
         target = meeting
     else:
-        repo = MeetingRepository(session)
-        target = await repo.update_asr_provider_for_user(
-            user_id=user_id, meeting_id=meeting_id, asr_provider=body.asr_provider
-        )
+        # Cross-field time-range check when only one timestamp is sent —
+        # merge body + current row before deciding. The model_validator on
+        # `MeetingPatch` only fires when BOTH timestamps appear in the
+        # same body.
+        if ("scheduled_start_at" in fields and "scheduled_end_at" not in fields) or (
+            "scheduled_end_at" in fields and "scheduled_start_at" not in fields
+        ):
+            current = await repo.get_for_user(user_id=user_id, meeting_id=meeting_id)
+            if current is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "error_code": "meeting.not_found",
+                        "message": "Meeting not found",
+                    },
+                )
+            merged_start = fields.get("scheduled_start_at", current.scheduled_start_at)
+            merged_end = fields.get("scheduled_end_at", current.scheduled_end_at)
+            if merged_start is not None and merged_end is not None and merged_end < merged_start:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={
+                        "error_code": "meeting.invalid_time_range",
+                        "message": ("scheduled_end_at must be >= scheduled_start_at"),
+                    },
+                )
+
+        target = await repo.update_for_user(user_id=user_id, meeting_id=meeting_id, fields=fields)
         if target is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -39,7 +39,7 @@ function _meeting(overrides: Partial<Meeting>): Meeting {
     created_at: "2026-01-01T00:00:00Z",
     started_at: null,
     ended_at: null,
-    scheduled_start_at: null,
+    scheduled_start_at: "2026-06-15T14:00:00Z",
     scheduled_end_at: null,
     ...overrides,
   };

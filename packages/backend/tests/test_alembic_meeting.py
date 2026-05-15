@@ -47,6 +47,9 @@ _NOT_NULL_COLUMNS = {
     "asr_provider",
     "created_at",
     "updated_at",
+    # Slice-15 migration 0012 promoted scheduled_start_at to NOT NULL after
+    # back-filling pre-existing rows from `created_at`.
+    "scheduled_start_at",
 }
 
 

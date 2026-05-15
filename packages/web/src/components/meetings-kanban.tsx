@@ -1,14 +1,18 @@
 /**
- * MeetingsKanban — slice meetings-ux-revamp tasks 2.2 + 2.3
- * + post-apply Q1 fix (past column collapse).
+ * MeetingsKanban — slice-15 task 7.3 (rules rewrite) on top of
+ * meetings-ux-revamp tasks 2.2 + 2.3.
  *
- * 3-column date-bucketed list of meetings. Buckets come from the pure
- * `getMeetingDateBucket` helper; Kanban groups + renders.
+ * 3-column lifecycle-bucketed list of meetings. Buckets come from the
+ * pure `getMeetingDateBucket` helper; Kanban groups + renders, in
+ * left-to-right order:
+ *   - 待補錄  (needs_recording): scheduled but past — needs follow-up
+ *   - 未來    (upcoming):        scheduled with future start
+ *   - 已結束  (completed):       in_progress or completed
  *
- * Past column trims to the most recent N (default 5) by default and
- * shows a "顯示全部 (N)" toggle so the column doesn't grow unbounded
- * as the meeting backlog accumulates. Past meetings are sorted by
- * `scheduled_start_at` DESC so the most recent ones float up.
+ * The 已結束 column trims to the most recent N (default 5) by default
+ * and shows a "顯示全部 (N)" toggle so the column doesn't grow
+ * unbounded. Completed meetings are sorted by `scheduled_start_at`
+ * DESC so the most recent ones float up.
  *
  * Layout: equal-width columns with min-width 280px so cards never wrap.
  * Each column body scrolls vertically when overflowing.
@@ -25,22 +29,18 @@ export interface MeetingsKanbanProps {
   meetings: Meeting[];
 }
 
-const BUCKET_ORDER: MeetingDateBucket[] = ["upcoming", "future", "past"];
+const BUCKET_ORDER: MeetingDateBucket[] = ["needs_recording", "upcoming", "completed"];
 
 const BUCKET_LABEL_KEY: Record<MeetingDateBucket, string> = {
+  needs_recording: "meetings.kanban.bucketNeedsRecording",
   upcoming: "meetings.kanban.bucketUpcoming",
-  future: "meetings.kanban.bucketFuture",
-  past: "meetings.kanban.bucketPast",
+  completed: "meetings.kanban.bucketCompleted",
 };
 
-const PAST_COLLAPSED_LIMIT = 5;
+const COMPLETED_COLLAPSED_LIMIT = 5;
 
-function _sortPastDesc(meetings: Meeting[]): Meeting[] {
-  return [...meetings].sort((a, b) => {
-    const aKey = a.scheduled_start_at ?? a.created_at;
-    const bKey = b.scheduled_start_at ?? b.created_at;
-    return bKey.localeCompare(aKey);
-  });
+function _sortCompletedDesc(meetings: Meeting[]): Meeting[] {
+  return [...meetings].sort((a, b) => b.scheduled_start_at.localeCompare(a.scheduled_start_at));
 }
 
 export function MeetingsKanban({ meetings }: MeetingsKanbanProps) {
@@ -50,14 +50,14 @@ export function MeetingsKanban({ meetings }: MeetingsKanbanProps) {
   const grouped = useMemo(() => {
     const now = new Date();
     const buckets: Record<MeetingDateBucket, Meeting[]> = {
+      needs_recording: [],
       upcoming: [],
-      future: [],
-      past: [],
+      completed: [],
     };
     for (const m of meetings) {
       buckets[getMeetingDateBucket(m, now)].push(m);
     }
-    buckets.past = _sortPastDesc(buckets.past);
+    buckets.completed = _sortCompletedDesc(buckets.completed);
     return buckets;
   }, [meetings]);
 
@@ -69,9 +69,10 @@ export function MeetingsKanban({ meetings }: MeetingsKanbanProps) {
     >
       {BUCKET_ORDER.map((bucket) => {
         const items = grouped[bucket];
-        const isPast = bucket === "past";
-        const isOverLimit = isPast && items.length > PAST_COLLAPSED_LIMIT;
-        const visible = isOverLimit && !pastExpanded ? items.slice(0, PAST_COLLAPSED_LIMIT) : items;
+        const isCompleted = bucket === "completed";
+        const isOverLimit = isCompleted && items.length > COMPLETED_COLLAPSED_LIMIT;
+        const visible =
+          isOverLimit && !pastExpanded ? items.slice(0, COMPLETED_COLLAPSED_LIMIT) : items;
         return (
           <section
             key={bucket}
@@ -96,17 +97,23 @@ export function MeetingsKanban({ meetings }: MeetingsKanbanProps) {
                   data-testid={`kanban-empty-${bucket}`}
                   className="flex flex-1 items-center justify-center text-center text-xs text-(--color-muted-foreground)"
                 >
-                  {t("meetings.kanban.bucketEmpty")}
+                  {bucket === "needs_recording"
+                    ? t("meetings.kanban.bucketNeedsRecordingEmpty")
+                    : t("meetings.kanban.bucketEmpty")}
                 </p>
               ) : (
                 <>
                   {visible.map((m) => (
-                    <MeetingCard key={m.id} meeting={m} />
+                    <MeetingCard
+                      key={m.id}
+                      meeting={m}
+                      showUploadShortcut={bucket === "needs_recording"}
+                    />
                   ))}
                   {isOverLimit && (
                     <button
                       type="button"
-                      data-testid="kanban-past-toggle"
+                      data-testid="kanban-completed-toggle"
                       onClick={() => setPastExpanded((v) => !v)}
                       className="rounded-md border border-dashed border-(--color-border) px-3 py-2 text-xs text-(--color-muted-foreground) transition-colors hover:border-(--color-primary)/40 hover:text-(--color-foreground)"
                     >

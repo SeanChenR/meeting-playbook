@@ -9,8 +9,8 @@
  * border via the primary tint.
  */
 
-import { Link } from "@tanstack/react-router";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Calendar as CalendarIcon, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "./ui/badge";
 import type { Meeting, MeetingStatus } from "../lib/meetings-api";
@@ -27,8 +27,8 @@ const STATUS_BADGE: Record<MeetingStatus, "default" | "success" | "outline"> = {
   completed: "default",
 };
 
-function _durationMinutes(start: string | null, end: string | null): number | null {
-  if (!start || !end) return null;
+function _durationMinutes(start: string, end: string | null): number | null {
+  if (!end) return null;
   const ms = new Date(end).getTime() - new Date(start).getTime();
   if (!Number.isFinite(ms) || ms <= 0) return null;
   return Math.round(ms / 60000);
@@ -47,30 +47,27 @@ function _formatTime(value: string, locale: string): string {
 
 export interface MeetingCardProps {
   meeting: Meeting;
+  /**
+   * When true, render a hover-only "Upload audio" shortcut button
+   * absolutely-positioned at the card's bottom-right corner. Click
+   * navigates to /meetings/$id?action=upload so the detail page
+   * auto-opens the upload dialog (slice-15 task 8.4).
+   */
+  showUploadShortcut?: boolean;
 }
 
-export function MeetingCard({ meeting }: MeetingCardProps) {
+export function MeetingCard({ meeting, showUploadShortcut = false }: MeetingCardProps) {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const color = STATUS_COLOR[meeting.status];
   const badgeVariant = STATUS_BADGE[meeting.status];
   const duration = _durationMinutes(meeting.scheduled_start_at, meeting.scheduled_end_at);
-  const timeText = meeting.scheduled_start_at
-    ? _formatTime(meeting.scheduled_start_at, i18n.language)
-    : _formatTime(meeting.created_at, i18n.language);
+  const timeText = _formatTime(meeting.scheduled_start_at, i18n.language);
 
-  return (
+  const cardLink = (
     <Link
-      // Literal-path form: bypasses typed param resolution so the synthetic
-      // test router renders an absolute href without the detail route in
-      // its tree. Production runtime accepts both forms.
       {...({ to: `/meetings/${meeting.id}` } as { to: "/meetings/$id"; params: { id: string } })}
       data-testid="meeting-card"
-      // Post-apply fix: removed `h-full` (was for auto-fill grid
-      // equal-height) AND added `shrink-0` because the Kanban column
-      // body is a `flex flex-col max-h-...` container — without
-      // shrink-0, flex's default shrink rule clips card content
-      // (counterparty + date hidden) when many cards stack. shrink-0
-      // forces natural card height; column overflow-y scrolls instead.
       className="group relative block shrink-0 overflow-hidden rounded-lg border border-(--color-border) bg-(--color-card) p-5 shadow-sm transition-[box-shadow,border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-(--color-primary)/40 hover:shadow-md"
     >
       <span
@@ -108,5 +105,30 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
         )}
       </div>
     </Link>
+  );
+
+  if (!showUploadShortcut) return cardLink;
+
+  return (
+    <div className="group relative">
+      {cardLink}
+      <button
+        type="button"
+        data-testid="meeting-card-upload-shortcut"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          navigate({
+            to: "/meetings/$id",
+            params: { id: meeting.id },
+            search: { action: "upload" } as never,
+          });
+        }}
+        className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1 rounded-md border border-(--color-primary)/40 bg-(--color-card) px-2.5 py-1 text-xs font-medium text-(--color-primary) opacity-0 shadow-sm transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-(--color-primary)/10"
+      >
+        <Upload className="size-3" aria-hidden />
+        {t("meetings.kanban.uploadShortcut")}
+      </button>
+    </div>
   );
 }

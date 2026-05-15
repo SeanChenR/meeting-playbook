@@ -8,7 +8,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider } from "../../lib/theme-provider";
 
@@ -123,6 +123,9 @@ describe("NewMeeting form", () => {
     await user.type(screen.getByLabelText(/標題/), "Q3");
     await user.type(screen.getByLabelText(/對方顯示名稱/), "林經理");
     await user.type(screen.getByLabelText(/我方顯示名稱/), "Sean");
+    // Slice-15: scheduled_start_at is required. Fill the date input.
+    const dateInput = screen.getByTestId("meeting-date") as HTMLInputElement;
+    fireEvent.change(dateInput, { target: { value: "2026-06-15" } });
     await user.click(screen.getByRole("button", { name: /建立$/ }));
 
     await waitFor(() => {
@@ -130,11 +133,11 @@ describe("NewMeeting form", () => {
     });
     expect(posted).not.toBeNull();
     expect(posted!.url).toContain("/api/meetings");
-    expect(posted!.body).toEqual({
-      title: "Q3",
-      counterparty_display_name: "林經理",
-      me_display_name: "Sean",
-    });
+    const postedBody = posted!.body as Record<string, unknown>;
+    expect(postedBody.title).toBe("Q3");
+    expect(postedBody.counterparty_display_name).toBe("林經理");
+    expect(postedBody.me_display_name).toBe("Sean");
+    expect(typeof postedBody.scheduled_start_at).toBe("string");
   });
 
   test("backend error_code is rendered as localized message", async () => {
@@ -157,6 +160,9 @@ describe("NewMeeting form", () => {
     await user.type(screen.getByLabelText(/標題/), "x");
     await user.type(screen.getByLabelText(/對方顯示名稱/), "C");
     await user.type(screen.getByLabelText(/我方顯示名稱/), "M");
+    fireEvent.change(screen.getByTestId("meeting-date") as HTMLInputElement, {
+      target: { value: "2026-06-15" },
+    });
     await user.click(screen.getByRole("button", { name: /建立$/ }));
 
     await waitFor(() => {
@@ -195,6 +201,9 @@ describe("NewMeeting form", () => {
     await user.type(screen.getByLabelText(/標題/), "Q3");
     await user.type(screen.getByLabelText(/對方顯示名稱/), "林經理");
     await user.type(screen.getByLabelText(/我方顯示名稱/), "Sean");
+    fireEvent.change(screen.getByTestId("meeting-date") as HTMLInputElement, {
+      target: { value: "2026-06-15" },
+    });
     await user.click(screen.getByRole("button", { name: /建立$/ }));
 
     await waitFor(() => {
@@ -244,10 +253,74 @@ describe("NewMeeting form", () => {
     await user.type(screen.getByLabelText(/標題/), "X");
     await user.type(screen.getByLabelText(/對方顯示名稱/), "C");
     await user.type(screen.getByLabelText(/我方顯示名稱/), "M");
+    fireEvent.change(screen.getByTestId("meeting-date") as HTMLInputElement, {
+      target: { value: "2026-06-15" },
+    });
     await user.click(screen.getByRole("button", { name: /建立$/ }));
 
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/meetings/m_fallback");
     });
+  });
+
+  // ─── Slice-15: scheduled_start_at is now required ─────────────────────
+
+  test("(slice-15) new meeting requires scheduled_start_at", async () => {
+    const user = userEvent.setup();
+    let postCalled = false;
+    fetchHandler = async (_, init) => {
+      if (init?.method === "POST") {
+        postCalled = true;
+        return new Response("{}", { status: 201 });
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    await renderInRouter();
+
+    await user.type(screen.getByLabelText(/標題/), "no date");
+    await user.type(screen.getByLabelText(/對方顯示名稱/), "C");
+    await user.type(screen.getByLabelText(/我方顯示名稱/), "M");
+    // Intentionally omit the date input.
+    await user.click(screen.getByRole("button", { name: /建立$/ }));
+
+    // HTML5 `required` on the date input blocks the submit; the form's
+    // own onSubmit guard also rejects. Either way, no POST should fire.
+    await waitFor(() => {
+      expect(postCalled).toBe(false);
+    });
+  });
+
+  test("(slice-15) new meeting rejects end-before-start", async () => {
+    const user = userEvent.setup();
+    let postCalled = false;
+    fetchHandler = async (_, init) => {
+      if (init?.method === "POST") {
+        postCalled = true;
+        return new Response("{}", { status: 201 });
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    await renderInRouter();
+
+    await user.type(screen.getByLabelText(/標題/), "bad range");
+    await user.type(screen.getByLabelText(/對方顯示名稱/), "C");
+    await user.type(screen.getByLabelText(/我方顯示名稱/), "M");
+    fireEvent.change(screen.getByTestId("meeting-date") as HTMLInputElement, {
+      target: { value: "2026-06-15" },
+    });
+    fireEvent.change(screen.getByTestId("meeting-time") as HTMLInputElement, {
+      target: { value: "14:00" },
+    });
+    fireEvent.change(screen.getByTestId("meeting-end-time") as HTMLInputElement, {
+      target: { value: "13:00" },
+    });
+    await user.click(screen.getByRole("button", { name: /建立$/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/結束時間必須晚於開始時間/)).toBeDefined();
+    });
+    expect(postCalled).toBe(false);
   });
 });

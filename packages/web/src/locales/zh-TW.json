@@ -156,6 +156,20 @@
       "cancel": "取消",
       "errorFallback": "建立失敗"
     },
+    "edit": {
+      "title": "標題",
+      "scheduledStart": "預定開始",
+      "scheduledEnd": "預定結束",
+      "counterpartyDisplayName": "對方顯示名稱",
+      "meDisplayName": "我方顯示名稱",
+      "save": "儲存",
+      "saving": "儲存中…",
+      "cancel": "取消",
+      "saved": "已儲存",
+      "editToggle": "編輯",
+      "dialogTitle": "編輯會議",
+      "dialogDescription": "修改 meeting 的標題、排定時間與顯示名稱"
+    },
     "detail": {
       "heading": "Meeting 詳細",
       "back": "← 返回列表",
@@ -182,6 +196,7 @@
     "session": {
       "start": "開始會議",
       "end": "結束會議",
+      "uploadAudio": "上傳音檔",
       "ending": "結束中…",
       "endingHint": "處理最後音訊中…",
       "capturing": "擷取中",
@@ -252,10 +267,12 @@
       }
     },
     "kanban": {
-      "bucketUpcoming": "即將到來",
-      "bucketFuture": "未來",
-      "bucketPast": "已結束",
+      "bucketNeedsRecording": "待補錄",
+      "bucketUpcoming": "未來",
+      "bucketCompleted": "已結束",
       "bucketEmpty": "此區段暫無會議",
+      "bucketNeedsRecordingEmpty": "目前沒有待補錄的會議",
+      "uploadShortcut": "上傳音檔",
       "pastShowAll": "顯示全部 ({{count}})",
       "pastCollapse": "收合"
     },
@@ -393,11 +410,6 @@
     }
   },
   "offline_ingest": {
-    "banner": {
-      "heading": "這場會議已結束 — 上傳音檔取得逐字稿",
-      "subhead": "支援 wav / mp3 / m4a / aac / flac / ogg，上限 3 小時 / 500MB。",
-      "cta": "上傳音檔"
-    },
     "dialog": {
       "heading": "上傳會議音檔",
       "close": "關閉",
@@ -481,6 +493,9 @@
     },
     "meeting": {
       "not_found": "找不到此 Meeting",
+      "invalid_time_range": "結束時間必須晚於開始時間",
+      "invalid_field": "欄位值無效",
+      "scheduledStartRequired": "請選擇預定開始時間",
       "title": {
         "required": "請輸入會議標題"
       },
@@ -489,6 +504,9 @@
       },
       "me_display_name": {
         "required": "請輸入我方顯示名稱"
+      },
+      "scheduled_start_at": {
+        "required": "請選擇預定開始時間"
       }
     }
   }

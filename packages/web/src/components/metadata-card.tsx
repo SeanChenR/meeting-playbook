@@ -49,6 +49,8 @@ export interface MetadataCardProps {
   onEnd: () => void;
   /** Optional rerun-asr trigger (renders the slot when provided). */
   rerunSlot?: ReactNode;
+  /** Always-on upload-audio entry; rendered in the actions row (slice-15 task 8.2). */
+  uploadSlot?: ReactNode;
   /** Destructive delete callback — opens the AlertDialog. */
   onDelete: () => void;
   startDisabled?: boolean;
@@ -74,6 +76,7 @@ export function MetadataCard({
   onStart,
   onEnd,
   rerunSlot,
+  uploadSlot,
   onDelete,
   startDisabled = false,
 }: MetadataCardProps) {
@@ -195,6 +198,7 @@ export function MetadataCard({
               {t("meetings.session.start")}
             </Button>
           )}
+          {uploadSlot && <div data-testid="metadata-upload-slot">{uploadSlot}</div>}
           {rerunSlot && <div data-testid="metadata-rerun-slot">{rerunSlot}</div>}
           <div className="flex-1" />
           <Button

@@ -23,7 +23,7 @@
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,9 +32,11 @@ import { AsrProviderSelector } from "../../components/asr-provider-selector";
 import { CaptureIndicator } from "../../components/capture-indicator";
 import { HeadphonesHint } from "../../components/headphones-hint";
 import { LayoutSwitcher } from "../../components/layout-switcher";
+import { Upload } from "lucide-react";
+import { MeetingEditForm } from "../../components/meeting-edit-form";
 import { MetadataCard } from "../../components/metadata-card";
-import { UploadBanner } from "../../components/offline-ingest/UploadBanner";
 import { UploadDialog } from "../../components/offline-ingest/UploadDialog";
+import { Button } from "../../components/ui/button";
 import { PlaybookPane } from "../../components/playbook-pane";
 import { ProtectedShell } from "../../components/protected-shell";
 import { RerunButton } from "../../components/rerun-button";
@@ -43,6 +45,13 @@ import { TranscriptPane } from "../../components/transcript-pane";
 import { Workspace } from "../../components/workspace";
 import { Alert } from "../../components/ui/alert";
 import { AlertDialog } from "../../components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useDetailLayout } from "../../hooks/use-detail-layout";
 import { useDetailTab } from "../../hooks/use-detail-tab";
@@ -67,11 +76,22 @@ export function MeetingDetail() {
   const deleteMutation = useDeleteMeetingMutation();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [offlineIngestOpen, setOfflineIngestOpen] = useState(false);
+  const [editFormOpen, setEditFormOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [layout, setLayout] = useDetailLayout();
 
   const meeting = query.data ?? null;
   const session = useMeetingSession(meetingId);
+
+  // Slice-15 task 8.5: needs_recording cards link here with
+  // ?action=upload. Auto-open the upload dialog on mount and scrub
+  // the query so a subsequent reload doesn't re-fire.
+  const search = useSearch({ strict: false }) as { action?: string };
+  useEffect(() => {
+    if (search.action !== "upload") return;
+    setOfflineIngestOpen(true);
+    navigate({ search: { action: undefined } as never, replace: true });
+  }, [search.action, navigate]);
   const queryClient = useQueryClient();
   const reducedMotion = useReducedMotion();
 
@@ -195,18 +215,56 @@ export function MeetingDetail() {
               />
             }
             rerunSlot={<RerunButton meeting={meeting} />}
+            uploadSlot={
+              <Button
+                type="button"
+                size="sm"
+                variant={meeting.status === "completed" ? "secondary" : "outline"}
+                disabled={meeting.status === "in_progress"}
+                onClick={() => setOfflineIngestOpen(true)}
+                data-testid="metadata-upload-audio"
+              >
+                <Upload className="size-3.5" />
+                {t("meetings.session.uploadAudio")}
+              </Button>
+            }
           />
         )}
 
-        {meeting && (
-          <UploadBanner meeting={meeting} onUploadClick={() => setOfflineIngestOpen(true)} />
-        )}
         {meeting && (
           <UploadDialog
             meeting={meeting}
             open={offlineIngestOpen}
             onClose={() => setOfflineIngestOpen(false)}
           />
+        )}
+
+        {meeting && (
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              data-testid="meeting-edit-toggle"
+              onClick={() => setEditFormOpen((v) => !v)}
+              className="rounded-md border border-(--color-border) px-3 py-1.5 text-xs hover:bg-(--color-muted)/40"
+            >
+              {editFormOpen ? t("meetings.edit.cancel") : t("meetings.edit.editToggle")}
+            </button>
+          </div>
+        )}
+        {meeting && (
+          <Dialog open={editFormOpen} onOpenChange={setEditFormOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>{t("meetings.edit.dialogTitle")}</DialogTitle>
+                <DialogDescription>{t("meetings.edit.dialogDescription")}</DialogDescription>
+              </DialogHeader>
+              <MeetingEditForm
+                meeting={meeting}
+                onSaved={() => setEditFormOpen(false)}
+                onCancel={() => setEditFormOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
         )}
 
         {meeting && <HeadphonesHint visible={meeting.status === "scheduled"} />}

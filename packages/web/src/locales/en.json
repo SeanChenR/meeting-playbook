@@ -156,6 +156,20 @@
       "cancel": "Cancel",
       "errorFallback": "Create failed"
     },
+    "edit": {
+      "title": "Title",
+      "scheduledStart": "Scheduled start",
+      "scheduledEnd": "Scheduled end",
+      "counterpartyDisplayName": "Counterparty display name",
+      "meDisplayName": "My display name",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "saved": "Saved",
+      "editToggle": "Edit",
+      "dialogTitle": "Edit meeting",
+      "dialogDescription": "Update title, schedule, and display names"
+    },
     "detail": {
       "heading": "Meeting detail",
       "back": "← Back to list",
@@ -181,6 +195,7 @@
     },
     "session": {
       "start": "Start Meeting",
+      "uploadAudio": "Upload audio",
       "end": "End Meeting",
       "ending": "Ending…",
       "endingHint": "Processing final audio…",
@@ -252,10 +267,12 @@
       }
     },
     "kanban": {
+      "bucketNeedsRecording": "Needs recording",
       "bucketUpcoming": "Upcoming",
-      "bucketFuture": "Future",
-      "bucketPast": "Completed",
+      "bucketCompleted": "Completed",
       "bucketEmpty": "No meetings in this bucket",
+      "bucketNeedsRecordingEmpty": "No meetings to follow up on",
+      "uploadShortcut": "Upload audio",
       "pastShowAll": "Show all ({{count}})",
       "pastCollapse": "Collapse"
     },
@@ -393,11 +410,6 @@
     }
   },
   "offline_ingest": {
-    "banner": {
-      "heading": "This meeting is over — upload audio to get a transcript",
-      "subhead": "Accepts wav / mp3 / m4a / aac / flac / ogg, up to 3 hours / 500MB.",
-      "cta": "Upload audio"
-    },
     "dialog": {
       "heading": "Upload meeting audio",
       "close": "Close",
@@ -481,6 +493,9 @@
     },
     "meeting": {
       "not_found": "Meeting not found",
+      "invalid_time_range": "End time must be at or after the start time",
+      "invalid_field": "Field value is invalid",
+      "scheduledStartRequired": "Scheduled start is required",
       "title": {
         "required": "Title is required"
       },
@@ -489,6 +504,9 @@
       },
       "me_display_name": {
         "required": "Me display name is required"
+      },
+      "scheduled_start_at": {
+        "required": "Scheduled start is required"
       }
     }
   }

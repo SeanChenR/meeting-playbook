@@ -72,6 +72,7 @@ async def test_post_meeting_returns_201_with_body(
             "title": "Q3 review",
             "counterparty_display_name": "林經理",
             "me_display_name": "Sean",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
         },
     )
 
@@ -100,13 +101,23 @@ async def test_list_returns_only_owners_meetings(
         resp = await api_client.post(
             "/api/meetings",
             headers={"X-User-Id": "user_a"},
-            json={"title": title, "counterparty_display_name": "C", "me_display_name": "M"},
+            json={
+                "title": title,
+                "counterparty_display_name": "C",
+                "me_display_name": "M",
+                "scheduled_start_at": "2026-06-15T14:00:00Z",
+            },
         )
         assert resp.status_code == 201
     resp = await api_client.post(
         "/api/meetings",
         headers={"X-User-Id": "user_b"},
-        json={"title": "B-only", "counterparty_display_name": "C", "me_display_name": "M"},
+        json={
+            "title": "B-only",
+            "counterparty_display_name": "C",
+            "me_display_name": "M",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
+        },
     )
     assert resp.status_code == 201
 
@@ -143,6 +154,7 @@ async def test_get_other_users_meeting_returns_404(
             "title": "B's secret",
             "counterparty_display_name": "C",
             "me_display_name": "M",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
         },
     )
     meeting_id = create.json()["id"]
@@ -171,7 +183,12 @@ async def test_delete_other_users_meeting_returns_404_and_keeps_row(
     create = await api_client.post(
         "/api/meetings",
         headers={"X-User-Id": "user_b"},
-        json={"title": "Protected", "counterparty_display_name": "C", "me_display_name": "M"},
+        json={
+            "title": "Protected",
+            "counterparty_display_name": "C",
+            "me_display_name": "M",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
+        },
     )
     meeting_id = create.json()["id"]
 
@@ -199,7 +216,12 @@ async def test_delete_own_meeting_returns_204_and_removes_row(
     create = await api_client.post(
         "/api/meetings",
         headers={"X-User-Id": "user_o"},
-        json={"title": "X", "counterparty_display_name": "C", "me_display_name": "M"},
+        json={
+            "title": "X",
+            "counterparty_display_name": "C",
+            "me_display_name": "M",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
+        },
     )
     mid = create.json()["id"]
 
@@ -232,6 +254,7 @@ async def test_create_ignores_client_supplied_status(
             "title": "T",
             "counterparty_display_name": "C",
             "me_display_name": "M",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
             "status": "completed",  # client lies; backend MUST ignore.
         },
     )
@@ -249,7 +272,12 @@ async def test_create_returns_null_calendar_event_id(
     resp = await api_client.post(
         "/api/meetings",
         headers={"X-User-Id": "user_cal"},
-        json={"title": "T", "counterparty_display_name": "C", "me_display_name": "M"},
+        json={
+            "title": "T",
+            "counterparty_display_name": "C",
+            "me_display_name": "M",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
+        },
     )
     assert resp.status_code == 201
     assert resp.json()["calendar_event_id"] is None
@@ -265,7 +293,12 @@ async def test_get_returns_persisted_asr_provider_qwen3(
     create = await api_client.post(
         "/api/meetings",
         headers={"X-User-Id": "user_asr"},
-        json={"title": "T", "counterparty_display_name": "C", "me_display_name": "M"},
+        json={
+            "title": "T",
+            "counterparty_display_name": "C",
+            "me_display_name": "M",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
+        },
     )
     mid = create.json()["id"]
 
@@ -297,10 +330,12 @@ async def test_create_with_scheduled_times(api_client: AsyncClient, migrated_eng
 
 
 @pytest.mark.asyncio
-async def test_create_without_scheduled_times_returns_null(
+async def test_create_without_scheduled_start_returns_422(
     api_client: AsyncClient, migrated_engine: AsyncEngine
 ):
-    """Slice-07: scheduled fields default to null when omitted from POST body."""
+    """Slice-15: scheduled_start_at became required for new meetings —
+    omitting it from the POST body MUST return 422.
+    """
     await _seed_user(migrated_engine, "user_no_sched_post")
 
     resp = await api_client.post(
@@ -312,10 +347,33 @@ async def test_create_without_scheduled_times_returns_null(
             "me_display_name": "Sean",
         },
     )
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["scheduled_start_at"] is None
-    assert body["scheduled_end_at"] is None
+    assert resp.status_code == 422, resp.text
+    # FastAPI's default validation envelope mentions the missing field path.
+    flat = str(resp.json()).lower()
+    assert "scheduled_start_at" in flat
+
+
+@pytest.mark.asyncio
+async def test_create_with_end_before_start_returns_422(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Slice-15: scheduled_end_at, when supplied, MUST be >= scheduled_start_at."""
+    await _seed_user(migrated_engine, "user_end_before_start")
+
+    resp = await api_client.post(
+        "/api/meetings",
+        headers={"X-User-Id": "user_end_before_start"},
+        json={
+            "title": "bad range",
+            "counterparty_display_name": "C",
+            "me_display_name": "M",
+            "scheduled_start_at": "2026-06-15T15:00:00Z",
+            "scheduled_end_at": "2026-06-15T14:00:00Z",
+        },
+    )
+    assert resp.status_code == 422, resp.text
+    flat = str(resp.json()).lower()
+    assert "scheduled_end_at" in flat or "scheduled_start_at" in flat
 
 
 @pytest.mark.asyncio
@@ -338,9 +396,12 @@ async def test_list_includes_scheduled_times(api_client: AsyncClient, migrated_e
         "/api/meetings",
         headers={"X-User-Id": "user_list_sched"},
         json={
-            "title": "without",
+            "title": "without end",
             "counterparty_display_name": "L",
             "me_display_name": "S",
+            # Slice-15 requires scheduled_start_at; omit scheduled_end_at to
+            # still cover the "end is nullable" wire shape per spec.
+            "scheduled_start_at": "2026-06-16T09:00:00Z",
         },
     )
 
@@ -351,3 +412,166 @@ async def test_list_includes_scheduled_times(api_client: AsyncClient, migrated_e
     for item in items:
         assert "scheduled_start_at" in item
         assert "scheduled_end_at" in item
+
+
+# ─── Slice-15: PATCH router scenarios ──────────────────────────────────
+
+
+async def _create_test_meeting(api_client, user_id: str, **extra):
+    body = {
+        "title": "before",
+        "counterparty_display_name": "C",
+        "me_display_name": "M",
+        "scheduled_start_at": "2026-06-15T14:00:00Z",
+        **extra,
+    }
+    resp = await api_client.post(
+        "/api/meetings",
+        headers={"X-User-Id": user_id},
+        json=body,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_patch_title_only_returns_updated_row(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Slice-15: PATCH with just `title` succeeds and echoes the new value."""
+    await _seed_user(migrated_engine, "user_patch_title")
+    mid = await _create_test_meeting(api_client, "user_patch_title")
+
+    resp = await api_client.patch(
+        f"/api/meetings/{mid}",
+        headers={"X-User-Id": "user_patch_title"},
+        json={"title": "after"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["title"] == "after"
+    # Other fields untouched.
+    assert body["counterparty_display_name"] == "C"
+
+
+@pytest.mark.asyncio
+async def test_patch_multi_field_updates_all(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Slice-15: multi-field PATCH writes them all in one request."""
+    await _seed_user(migrated_engine, "user_patch_multi")
+    mid = await _create_test_meeting(api_client, "user_patch_multi")
+
+    resp = await api_client.patch(
+        f"/api/meetings/{mid}",
+        headers={"X-User-Id": "user_patch_multi"},
+        json={
+            "title": "after",
+            "counterparty_display_name": "新對方",
+            "me_display_name": "Sean Chen",
+            "scheduled_start_at": "2026-07-01T09:00:00Z",
+            "scheduled_end_at": "2026-07-01T10:00:00Z",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["title"] == "after"
+    assert body["counterparty_display_name"] == "新對方"
+    assert body["me_display_name"] == "Sean Chen"
+    assert body["scheduled_start_at"].startswith("2026-07-01T09:00:00")
+    assert body["scheduled_end_at"].startswith("2026-07-01T10:00:00")
+
+
+@pytest.mark.asyncio
+async def test_patch_empty_body_is_noop_200(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Slice-15: empty `{}` body returns current row idempotently."""
+    await _seed_user(migrated_engine, "user_patch_empty")
+    mid = await _create_test_meeting(api_client, "user_patch_empty")
+
+    resp = await api_client.patch(
+        f"/api/meetings/{mid}",
+        headers={"X-User-Id": "user_patch_empty"},
+        json={},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["title"] == "before"
+
+
+@pytest.mark.asyncio
+async def test_patch_whitespace_only_string_returns_422(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Whitespace-only `title` is rejected with 422 per shared schema rule."""
+    await _seed_user(migrated_engine, "user_patch_ws")
+    mid = await _create_test_meeting(api_client, "user_patch_ws")
+
+    resp = await api_client.patch(
+        f"/api/meetings/{mid}",
+        headers={"X-User-Id": "user_patch_ws"},
+        json={"title": "   "},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+async def test_patch_end_with_existing_start_after_returns_422(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Slice-15: when only `scheduled_end_at` is sent but the persisted
+    `scheduled_start_at` is later than it, the router merges body+row and
+    rejects with 422.
+    """
+    await _seed_user(migrated_engine, "user_patch_range")
+    mid = await _create_test_meeting(
+        api_client,
+        "user_patch_range",
+        scheduled_start_at="2026-08-01T15:00:00Z",
+    )
+
+    resp = await api_client.patch(
+        f"/api/meetings/{mid}",
+        headers={"X-User-Id": "user_patch_range"},
+        # Existing start is 15:00; this would be 14:00 < 15:00 → must reject.
+        json={"scheduled_end_at": "2026-08-01T14:00:00Z"},
+    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error_code"] == "meeting.invalid_time_range"
+
+
+@pytest.mark.asyncio
+async def test_patch_cross_user_returns_404(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Cross-user PATCH MUST return 404 without leaking existence."""
+    await _seed_user(migrated_engine, "user_owner_p")
+    await _seed_user(migrated_engine, "user_intruder_p")
+    mid = await _create_test_meeting(api_client, "user_owner_p")
+
+    resp = await api_client.patch(
+        f"/api/meetings/{mid}",
+        headers={"X-User-Id": "user_intruder_p"},
+        json={"title": "stolen"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_patch_asr_provider_only_still_works(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Slice-11 behaviour kept: PATCH with just `asr_provider` flips the
+    persisted engine. Slice-15 implementation delegates through the new
+    multi-field path.
+    """
+    await _seed_user(migrated_engine, "user_patch_asr")
+    mid = await _create_test_meeting(api_client, "user_patch_asr")
+
+    resp = await api_client.patch(
+        f"/api/meetings/{mid}",
+        headers={"X-User-Id": "user_patch_asr"},
+        json={"asr_provider": "whisper"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["asr_provider"] == "whisper"

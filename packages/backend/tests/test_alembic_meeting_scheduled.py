@@ -19,7 +19,9 @@ async def test_meeting_has_scheduled_start_at_column(migrated_engine: AsyncEngin
     by_name = {c["name"]: c for c in cols}
     assert "scheduled_start_at" in by_name, "migration 0004 must add scheduled_start_at"
     col = by_name["scheduled_start_at"]
-    assert col["nullable"] is True, "scheduled_start_at must be nullable"
+    # Slice-15 migration 0012 flipped this column to NOT NULL after
+    # back-filling pre-existing NULL rows from `created_at`.
+    assert col["nullable"] is False, "scheduled_start_at MUST be NOT NULL at head (slice-15)"
     # SQLAlchemy reports TIMESTAMP WITH TIME ZONE as TIMESTAMP with timezone=True
     coltype = col["type"]
     assert getattr(coltype, "timezone", False) is True, (

@@ -62,6 +62,7 @@ async def test_meeting_full_lifecycle(api_client: AsyncClient, migrated_engine: 
             "title": "Round trip",
             "counterparty_display_name": "林經理",
             "me_display_name": "Sean",
+            "scheduled_start_at": "2026-06-15T14:00:00Z",
             "status": "completed",  # ignored on create per spec
         },
     )

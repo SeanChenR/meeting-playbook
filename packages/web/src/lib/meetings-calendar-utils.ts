@@ -3,8 +3,9 @@
  *
  * Two helpers:
  *   meetingToCalendarEvent — converts a meeting row to a react-big-calendar
- *     event object; null when the meeting has no scheduled_start_at (those
- *     belong in the unscheduled list, not on the grid).
+ *     event object. Slice-15 made `scheduled_start_at` NOT NULL so this
+ *     function no longer short-circuits to null; every meeting renders on
+ *     the grid.
  *   statusToEventClassName — Tailwind classes by meeting status for
  *     react-big-calendar's eventPropGetter.
  *
@@ -21,8 +22,7 @@ export interface CalendarEvent {
   resource: Meeting;
 }
 
-export function meetingToCalendarEvent(meeting: Meeting): CalendarEvent | null {
-  if (!meeting.scheduled_start_at) return null;
+export function meetingToCalendarEvent(meeting: Meeting): CalendarEvent {
   const start = new Date(meeting.scheduled_start_at);
   // Default end = start + 30min when scheduled_end_at is null (some Calendar
   // events arrive without an explicit end).

@@ -59,7 +59,9 @@ export function MeetingsCalendar() {
   const meetingsQuery = useQuery(meetingsListQueryOptions());
   const meetings: Meeting[] = useMemo(() => meetingsQuery.data ?? [], [meetingsQuery.data]);
   const events: CalendarEvent[] = useMemo(
-    () => meetings.map(meetingToCalendarEvent).filter((e): e is CalendarEvent => e !== null),
+    // Slice-15: `meetingToCalendarEvent` no longer short-circuits to null
+    // because `scheduled_start_at` is NOT NULL after migration 0012.
+    () => meetings.map(meetingToCalendarEvent),
     [meetings],
   );
   const unscheduled = useMemo(

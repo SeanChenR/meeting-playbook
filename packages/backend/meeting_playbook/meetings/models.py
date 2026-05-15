@@ -55,9 +55,10 @@ class Meeting(Base):
     ended_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True, default=None
     )
-    scheduled_start_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True, default=None
-    )
+    # Slice-15: scheduled_start_at became NOT NULL after migration 0012
+    # (pre-existing rows back-filled from created_at). Required for every
+    # newly-created meeting; nullable type retained for the end timestamp.
+    scheduled_start_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     scheduled_end_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True, default=None
     )

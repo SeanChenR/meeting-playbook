@@ -163,11 +163,25 @@ async def import_from_calendar(
     counterparty = pick_counterparty(event, user_email)
     me_display = user_name or (user_email.split("@", 1)[0] if "@" in user_email else "") or "Me"
 
+    # Slice-15: meeting.scheduled_start_at became NOT NULL. Carry the
+    # Calendar event's start / end ISO 8601 strings into the meeting row so
+    # the kanban / list / calendar views can sort by scheduled time without
+    # falling back to created_at.
+    from datetime import datetime as _dt
+
+    def _parse_iso(value: str) -> _dt | None:
+        try:
+            return _dt.fromisoformat(value.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+
     meeting = await MeetingRepository(session).create(
         user_id=user_id,
         title=event.title or "(untitled)",
         counterparty_display_name=counterparty,
         me_display_name=me_display,
+        scheduled_start_at=_parse_iso(event.start),
+        scheduled_end_at=_parse_iso(event.end),
     )
 
     # Set calendar_event_id directly — MeetingRepository.create does not yet

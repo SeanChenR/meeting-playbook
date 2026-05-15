@@ -59,30 +59,47 @@ export function NewMeeting() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+
+    // Slice-15: scheduled_start_at became required. Reject locally with
+    // the same error code the backend would surface so the form does not
+    // bother POSTing on missing input.
+    if (!scheduledDate) {
+      setError(localizedErrorMessage("meeting.scheduledStartRequired", t));
+      return;
+    }
+    const startTime = scheduledStartTime || "09:00";
+    const start = new Date(`${scheduledDate}T${startTime}:00`);
+    if (Number.isNaN(start.getTime())) {
+      setError(localizedErrorMessage("meeting.scheduledStartRequired", t));
+      return;
+    }
+    let endIso: string | undefined;
+    if (scheduledEndTime) {
+      const end = new Date(`${scheduledDate}T${scheduledEndTime}:00`);
+      if (!Number.isNaN(end.getTime())) {
+        if (end.getTime() < start.getTime()) {
+          setError(localizedErrorMessage("meeting.invalid_time_range", t));
+          return;
+        }
+        endIso = end.toISOString();
+      }
+    }
+
     try {
       const payload: {
         title: string;
         counterparty_display_name: string;
         me_display_name: string;
-        scheduled_start_at?: string;
+        scheduled_start_at: string;
         scheduled_end_at?: string;
       } = {
         title,
         counterparty_display_name: counterparty,
         me_display_name: me,
+        scheduled_start_at: start.toISOString(),
       };
-      if (scheduledDate) {
-        const startTime = scheduledStartTime || "09:00";
-        const start = new Date(`${scheduledDate}T${startTime}:00`);
-        if (!Number.isNaN(start.getTime())) {
-          payload.scheduled_start_at = start.toISOString();
-        }
-        if (scheduledEndTime) {
-          const end = new Date(`${scheduledDate}T${scheduledEndTime}:00`);
-          if (!Number.isNaN(end.getTime())) {
-            payload.scheduled_end_at = end.toISOString();
-          }
-        }
+      if (endIso) {
+        payload.scheduled_end_at = endIso;
       }
       const meeting = await mutation.mutateAsync(payload);
       if (cameFromCalendar) {
@@ -160,6 +177,7 @@ export function NewMeeting() {
                     id="meeting-date"
                     data-testid="meeting-date"
                     type="date"
+                    required
                     value={scheduledDate}
                     onChange={(e) => {
                       setScheduledDate(e.target.value);
@@ -183,6 +201,7 @@ export function NewMeeting() {
                   </Label>
                   <Input
                     id="meeting-end-time"
+                    data-testid="meeting-end-time"
                     type="time"
                     value={scheduledEndTime}
                     onChange={(e) => setScheduledEndTime(e.target.value)}

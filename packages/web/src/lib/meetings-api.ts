@@ -25,8 +25,11 @@ export interface Meeting {
   created_at: string;
   started_at: string | null;
   ended_at: string | null;
-  // Slice-7: optional planned timestamps for the calendar view.
-  scheduled_start_at: string | null;
+  // Slice-7 introduced these; slice-15 made `scheduled_start_at` required
+  // at the DB layer (migration 0012 + Pydantic NOT NULL) so the meetings
+  // list / Kanban / calendar views can drop their `?? created_at`
+  // fallback. `scheduled_end_at` stays nullable.
+  scheduled_start_at: string;
   scheduled_end_at: string | null;
 }
 
@@ -40,6 +43,13 @@ export interface MeetingDetail extends Meeting {
 }
 
 export interface MeetingPatchPayload {
+  // Slice-15: PATCH now accepts every mutable field. All keys are
+  // optional — the form sends only the changed entries.
+  title?: string;
+  counterparty_display_name?: string;
+  me_display_name?: string;
+  scheduled_start_at?: string;
+  scheduled_end_at?: string | null;
   asr_provider?: string;
 }
 

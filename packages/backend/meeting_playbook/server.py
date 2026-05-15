@@ -117,12 +117,19 @@ def create_app() -> FastAPI:
 
         # Domain-aware mapping: meeting POST body field errors get a
         # structured `meeting.<field>.required` so the frontend can resolve
-        # to a localized message (slice-03 spec — required-field matrix).
+        # to a localized message (slice-03 spec — required-field matrix;
+        # slice-15 adds `scheduled_start_at` to the required matrix).
         if (
             req.url.path.startswith("/api/meetings")
             and len(loc) >= 2
             and loc[0] == "body"
-            and loc[1] in {"title", "counterparty_display_name", "me_display_name"}
+            and loc[1]
+            in {
+                "title",
+                "counterparty_display_name",
+                "me_display_name",
+                "scheduled_start_at",
+            }
         ):
             error_code = f"meeting.{loc[1]}.required"
         else:

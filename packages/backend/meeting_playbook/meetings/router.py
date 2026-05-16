@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -64,21 +64,32 @@ async def create_meeting(
 async def list_meetings(
     user_id: Annotated[str, Depends(get_user_id_dependency)],
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
+    # Slice-17 — optional tag-AND filter. `?tag_ids=a,b,c` returns meetings
+    # that carry every supplied tag id. Validation: any id not owned by the
+    # caller raises 422 `tag.unknown_id` (silent drop would hide typos).
     tag_ids: str | None = None,
+    # Slice-18 — home-page filter / order / limit. All optional, default
+    # behaviour is unchanged (whole owned list, `created_at DESC`).
+    scheduled_date: Annotated[str | None, Query()] = None,
+    status: Annotated[str | None, Query()] = None,
+    pending: Annotated[bool, Query()] = False,
+    order: Annotated[str | None, Query()] = None,
+    limit: Annotated[int | None, Query(ge=1)] = None,
 ) -> list[MeetingRead]:
-    """Slice-17: optional `?tag_ids=a,b,c` AND-filters by tag attachment.
+    """List meetings owned by the requesting user.
 
-    Validation:
-    - Empty / missing `tag_ids` is a no-op (returns every owned meeting).
-    - Any id in `tag_ids` that does NOT belong to `user_id` raises HTTP 422
-      `tag.unknown_id` — silently dropping unknown ids hides typos.
+    Dispatches between the two repository entry points:
+    - `tag_ids` present → `list_for_user` (tag-aware, eager-loads tags).
+      Other slice-18 filter params are ignored on this path; combining
+      tag + scheduled_date / pending / order / limit is intentionally
+      not supported in this revision.
+    - Otherwise → `list_by_user` (slice-18 filter / order / limit path).
     """
     repo = MeetingRepository(session)
     parsed_ids: list[str] = []
     if tag_ids:
         parsed_ids = [t for t in (chunk.strip() for chunk in tag_ids.split(",")) if t]
     if parsed_ids:
-        # Verify every id is owned by the requesting user — single query.
         from meeting_playbook.tags.models import Tag
 
         owned_rows = await session.execute(
@@ -93,9 +104,28 @@ async def list_meetings(
                     "message": "One or more tag_ids do not belong to this user.",
                 },
             )
-
-    rows = await repo.list_for_user(user_id, tag_ids=parsed_ids or None)
+        rows = await repo.list_for_user(user_id, tag_ids=parsed_ids)
+    else:
+        try:
+            rows = await repo.list_by_user(
+                user_id,
+                scheduled_date=scheduled_date,
+                status=status,
+                pending=pending,
+                order=order,
+                limit=limit,
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status_code_for_invalid_param(),
+                detail={"error_code": "meeting.invalid_query_param", "message": str(e)},
+            ) from e
     return [MeetingRead.model_validate(m) for m in rows]
+
+
+def status_code_for_invalid_param() -> int:
+    """Indirection so the value reads clearly at the call site."""
+    return status.HTTP_400_BAD_REQUEST
 
 
 @router.get("/{meeting_id}", response_model=MeetingDetailRead)

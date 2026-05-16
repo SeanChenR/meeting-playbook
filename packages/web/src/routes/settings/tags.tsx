@@ -15,7 +15,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { ProtectedShell } from "../../components/protected-shell";
+// Slice-19 polish: tags page renders as a section inside the single-page
+// `/settings` (`<SettingsLayout>` provides the protected shell). Direct
+// access to `/settings/tags` redirects to `/settings#tags`.
 import { TagChip } from "../../components/tags/tag-chip";
 import { AlertDialog } from "../../components/ui/alert-dialog";
 import { Button } from "../../components/ui/button";
@@ -121,7 +123,7 @@ export function SettingsTags() {
   }
 
   return (
-    <ProtectedShell>
+    <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight text-(--color-foreground)">
@@ -374,6 +376,6 @@ export function SettingsTags() {
           </button>
         )}
       </div>
-    </ProtectedShell>
+    </div>
   );
 }

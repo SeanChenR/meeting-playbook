@@ -332,6 +332,23 @@
     line-height: 1.5;
   }
 
+  /* Sean review: every interactive element gets the pointer cursor by
+     default. Disabled state is honoured (no pointer on `disabled` /
+     `aria-disabled="true"` controls). */
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="radio"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  a[href]:not([aria-disabled="true"]),
+  summary:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
   /* Hairline focus ring used by all interactive elements. */
   :focus-visible {
     outline: 2px solid var(--color-ring);

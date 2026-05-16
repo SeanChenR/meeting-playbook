@@ -1,5 +1,3 @@
-import { LogOut } from "./animate-ui/icons/log-out";
-import { ChevronDown, Mic, Tag as TagIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,14 +5,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { authClient } from "../lib/auth-client";
 import { LocaleToggle } from "./locale-toggle";
 import { ThemeToggle } from "./theme-toggle";
-import { Avatar } from "./ui/avatar";
-import { Button } from "./ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+import { UserMenu } from "./user-menu";
 
 export interface ProtectedShellProps {
   children: ReactNode;
@@ -28,14 +19,12 @@ export interface ProtectedShellProps {
 }
 
 /**
- * ProtectedShell — slice ui-overhaul-claude-design task 2.1.
+ * ProtectedShell — slice-18 task 3.2.
  *
- * Per `meeting-detail-layout` design Decision 1 + `ui-design-system` task
- * 2.1 acceptance criteria:
- *   - 56px sticky NavBar at top with logo (left) + locale-toggle /
- *     theme-toggle / avatar / logout (right cluster).
- *   - Main area max-width 1200px centred, OR fullBleed for detail page.
- *   - Toaster is mounted globally in App.tsx so we don't re-mount per route.
+ * NavBar exposes three top-level destinations (`/`, `/meetings`, `/dashboard`)
+ * and routes Locale / Theme / Settings / Logout into the avatar-anchored
+ * UserMenu so the bar stays uncluttered. The legacy `navbar-locale-toggle` /
+ * `navbar-theme-toggle` / `navbar-logout` testids are intentionally retired.
  *
  * Session gate behaviour is unchanged from slice-1 (redirect to /login when
  * no session). We keep the loading + null branches identical so existing
@@ -51,11 +40,6 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
       navigate({ to: "/login", replace: true });
     }
   }, [session, isPending, navigate]);
-
-  const handleLogout = async () => {
-    await authClient.signOut();
-    navigate({ to: "/login", replace: true });
-  };
 
   if (isPending) {
     return (
@@ -80,21 +64,13 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
           className="mx-auto flex w-full max-w-[1600px] items-center px-6"
         >
           <Link
-            to="/meetings"
+            to="/"
             className="flex items-center gap-2.5 text-sm font-semibold tracking-tight text-(--color-foreground)"
           >
             <img src="/logo.png" alt="" aria-hidden className="size-7 object-contain" />
             {t("auth.home.topNavTitle")}
           </Link>
           <nav className="ml-6 hidden items-center gap-1 sm:flex">
-            <Link
-              to="/home"
-              data-testid="navbar-home-link"
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"
-              activeProps={{ className: "bg-(--color-muted) text-(--color-foreground)" }}
-            >
-              {t("nav.home")}
-            </Link>
             <Link
               to="/meetings"
               data-testid="navbar-meetings-link"
@@ -103,62 +79,20 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
             >
               {t("nav.meetings")}
             </Link>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  data-testid="navbar-settings-trigger"
-                  className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground) focus:outline-none focus-visible:outline-2 focus-visible:outline-(--color-primary)"
-                >
-                  {t("nav.settings")}
-                  <ChevronDown className="size-3.5" aria-hidden />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-44">
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/settings/tags"
-                    data-testid="navbar-settings-tags-link"
-                    className="flex w-full cursor-pointer items-center gap-2"
-                  >
-                    <TagIcon className="size-3.5" aria-hidden />
-                    {t("nav.settingsTags")}
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/settings/voice"
-                    data-testid="navbar-settings-voice-link"
-                    className="flex w-full cursor-pointer items-center gap-2"
-                  >
-                    <Mic className="size-3.5" aria-hidden />
-                    {t("nav.settingsVoice")}
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Link
+              to="/dashboard"
+              data-testid="navbar-dashboard-link"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"
+              activeProps={{ className: "bg-(--color-muted) text-(--color-foreground)" }}
+            >
+              {t("nav.dashboard")}
+            </Link>
           </nav>
           <div className="ml-auto flex items-center gap-1">
             <LocaleToggle />
             <ThemeToggle />
             <span className="mx-1.5 h-5 w-px bg-(--color-border)" aria-hidden />
-            <Avatar
-              src={image}
-              alt={displayName}
-              fallback={displayName?.[0] ?? "?"}
-              data-testid="user-avatar"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              data-testid="logout-button"
-              className="text-(--color-muted-foreground)"
-            >
-              <LogOut animateOnHover className="size-4" />
-              <span className="sr-only sm:not-sr-only">{t("auth.home.logout")}</span>
-            </Button>
+            <UserMenu displayName={displayName ?? "?"} image={image} />
           </div>
         </div>
       </header>

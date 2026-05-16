@@ -16,9 +16,81 @@
     "backToList": "Back to list",
     "home": "Home",
     "meetings": "Meetings",
+    "dashboard": "Dashboard",
+    "settings": "Settings"
+  },
+  "home": {
+    "today": {
+      "title": "Today's Meetings",
+      "empty": "No meetings scheduled for today",
+      "loading": "Loading…",
+      "error": "Failed to load today's meetings"
+    },
+    "in_progress": {
+      "title": "In-Progress Recordings",
+      "empty": "No recordings in progress",
+      "loading": "Loading…",
+      "error": "Failed to load in-progress recordings"
+    },
+    "pending": {
+      "title": "Pending Items",
+      "empty": "Nothing pending",
+      "loading": "Loading…",
+      "error": "Failed to load pending items"
+    },
+    "recently_edited": {
+      "title": "Recently Edited",
+      "empty": "No recently edited meetings",
+      "loading": "Loading…",
+      "error": "Failed to load recently edited meetings"
+    },
+    "quick_actions": {
+      "title": "Quick Actions",
+      "new_meeting": "New Meeting",
+      "import_calendar": "Import from Calendar"
+    },
+    "two_factor": {
+      "title": "Two-factor authentication is not enabled",
+      "body": "Enable 2FA to protect your meeting data.",
+      "cta": "Go to security settings"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "stat_cards": {
+      "monthly_meetings": "Meetings this month",
+      "average_duration": "Average duration",
+      "total_duration": "Total time",
+      "vs_previous": "vs previous month",
+      "deltaSuffix": "meetings"
+    },
+    "charts": {
+      "top_counterparties": "Top counterparties",
+      "tag_distribution": "Tag distribution",
+      "daily_trend": "Daily trend",
+      "hour_distribution": "Hour of day",
+      "calendar_heatmap": "Activity",
+      "totalLabel": "{{count}} total",
+      "dayLabel": "Day {{day}}",
+      "hourLabel": "{{hour}}",
+      "dayCellTitle": "Day {{day}}: {{count}}",
+      "legendLow": "Less",
+      "legendHigh": "More"
+    },
+    "period": {
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month"
+    },
+    "empty": "No data for this period",
+    "loading": "Loading…",
+    "error": "Failed to load dashboard data"
+  },
+  "user_menu": {
+    "trigger": "Open user menu",
     "settings": "Settings",
-    "settingsTags": "Tags",
-    "settingsVoice": "Voice"
+    "locale": "Switch language",
+    "theme": "Switch theme",
+    "logout": "Logout"
   },
   "auth": {
     "shell": {
@@ -453,6 +525,69 @@
       "permissionDenied": "Microphone permission denied. Enable it in browser settings and retry.",
       "previouslyEnrolled": "Voice already enrolled (last updated {{timestamp}})",
       "reRecordToOverwrite": "Re-record to overwrite"
+    },
+    "security": {
+      "title": "Security",
+      "intro": "Manage two-factor authentication (2FA) to protect your account.",
+      "enroll": "Enable 2FA",
+      "enabledTitle": "Two-factor authentication is on",
+      "enabledBody": "Sign-in now requires a one-time code from your authenticator app.",
+      "statusEnabled": "Enabled",
+      "statusDisabled": "Not enabled",
+      "oauthOnlyHint": "You signed in with Google; 2FA is managed in your Google Account. Adjust it from Google Security settings."
+    },
+    "nav": {
+      "menu_entry": "Settings",
+      "profile": "Profile",
+      "security": "Security",
+      "integrations": "Integrations",
+      "voice": "Voice",
+      "tags": "Tags",
+      "preferences": "Preferences",
+      "data": "Data"
+    },
+    "profile": {
+      "title": "Profile",
+      "subhead": "Read-only summary of your current sign-in.",
+      "name_label": "Name",
+      "email_label": "Email",
+      "verifiedLabel": "Email verified",
+      "accountTitle": "Account & providers",
+      "accountSubhead": "Linked sign-in methods and account creation time.",
+      "providerLabel": "Sign-in method",
+      "providerCredential": "Email + Password",
+      "verificationLabel": "Email verification",
+      "verifiedYes": "Verified",
+      "verifiedNo": "Not verified",
+      "memberSinceLabel": "Member since"
+    },
+    "integrations": {
+      "title": "Integrations",
+      "subhead": "Manage connections to external services."
+    },
+    "preferences": {
+      "title": "Preferences",
+      "subhead": "Personalize your experience.",
+      "language_label": "Language",
+      "theme_label": "Theme",
+      "asr_label": "Default ASR Provider",
+      "asr_value": "Qwen3-ASR",
+      "coming_soon": "Coming soon"
+    },
+    "data": {
+      "title": "Data",
+      "subhead": "Recording retention and account-data controls.",
+      "retention_label": "Recording window",
+      "retentionLabel": "Recording window",
+      "retentionBody": "Audio is auto-deleted after 30 days; transcripts and summaries persist",
+      "retention_value": "30 days",
+      "export_all": "Export all meetings",
+      "exportBody": "Download playbooks, transcripts and summaries for every meeting in one bundle",
+      "delete_account": "Delete account",
+      "deleteBody": "Permanently remove your account, meetings and all related data. Cannot be undone",
+      "coming_soon_title": "Coming soon",
+      "coming_soon_body": "This feature is still under development.",
+      "coming_soon_close": "Got it"
     }
   },
   "transcript": {
@@ -537,6 +672,9 @@
     "common": {
       "unknown": "An unknown error occurred",
       "internal_error": "Server error, please try again later"
+    },
+    "stats": {
+      "invalid_range": "Unknown time range; choose this week / this month / last 6 months"
     },
     "auth": {
       "gateway_bypass": "Please sign in through the gateway",

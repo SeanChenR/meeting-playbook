@@ -7,15 +7,14 @@
  */
 
 import { createRootRoute, createRoute, Outlet, redirect } from "@tanstack/react-router";
-import { Home } from "./routes/home";
+import { SettingsLayout } from "./components/settings/layout";
+import { DashboardPage } from "./routes/DashboardPage";
 import { Login } from "./routes/login";
 import { MeetingDetail } from "./routes/meetings/detail";
 import { MeetingsCalendar } from "./routes/meetings/calendar";
 import { MeetingsList } from "./routes/meetings/list";
 import { NewMeeting } from "./routes/meetings/new";
 import { UpcomingEvents } from "./routes/calendar/upcoming";
-import { SettingsTags } from "./routes/settings/tags";
-import { SettingsVoice } from "./routes/settings/voice";
 import { Signup } from "./routes/signup";
 import { TotpEnroll } from "./routes/totp/enroll";
 import { TotpVerify } from "./routes/totp/verify";
@@ -24,6 +23,9 @@ export const rootRoute = createRootRoute({
   component: () => <Outlet />,
 });
 
+// Slice-18 v2 (Sean revision): HomePage removed entirely — the 4-region
+// dashboard duplicated /meetings. Root now redirects to /meetings so the
+// kanban-style meetings view is the de-facto landing surface.
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
@@ -56,10 +58,10 @@ const totpVerifyRoute = createRoute({
   component: TotpVerify,
 });
 
-const homeRoute = createRoute({
+const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/home",
-  component: Home,
+  path: "/dashboard",
+  component: DashboardPage,
 });
 
 const meetingsListRoute = createRoute({
@@ -95,19 +97,66 @@ const calendarImportRoute = createRoute({
   component: UpcomingEvents,
 });
 
-// Slice-13: standalone /settings/voice (no /settings shell yet — will be
-// folded into the sub-nav when slice-19 ships).
+// Slice-19 v3 (Sean revision): `/settings` is now a single scrollable page
+// — all six former sub-pages render as stacked anchor sections under one
+// URL. Legacy deep links (`/settings/profile`, `/settings/security`, …)
+// redirect to `/settings#<id>` so any in-flight bookmark / shortcut still
+// lands on the right section.
+const settingsLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: SettingsLayout,
+});
+
+function _legacySubRouteRedirect(hash: string) {
+  return () => {
+    throw redirect({ to: "/settings", hash });
+  };
+}
+
+const settingsProfileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/profile",
+  beforeLoad: _legacySubRouteRedirect("profile"),
+});
+
+const settingsSecurityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/security",
+  beforeLoad: _legacySubRouteRedirect("security"),
+});
+
+const settingsIntegrationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/integrations",
+  beforeLoad: _legacySubRouteRedirect("integrations"),
+});
+
 const settingsVoiceRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/voice",
-  component: SettingsVoice,
+  beforeLoad: _legacySubRouteRedirect("voice"),
 });
 
-// Slice-17: /settings/tags — tag CRUD management page.
+const settingsPreferencesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/preferences",
+  beforeLoad: _legacySubRouteRedirect("preferences"),
+});
+
+const settingsDataRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/data",
+  beforeLoad: _legacySubRouteRedirect("data"),
+});
+
+// Slice-17 was top-level `/settings/tags`; post-slice-19 the page is a
+// section in the single-page /settings. Keep the legacy path as a redirect
+// so any bookmark / external link lands on the right anchor.
 const settingsTagsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings/tags",
-  component: SettingsTags,
+  beforeLoad: _legacySubRouteRedirect("tags"),
 });
 
 export const routeTree = rootRoute.addChildren([
@@ -116,12 +165,18 @@ export const routeTree = rootRoute.addChildren([
   signupRoute,
   totpEnrollRoute,
   totpVerifyRoute,
-  homeRoute,
+  dashboardRoute,
   meetingsListRoute,
   meetingsNewRoute,
   meetingsCalendarRoute,
   meetingDetailRoute,
   calendarImportRoute,
+  settingsLayoutRoute,
+  settingsProfileRoute,
+  settingsSecurityRoute,
+  settingsIntegrationsRoute,
   settingsVoiceRoute,
+  settingsPreferencesRoute,
+  settingsDataRoute,
   settingsTagsRoute,
 ]);

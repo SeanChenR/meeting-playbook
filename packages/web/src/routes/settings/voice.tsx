@@ -17,7 +17,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { ProtectedShell } from "../../components/protected-shell";
+// Slice-19: ProtectedShell now provided by `<SettingsLayout />` parent; the
+// page renders content only so the sub-nav doesn't unmount on tab switch.
+import { Mic } from "lucide-react";
+import { GradientCardFrame } from "../../components/magicui/gradient-card-frame";
 import { Button } from "../../components/ui/button";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
 import {
@@ -246,109 +249,131 @@ export function SettingsVoice() {
     : null;
 
   return (
-    <ProtectedShell>
-      <section className="space-y-1">
-        <h1
-          className="text-3xl font-bold tracking-tight text-(--color-foreground)"
-          data-testid="settings-voice-heading"
-        >
-          {t("settings.voice.heading")}
-        </h1>
-        <p className="text-sm text-(--color-muted-foreground)">{t("settings.voice.subhead")}</p>
-      </section>
-
-      <section className="space-y-4 rounded-md border border-(--color-border) bg-(--color-card) p-6">
-        <p className="text-xs text-(--color-muted-foreground)">
-          {t("settings.voice.permissionHint")}
-        </p>
-
-        {hasPreviousEnrollment && formattedEnrolledAt && (
-          <p
-            data-testid="voice-previous-enrollment"
-            className="rounded-md border border-(--color-success)/40 bg-(--color-success)/10 px-3 py-2 text-sm text-(--color-foreground)"
-          >
-            {t("settings.voice.previouslyEnrolled", { timestamp: formattedEnrolledAt })}
-          </p>
-        )}
-
-        {isRecording && (
-          <div className="space-y-2" data-testid="voice-level-meter">
-            <p className="text-sm text-(--color-foreground)">
-              {t("settings.voice.recording", { seconds: elapsedSeconds })}
-            </p>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-(--color-muted)">
-              <div
-                className="h-full bg-(--color-primary) transition-[width] duration-100"
-                style={{ width: `${levelPercent}%` }}
-                data-testid="voice-level-bar"
-              />
-            </div>
+    <GradientCardFrame
+      data-testid="settings-voice-card"
+      accent="var(--color-primary)"
+      accentAlt="var(--color-accent)"
+    >
+      <div className="flex flex-col items-center rounded-[inherit] p-8">
+        <div className="flex flex-col items-center gap-3 pb-6 text-center">
+          <div className="flex size-20 items-center justify-center rounded-full bg-(--color-primary)/15 ring-2 ring-(--color-primary)/40">
+            <Mic
+              className={
+                isRecording
+                  ? "size-10 animate-pulse text-(--color-primary)"
+                  : "size-10 text-(--color-primary)"
+              }
+              aria-hidden
+            />
           </div>
-        )}
+          <h1
+            className="text-xl font-semibold tracking-tight text-(--color-foreground)"
+            data-testid="settings-voice-heading"
+          >
+            {t("settings.voice.heading")}
+          </h1>
+          <p className="max-w-md text-sm text-(--color-muted-foreground)">
+            {t("settings.voice.subhead")}
+          </p>
+        </div>
 
-        {hasPreview && previewUrl && (
-          <audio controls src={previewUrl} data-testid="voice-preview" className="w-full" />
-        )}
+        <section className="space-y-4 rounded-md border border-(--color-border)/60 bg-(--color-card)/50 p-6">
+          <p className="text-xs text-(--color-muted-foreground)">
+            {t("settings.voice.permissionHint")}
+          </p>
 
-        <div className="flex flex-wrap gap-2">
-          {state === "idle" && (
-            <Button type="button" onClick={_startRecording} data-testid="voice-start-button">
-              {hasPreviousEnrollment
-                ? t("settings.voice.reRecordToOverwrite")
-                : t("settings.voice.startRecording")}
-            </Button>
-          )}
-          {isRecording && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={_stopRecording}
-              data-testid="voice-stop-button"
+          {hasPreviousEnrollment && formattedEnrolledAt && (
+            <p
+              data-testid="voice-previous-enrollment"
+              className="rounded-md border border-(--color-success)/40 bg-(--color-success)/10 px-3 py-2 text-sm text-(--color-foreground)"
             >
-              {t("settings.voice.stopRecording")}
-            </Button>
+              {t("settings.voice.previouslyEnrolled", { timestamp: formattedEnrolledAt })}
+            </p>
           )}
-          {hasPreview && (
-            <>
+
+          {isRecording && (
+            <div className="space-y-2" data-testid="voice-level-meter">
+              <p className="text-sm text-(--color-foreground)">
+                {t("settings.voice.recording", { seconds: elapsedSeconds })}
+              </p>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-(--color-muted)">
+                <div
+                  className="h-full bg-(--color-primary) transition-[width] duration-100"
+                  style={{ width: `${levelPercent}%` }}
+                  data-testid="voice-level-bar"
+                />
+              </div>
+            </div>
+          )}
+
+          {hasPreview && previewUrl && (
+            <audio controls src={previewUrl} data-testid="voice-preview" className="w-full" />
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {state === "idle" && (
+              <Button type="button" onClick={_startRecording} data-testid="voice-start-button">
+                {hasPreviousEnrollment
+                  ? t("settings.voice.reRecordToOverwrite")
+                  : t("settings.voice.startRecording")}
+              </Button>
+            )}
+            {isRecording && (
               <Button
                 type="button"
                 variant="secondary"
-                onClick={_resetForRerecord}
-                data-testid="voice-rerecord-button"
+                onClick={_stopRecording}
+                data-testid="voice-stop-button"
               >
-                {t("settings.voice.rerecord")}
+                {t("settings.voice.stopRecording")}
               </Button>
-              <Button
-                type="button"
-                onClick={_saveRecording}
-                disabled={state === "saving"}
-                data-testid="voice-save-button"
-              >
-                {state === "saving"
-                  ? t("settings.voice.saving")
-                  : state === "saved"
-                    ? t("settings.voice.saved")
-                    : t("settings.voice.save")}
-              </Button>
-            </>
-          )}
-        </div>
+            )}
+            {hasPreview && (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={_resetForRerecord}
+                  data-testid="voice-rerecord-button"
+                >
+                  {t("settings.voice.rerecord")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={_saveRecording}
+                  disabled={state === "saving"}
+                  data-testid="voice-save-button"
+                >
+                  {state === "saving"
+                    ? t("settings.voice.saving")
+                    : state === "saved"
+                      ? t("settings.voice.saved")
+                      : t("settings.voice.save")}
+                </Button>
+              </>
+            )}
+          </div>
 
-        {errorMessage && (
-          <p role="alert" data-testid="voice-error" className="text-sm text-(--color-destructive)">
-            {errorMessage}
-          </p>
-        )}
-        {state === "saved" && (
-          <p
-            role="status"
-            data-testid="voice-saved-confirmation"
-            className="text-sm text-(--color-success)"
-          >
-            {t("settings.voice.saved")}
-          </p>
-        )}
-      </section>
-    </ProtectedShell>
+          {errorMessage && (
+            <p
+              role="alert"
+              data-testid="voice-error"
+              className="text-sm text-(--color-destructive)"
+            >
+              {errorMessage}
+            </p>
+          )}
+          {state === "saved" && (
+            <p
+              role="status"
+              data-testid="voice-saved-confirmation"
+              className="text-sm text-(--color-success)"
+            >
+              {t("settings.voice.saved")}
+            </p>
+          )}
+        </section>
+      </div>
+    </GradientCardFrame>
   );
 }

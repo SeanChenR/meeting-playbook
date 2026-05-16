@@ -108,16 +108,49 @@ async function _envelopeError(resp: Response): Promise<MeetingApiError> {
   return new MeetingApiError(resp.status, body.error_code, body.message ?? `HTTP ${resp.status}`);
 }
 
-export async function listMeetings(options?: { tagIds?: string[] }): Promise<Meeting[]> {
+/**
+ * Slice-17 added `tagIds` to AND-filter by tag attachment.
+ * Slice-18 added home-page filters (`scheduled_date / status / pending /
+ * order / limit`). Both sets are exposed as the same `MeetingListFilters`
+ * object; the backend dispatches between the tag-aware path and the
+ * filter path based on whether `tagIds` is present.
+ */
+export interface MeetingListFilters {
+  tagIds?: string[];
+  /** YYYY-MM-DD in Asia/Taipei day boundary. */
+  scheduled_date?: string;
+  status?: MeetingStatus;
+  pending?: boolean;
+  /** e.g. `"scheduled_start_at:asc"` or `"updated_at:desc"`. */
+  order?: string;
+  limit?: number;
+}
+
+export async function listMeetings(filters?: MeetingListFilters): Promise<Meeting[]> {
   const params = new URLSearchParams();
-  if (options?.tagIds && options.tagIds.length > 0) {
-    params.set("tag_ids", options.tagIds.join(","));
+  if (filters?.tagIds && filters.tagIds.length > 0) {
+    params.set("tag_ids", filters.tagIds.join(","));
   }
-  const qs = params.toString();
-  const url = qs.length > 0 ? `/api/meetings?${qs}` : "/api/meetings";
+  if (filters?.scheduled_date) params.set("scheduled_date", filters.scheduled_date);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.pending !== undefined) params.set("pending", String(filters.pending));
+  if (filters?.order) params.set("order", filters.order);
+  if (filters?.limit !== undefined) params.set("limit", String(filters.limit));
+  const url = params.toString() ? `/api/meetings?${params.toString()}` : "/api/meetings";
   const resp = await fetch(url);
   if (!resp.ok) throw await _envelopeError(resp);
   return (await resp.json()) as Meeting[];
+}
+
+/**
+ * Slice-18 home regions each call this with a different filter combo.
+ * Cache key includes the filter object so regions don't share entries.
+ */
+export function meetingsFilteredQueryOptions(filters: MeetingListFilters) {
+  return {
+    queryKey: ["meetings", "filtered", filters] as const,
+    queryFn: () => listMeetings(filters),
+  };
 }
 
 export async function getMeeting(id: string): Promise<MeetingDetail> {

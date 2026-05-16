@@ -15,7 +15,10 @@
     "back": "返回",
     "backToList": "返回列表",
     "home": "首頁",
-    "meetings": "會議"
+    "meetings": "會議",
+    "settings": "設定",
+    "settingsTags": "標籤",
+    "settingsVoice": "聲紋"
   },
   "auth": {
     "shell": {
@@ -391,7 +394,48 @@
       "fallback": "儲存失敗，請稍後再試"
     }
   },
+  "tags": {
+    "chip": {
+      "removeAria": "移除標籤 {{name}}"
+    },
+    "picker": {
+      "trigger": "+ 新增標籤",
+      "placeholder": "搜尋或建立標籤",
+      "create": "建立「{{query}}」",
+      "noResults": "找不到標籤"
+    },
+    "filter": {
+      "label": "標籤",
+      "empty": "尚無標籤"
+    }
+  },
   "settings": {
+    "tags": {
+      "title": "標籤管理",
+      "subtitle": "為會議建立分類標籤，便於在列表、看板與行事曆視圖中過濾。",
+      "empty": "尚無標籤，點上方「+ 新增標籤」開始建立。",
+      "create": {
+        "cta": "+ 新增標籤",
+        "namePlaceholder": "輸入標籤名稱（1–30 字元）",
+        "submit": "建立",
+        "cancel": "取消",
+        "emptyName": "標籤名稱不可為空"
+      },
+      "meetingCount_one": "{{count}} 個會議",
+      "meetingCount_other": "{{count}} 個會議",
+      "renameAction": "重新命名",
+      "renameSubmit": "儲存",
+      "renameCancel": "取消",
+      "recolorAction": "換顏色",
+      "deleteAction": "刪除",
+      "deleteConfirm": {
+        "title": "刪除標籤「{{name}}」？",
+        "description_one": "此標籤目前掛在 {{count}} 個會議上，刪除後將從這些會議移除。此動作無法復原。",
+        "description_other": "此標籤目前掛在 {{count}} 個會議上，刪除後將從這些會議移除。此動作無法復原。",
+        "cancel": "取消",
+        "confirm": "刪除"
+      }
+    },
     "voice": {
       "heading": "聲紋登錄",
       "subhead": "錄製 30 秒的自我介紹，單聲道會議時系統會自動把符合的說話者標為「我」。",
@@ -580,6 +624,14 @@
       "scheduled_start_at": {
         "required": "請選擇預定開始時間"
       }
+    },
+    "tag": {
+      "name_taken": "已存在同名標籤",
+      "name_required": "請輸入標籤名稱",
+      "invalid_color": "顏色不在允許的色盤中",
+      "too_many_for_meeting": "此會議已有 10 個標籤，請先移除一個再新增",
+      "unknown_id": "選取的標籤 id 已不存在",
+      "not_found": "找不到此標籤"
     }
   }
 }

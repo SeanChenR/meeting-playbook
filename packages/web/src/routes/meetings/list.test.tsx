@@ -169,4 +169,33 @@ describe("MeetingsList route", () => {
     expect(card.tagName).toBe("A");
     expect(card.getAttribute("href")).toBe("/meetings/m_one");
   });
+
+  // ─── Slice-17 addition ────────────────────────────────────────────────
+
+  test("(slice-17) meeting card shows tag chips when tags are attached", async () => {
+    fetchHandler = async (url) => {
+      if (url.startsWith("/api/meetings")) {
+        return new Response(
+          JSON.stringify([
+            {
+              ...SAMPLE_MEETING,
+              tags: [
+                { id: "tag_a", name: "客戶X", color: "#DDD6FE" },
+                { id: "tag_b", name: "面試", color: "#FEF3C7" },
+              ],
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      // tags listing for TagFilter
+      return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+    };
+
+    await renderWithRouter(<MeetingsList />, { initialEntries: ["/meetings"], path: "/meetings" });
+
+    const cardTags = await screen.findByTestId("meeting-card-tags");
+    expect(cardTags.textContent).toContain("客戶X");
+    expect(cardTags.textContent).toContain("面試");
+  });
 });

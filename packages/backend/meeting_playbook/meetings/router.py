@@ -64,9 +64,37 @@ async def create_meeting(
 async def list_meetings(
     user_id: Annotated[str, Depends(get_user_id_dependency)],
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
+    tag_ids: str | None = None,
 ) -> list[MeetingRead]:
+    """Slice-17: optional `?tag_ids=a,b,c` AND-filters by tag attachment.
+
+    Validation:
+    - Empty / missing `tag_ids` is a no-op (returns every owned meeting).
+    - Any id in `tag_ids` that does NOT belong to `user_id` raises HTTP 422
+      `tag.unknown_id` — silently dropping unknown ids hides typos.
+    """
     repo = MeetingRepository(session)
-    rows = await repo.list_by_user(user_id)
+    parsed_ids: list[str] = []
+    if tag_ids:
+        parsed_ids = [t for t in (chunk.strip() for chunk in tag_ids.split(",")) if t]
+    if parsed_ids:
+        # Verify every id is owned by the requesting user — single query.
+        from meeting_playbook.tags.models import Tag
+
+        owned_rows = await session.execute(
+            select(Tag.id).where(Tag.user_id == user_id, Tag.id.in_(parsed_ids))
+        )
+        owned_set = {row[0] for row in owned_rows.all()}
+        if owned_set != set(parsed_ids):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error_code": "tag.unknown_id",
+                    "message": "One or more tag_ids do not belong to this user.",
+                },
+            )
+
+    rows = await repo.list_for_user(user_id, tag_ids=parsed_ids or None)
     return [MeetingRead.model_validate(m) for m in rows]
 
 

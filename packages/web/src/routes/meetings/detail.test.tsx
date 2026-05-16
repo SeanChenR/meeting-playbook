@@ -285,6 +285,53 @@ describe("MeetingDetail route", () => {
       summary.hasAttribute("data-disabled") || (summary as HTMLButtonElement).disabled === true;
     expect(isDisabled).toBe(true);
   });
+
+  test("(slice-17) detail header renders the tags row with chips + TagPicker trigger", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/chat_messages")) {
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("/playbook")) {
+        return new Response(
+          JSON.stringify({
+            id: "pb_abc",
+            meeting_id: "m_abc",
+            free_form_markdown: "",
+            objective: "",
+            counterparty_profile: "",
+            anticipated_topics: "",
+            anticipated_objections: "",
+            talking_points: "",
+            red_lines: "",
+            created_at: "2026-05-07T10:00:00Z",
+            updated_at: "2026-05-07T10:00:00Z",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.startsWith("/api/tags")) {
+        return new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          ...SAMPLE_MEETING,
+          tags: [{ id: "tag_a", name: "客戶X", color: "#DDD6FE" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    await renderInRouter();
+    const row = await screen.findByTestId("meeting-detail-tags-row");
+    expect(row.textContent).toContain("客戶X");
+    expect(screen.getByTestId("tag-picker-trigger")).toBeDefined();
+  });
 });
 
 // ─── Slice-06: Start/End Meeting buttons + capture indicator + transcript ─

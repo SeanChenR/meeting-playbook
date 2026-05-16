@@ -46,6 +46,16 @@ class MeetingCreate(BaseModel):
         return self
 
 
+class TagSummary(BaseModel):
+    """Slice-17: minimal tag payload nested inside meeting list / detail."""
+
+    id: str
+    name: str
+    color: str
+
+    model_config = {"from_attributes": True}
+
+
 class MeetingRead(BaseModel):
     id: str
     user_id: str
@@ -62,6 +72,10 @@ class MeetingRead(BaseModel):
     # (migration 0012 back-filled pre-existing NULL rows from created_at).
     scheduled_start_at: datetime
     scheduled_end_at: datetime | None
+    # Slice-17: every list / detail payload carries the meeting's tags.
+    # Defaults to empty list so legacy code paths that build MeetingRead from
+    # plain dicts (no tag relationship loaded) still serialize cleanly.
+    tags: list[TagSummary] = []
 
     model_config = {"from_attributes": True}
 

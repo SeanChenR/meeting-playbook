@@ -43,6 +43,8 @@ import { PlaybookPane } from "../../components/playbook-pane";
 import { ProtectedShell } from "../../components/protected-shell";
 import { RerunButton } from "../../components/rerun-button";
 import { SummaryPane } from "../../components/summary-pane";
+import { TagChip } from "../../components/tags/tag-chip";
+import { TagPicker } from "../../components/tags/tag-picker";
 import { TranscriptPane } from "../../components/transcript-pane";
 import { Workspace } from "../../components/workspace";
 import { Alert } from "../../components/ui/alert";
@@ -250,6 +252,15 @@ export function MeetingDetail() {
               </Button>
             }
           />
+        )}
+
+        {meeting && (
+          <div data-testid="meeting-detail-tags-row" className="flex flex-wrap items-center gap-2">
+            {(meeting.tags ?? []).map((tag) => (
+              <TagChip key={tag.id} name={tag.name} color={tag.color} />
+            ))}
+            <TagPicker meetingId={meeting.id} currentTags={meeting.tags ?? []} />
+          </div>
         )}
 
         {meeting && (

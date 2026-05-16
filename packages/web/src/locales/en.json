@@ -15,7 +15,10 @@
     "back": "Back",
     "backToList": "Back to list",
     "home": "Home",
-    "meetings": "Meetings"
+    "meetings": "Meetings",
+    "settings": "Settings",
+    "settingsTags": "Tags",
+    "settingsVoice": "Voice"
   },
   "auth": {
     "shell": {
@@ -392,7 +395,48 @@
       "fallback": "Save failed, please try again"
     }
   },
+  "tags": {
+    "chip": {
+      "removeAria": "Remove tag {{name}}"
+    },
+    "picker": {
+      "trigger": "+ Add tag",
+      "placeholder": "Search or create a tag",
+      "create": "Create '{{query}}'",
+      "noResults": "No tags found"
+    },
+    "filter": {
+      "label": "Tags",
+      "empty": "No tags created yet"
+    }
+  },
   "settings": {
+    "tags": {
+      "title": "Tags",
+      "subtitle": "Per-user labels for filtering meetings across the list, kanban, and calendar views.",
+      "empty": "No tags yet. Click \"+ Add tag\" above to create one.",
+      "create": {
+        "cta": "+ Add tag",
+        "namePlaceholder": "Tag name (1–30 chars)",
+        "submit": "Create",
+        "cancel": "Cancel",
+        "emptyName": "Tag name cannot be empty"
+      },
+      "meetingCount_one": "{{count}} meeting",
+      "meetingCount_other": "{{count}} meetings",
+      "renameAction": "Rename",
+      "renameSubmit": "Save",
+      "renameCancel": "Cancel",
+      "recolorAction": "Recolor",
+      "deleteAction": "Delete",
+      "deleteConfirm": {
+        "title": "Delete tag '{{name}}'?",
+        "description_one": "This tag is attached to 1 meeting; deleting will remove it from each. This cannot be undone.",
+        "description_other": "This tag is attached to {{count}} meetings; deleting will remove it from each. This cannot be undone.",
+        "cancel": "Cancel",
+        "confirm": "Delete"
+      }
+    },
     "voice": {
       "heading": "Voice enrollment",
       "subhead": "Record a 30-second self-introduction. In single-channel meetings, the system will automatically label matching speech as 'me'.",
@@ -581,6 +625,14 @@
       "scheduled_start_at": {
         "required": "Scheduled start is required"
       }
+    },
+    "tag": {
+      "name_taken": "A tag with this name already exists",
+      "name_required": "Tag name is required",
+      "invalid_color": "Color is not in the allowed palette",
+      "too_many_for_meeting": "This meeting already has 10 tags; detach one before adding another",
+      "unknown_id": "One or more selected tag ids no longer exist",
+      "not_found": "Tag not found"
     }
   }
 }

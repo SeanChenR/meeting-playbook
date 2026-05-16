@@ -38,6 +38,7 @@ from meeting_playbook.offline_ingest.router import router as offline_ingest_rout
 from meeting_playbook.playbooks.router import router as playbooks_router
 from meeting_playbook.retention import runtime as retention_runtime
 from meeting_playbook.sessions.router import router as sessions_router
+from meeting_playbook.tags.router import router as tags_router
 from meeting_playbook.voice_enrollment.router import router as voice_enrollment_router
 from meeting_playbook.summarization.router import router as summary_router
 
@@ -171,6 +172,7 @@ def create_app() -> FastAPI:
         return {"user_id": x_user_id}
 
     app.include_router(meetings_router)
+    app.include_router(tags_router)
     app.include_router(playbooks_router)
     app.include_router(calendar_router)
     app.include_router(sessions_router)

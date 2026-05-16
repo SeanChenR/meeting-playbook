@@ -17,8 +17,9 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { TagFilter } from "../../components/tags/tag-filter";
 import { useTranslation } from "react-i18next";
 import { Calendar, dateFnsLocalizer, Navigate, type SlotInfo, Views } from "react-big-calendar";
 import { format, getDay, getISOWeek, parse, startOfWeek } from "date-fns";
@@ -49,14 +50,25 @@ const _localizer = dateFnsLocalizer({
 
 type View = "month" | "week";
 
+function _parseTagIdsFromSearch(searchStr: string): string[] {
+  const params = new URLSearchParams(searchStr.startsWith("?") ? searchStr.slice(1) : searchStr);
+  const raw = params.get("tag_ids");
+  return raw ? raw.split(",").filter(Boolean) : [];
+}
+
 export function MeetingsCalendar() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [view, setView] = useState<View>("week");
   const [cursor, setCursor] = useState<Date>(new Date());
   const [hidden, setHidden] = useState<Set<string>>(new Set());
 
-  const meetingsQuery = useQuery(meetingsListQueryOptions());
+  const tagIds = useMemo(
+    () => _parseTagIdsFromSearch(location.searchStr ?? ""),
+    [location.searchStr],
+  );
+  const meetingsQuery = useQuery(meetingsListQueryOptions({ tagIds }));
   const meetings: Meeting[] = useMemo(() => meetingsQuery.data ?? [], [meetingsQuery.data]);
   const events: CalendarEvent[] = useMemo(
     // Slice-15: `meetingToCalendarEvent` no longer short-circuits to null
@@ -159,6 +171,7 @@ export function MeetingsCalendar() {
             >
               <ChevronRight className="size-4" />
             </Button>
+            <TagFilter />
             <Link
               to="/meetings/new"
               search={{ from: "calendar" } as never}

@@ -26,7 +26,9 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0014_recording_started_at"
-down_revision: str | None = "0012_meeting_start_not_null"
+# Slice-17's `0013_tag_system` slots between 0012 and slice-16's 0014.
+# Without this edit alembic would see two heads off 0012 (0013 + 0014).
+down_revision: str | None = "0013_tag_system"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

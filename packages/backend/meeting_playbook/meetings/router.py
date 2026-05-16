@@ -68,10 +68,12 @@ async def list_meetings(
     # that carry every supplied tag id. Validation: any id not owned by the
     # caller raises 422 `tag.unknown_id` (silent drop would hide typos).
     tag_ids: str | None = None,
-    # Slice-18 — home-page filter / order / limit. All optional, default
-    # behaviour is unchanged (whole owned list, `created_at DESC`).
+    # Slice-18 — home-page filter / order / limit. All optional. The
+    # `status` query is aliased to the function parameter `meeting_status`
+    # so the function body can still reference `fastapi.status` constants
+    # without shadowing.
     scheduled_date: Annotated[str | None, Query()] = None,
-    status: Annotated[str | None, Query()] = None,
+    meeting_status: Annotated[str | None, Query(alias="status")] = None,
     pending: Annotated[bool, Query()] = False,
     order: Annotated[str | None, Query()] = None,
     limit: Annotated[int | None, Query(ge=1)] = None,
@@ -83,12 +85,23 @@ async def list_meetings(
       Other slice-18 filter params are ignored on this path; combining
       tag + scheduled_date / pending / order / limit is intentionally
       not supported in this revision.
-    - Otherwise → `list_by_user` (slice-18 filter / order / limit path).
+    - Slice-18 filters present → `list_by_user` (no tag eager-load).
+    - Default (no filters at all) → `list_for_user(user_id)` so every
+      list response keeps the slice-17 `tags` array eager-loaded.
     """
     repo = MeetingRepository(session)
     parsed_ids: list[str] = []
     if tag_ids:
         parsed_ids = [t for t in (chunk.strip() for chunk in tag_ids.split(",")) if t]
+    has_filters = any(
+        [
+            scheduled_date is not None,
+            meeting_status is not None,
+            pending,
+            order is not None,
+            limit is not None,
+        ]
+    )
     if parsed_ids:
         from meeting_playbook.tags.models import Tag
 
@@ -105,12 +118,12 @@ async def list_meetings(
                 },
             )
         rows = await repo.list_for_user(user_id, tag_ids=parsed_ids)
-    else:
+    elif has_filters:
         try:
             rows = await repo.list_by_user(
                 user_id,
                 scheduled_date=scheduled_date,
-                status=status,
+                status=meeting_status,
                 pending=pending,
                 order=order,
                 limit=limit,
@@ -120,6 +133,9 @@ async def list_meetings(
                 status_code=status_code_for_invalid_param(),
                 detail={"error_code": "meeting.invalid_query_param", "message": str(e)},
             ) from e
+    else:
+        # Default path — preserve slice-17 tag eager-loading.
+        rows = await repo.list_for_user(user_id)
     return [MeetingRead.model_validate(m) for m in rows]
 
 

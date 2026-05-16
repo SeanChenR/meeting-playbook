@@ -19,6 +19,13 @@ export interface GradientCardFrameProps {
   accent?: string;
   /** Border + radial secondary color (for the gradient line). Default var(--color-accent). */
   accentAlt?: string;
+  /**
+   * When true, all hover affordances are suppressed: no card lift, no
+   * brighter border, no brighter radial bg. The static gradient border
+   * + subtle radial stay. Dashboard charts pass this — they're read-only
+   * surfaces, hover lift was visual noise.
+   */
+  disableHover?: boolean;
   className?: string;
   bodyClassName?: string;
   children: ReactNode;
@@ -28,6 +35,7 @@ export interface GradientCardFrameProps {
 export function GradientCardFrame({
   accent = "var(--color-primary)",
   accentAlt = "var(--color-accent)",
+  disableHover = false,
   className,
   bodyClassName,
   children,
@@ -40,51 +48,54 @@ export function GradientCardFrame({
       // masks. The `group` class lets the inner body react to hover via
       // group-hover utilities (no JS / no re-render).
       className={cn(
-        "group relative rounded-xl p-px transition-[background,box-shadow,transform] duration-200",
-        // Lift the whole card and add a soft glow on hover.
-        "hover:-translate-y-0.5 hover:shadow-lg",
+        "group relative rounded-xl p-px",
+        !disableHover &&
+          "transition-[background,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-lg",
         className,
       )}
       style={
         {
-          // CSS vars expose accent colors to the body's hover state so we
-          // don't have to bake them into class strings.
           "--card-accent": accent,
           "--card-accent-alt": accentAlt,
           background: `linear-gradient(135deg, ${accent}40, transparent 35%, transparent 65%, ${accentAlt}40)`,
         } as React.CSSProperties
       }
     >
-      {/* Hover-only overlay: brightens the gradient border by stacking a
-          higher-opacity copy on top, fading in via opacity transition. */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-        style={{
-          background: `linear-gradient(135deg, ${accent}, transparent 35%, transparent 65%, ${accentAlt})`,
-        }}
-      />
-      <div
-        className={cn(
-          "relative rounded-[calc(theme(borderRadius.xl)-1px)] transition-[background] duration-200",
-          bodyClassName,
-        )}
-        style={{
-          // Subtle radial accent in the top-right corner — uses color-mix
-          // so it adapts to the active theme without hard-coded hex. The
-          // mix percentage jumps on hover via inline CSS var swap below.
-          background: `radial-gradient(at 100% 0%, color-mix(in oklch, ${accent} 8%, var(--color-card)) 0%, var(--color-card) 60%)`,
-        }}
-      >
-        {/* Hover overlay on the body: stronger radial tint that fades in. */}
+      {!disableHover && (
+        // Hover-only overlay: brightens the gradient border by stacking a
+        // higher-opacity copy on top, fading in via opacity transition.
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
           style={{
-            background: `radial-gradient(at 100% 0%, color-mix(in oklch, ${accent} 18%, var(--color-card)) 0%, var(--color-card) 70%)`,
+            background: `linear-gradient(135deg, ${accent}, transparent 35%, transparent 65%, ${accentAlt})`,
           }}
         />
-        <div className="relative">{children}</div>
+      )}
+      <div
+        className={cn(
+          "relative rounded-[calc(theme(borderRadius.xl)-1px)]",
+          !disableHover && "transition-[background] duration-200",
+          bodyClassName,
+        )}
+        style={{
+          background: `radial-gradient(at 100% 0%, color-mix(in oklch, ${accent} 8%, var(--color-card)) 0%, var(--color-card) 60%)`,
+        }}
+      >
+        {!disableHover && (
+          // Hover overlay on the body: stronger radial tint that fades in.
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+            style={{
+              background: `radial-gradient(at 100% 0%, color-mix(in oklch, ${accent} 18%, var(--color-card)) 0%, var(--color-card) 70%)`,
+            }}
+          />
+        )}
+        {/* `h-full` so flex chains in children (e.g. chart cards using
+            `flex flex-col` + `flex-1` for the chart body) don't collapse
+            when bodyClassName carries `h-full`. */}
+        <div className="relative h-full">{children}</div>
       </div>
     </div>
   );

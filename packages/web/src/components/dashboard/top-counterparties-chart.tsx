@@ -23,6 +23,7 @@ export function TopCounterpartiesChart({ stats }: Props) {
   return (
     <GradientCardFrame
       data-testid="dashboard-chart-top-counterparties"
+      disableHover
       accent="var(--color-primary)"
       accentAlt="var(--color-accent)"
       className="h-full"

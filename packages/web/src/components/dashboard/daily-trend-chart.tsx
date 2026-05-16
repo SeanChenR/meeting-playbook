@@ -31,6 +31,7 @@ export function DailyTrendChart({ stats }: Props) {
   return (
     <GradientCardFrame
       data-testid="dashboard-chart-daily-trend"
+      disableHover
       accent="var(--color-primary)"
       accentAlt="var(--color-accent)"
     >

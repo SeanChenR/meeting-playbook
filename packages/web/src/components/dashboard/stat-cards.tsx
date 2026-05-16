@@ -122,6 +122,7 @@ function _StatCell({
   return (
     <GradientCardFrame
       data-testid={testId}
+      disableHover
       accent={accent}
       accentAlt="var(--color-primary)"
       className="h-full"

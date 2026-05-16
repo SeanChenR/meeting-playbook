@@ -23,6 +23,7 @@ export function HourDistributionChart({ stats }: Props) {
   return (
     <GradientCardFrame
       data-testid="dashboard-chart-hour-distribution"
+      disableHover
       accent="var(--color-accent)"
       accentAlt="var(--color-primary)"
       className="h-full"

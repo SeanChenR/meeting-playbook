@@ -65,8 +65,8 @@
       "deltaSuffix": "場"
     },
     "charts": {
-      "top_counterparties": "Top counterparties",
-      "tag_distribution": "Tag 分佈",
+      "top_counterparties": "對方排行",
+      "tag_distribution": "標籤分佈",
       "daily_trend": "日趨勢",
       "hour_distribution": "時段分布",
       "calendar_heatmap": "本月分佈",

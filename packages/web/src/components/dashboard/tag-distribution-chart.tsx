@@ -29,6 +29,7 @@ export function TagDistributionChart({ stats }: Props) {
   return (
     <GradientCardFrame
       data-testid="dashboard-chart-tag-distribution"
+      disableHover
       accent="var(--color-accent)"
       accentAlt="var(--color-primary)"
       className="h-full"

@@ -254,6 +254,29 @@ class DashboardStatsQuery:
         counts_by_hour = {int(r.hour): int(r.cnt) for r in hour_rows}
         hour_distribution = [HourBucket(hour=h, count=counts_by_hour.get(h, 0)) for h in range(24)]
 
+        # Tag distribution — counts distinct meetings per tag for the month.
+        # `meeting_tag` is the slice-17 join table; `tag.user_id` scopes to
+        # the requesting user so we never accidentally surface tags from
+        # other users (would be impossible via FK anyway, but explicit).
+        tag_rows = await self._session.execute(
+            text(
+                """
+                SELECT t.name AS tag, COUNT(DISTINCT mt.meeting_id) AS cnt
+                FROM tag t
+                JOIN meeting_tag mt ON mt.tag_id = t.id
+                JOIN meeting m ON m.id = mt.meeting_id
+                WHERE t.user_id = :uid
+                  AND m.user_id = :uid
+                  AND m.scheduled_start_at >= :start
+                  AND m.scheduled_start_at < :end
+                GROUP BY t.name
+                ORDER BY cnt DESC, t.name ASC
+                """
+            ),
+            {"uid": user_id, "start": month_start, "end": month_end},
+        )
+        tag_distribution = [TagBucket(tag=str(r.tag), count=int(r.cnt)) for r in tag_rows]
+
         return DashboardStats(
             month=_month_str(month_start),
             prev_month=_month_str(prev_month_start),
@@ -264,5 +287,5 @@ class DashboardStatsQuery:
             top_counterparties=top_counterparties,
             daily_trend=daily_trend,
             hour_distribution=hour_distribution,
-            tag_distribution=[],  # S17 placeholder
+            tag_distribution=tag_distribution,
         )

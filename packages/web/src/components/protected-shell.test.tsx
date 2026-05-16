@@ -90,15 +90,29 @@ describe("ProtectedShell NavBar", () => {
     expect(navbar.className).toContain("top-0");
   });
 
-  test("right-cluster contains theme-toggle, avatar, and logout-button", async () => {
+  // Slice-18: theme-toggle / logout-button moved into the UserMenu dropdown
+  // anchored on the avatar. The bar itself only carries the avatar trigger.
+  test("right-cluster exposes the UserMenu trigger (avatar)", async () => {
     await renderWithRouter(
       <ProtectedShell>
         <div />
       </ProtectedShell>,
       { initialEntries: ["/x"], path: "/x" },
     );
-    expect(screen.getByTestId("theme-toggle")).toBeDefined();
+    expect(screen.getByTestId("usermenu-trigger")).toBeDefined();
     expect(screen.getByTestId("user-avatar")).toBeDefined();
-    expect(screen.getByTestId("logout-button")).toBeDefined();
+  });
+
+  test("exposes the two top-level destinations as nav links", async () => {
+    // Slice-18 v2 (Sean revision): home link retired; only meetings + dashboard.
+    await renderWithRouter(
+      <ProtectedShell>
+        <div />
+      </ProtectedShell>,
+      { initialEntries: ["/x"], path: "/x" },
+    );
+    expect(screen.getByTestId("navbar-meetings-link")).toBeDefined();
+    expect(screen.getByTestId("navbar-dashboard-link")).toBeDefined();
+    expect(screen.queryByTestId("navbar-home-link")).toBeNull();
   });
 });

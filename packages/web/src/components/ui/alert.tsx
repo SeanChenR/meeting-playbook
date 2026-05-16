@@ -8,10 +8,12 @@ const alertVariants = cva("relative w-full rounded-md border px-4 py-3 text-sm",
       default: "border-(--color-border) bg-(--color-card) text-(--color-foreground)",
       destructive:
         "border-(--color-destructive)/30 bg-(--color-destructive)/10 text-(--color-destructive)",
-      // Slice-7 round 2: warning = advisory (amber) — more visible than
-      // `default`, less alarming than `destructive`. Used for the headphones
-      // hint and any other non-blocking caution.
-      warning: "border-amber-500/40 bg-amber-50 text-amber-900",
+      // Slice-7 round 2: warning = advisory — more visible than `default`,
+      // less alarming than `destructive`.
+      // Slice-18 follow-up: switch from hard-coded amber-50 / amber-900 to
+      // theme-aware oklch tokens so dark mode reads (--color-accent is
+      // warm-orange under `--primary-hue-dark: 50`).
+      warning: "border-(--color-accent)/40 bg-(--color-accent)/10 text-(--color-foreground)",
       success: "border-(--color-accent)/30 bg-(--color-accent)/10 text-(--color-accent)",
     },
   },

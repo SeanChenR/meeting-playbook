@@ -32,6 +32,7 @@ from meeting_playbook.transcript_edit.router import router as transcript_edit_ro
 from meeting_playbook.calendar.router import router as calendar_router
 from meeting_playbook.chat.router import router as chat_router
 from meeting_playbook.config import get_settings
+from meeting_playbook.dashboard_stats.router import router as dashboard_stats_router
 from meeting_playbook.meetings.router import router as meetings_router
 from meeting_playbook.offline_ingest import pipeline as _offline_ingest_pipeline  # noqa: F401 — auto-registers tus completion handler
 from meeting_playbook.offline_ingest.router import router as offline_ingest_router
@@ -171,6 +172,10 @@ def create_app() -> FastAPI:
             )
         return {"user_id": x_user_id}
 
+    # Mount /api/meetings/stats BEFORE the meetings router; FastAPI matches
+    # routes in registration order and the catch-all `/{meeting_id}` route
+    # on the meetings router would otherwise swallow `/stats`.
+    app.include_router(dashboard_stats_router)
     app.include_router(meetings_router)
     app.include_router(tags_router)
     app.include_router(playbooks_router)

@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { AuthShell } from "../components/auth-shell";
 import { i18n } from "../lib/i18n";
@@ -47,7 +47,7 @@ mock.module("../lib/auth-client", () => ({
   },
 }));
 
-import { Home } from "./home";
+// Slice-18: legacy Home route removed; greeting/eyebrow strings retired.
 import { Signup } from "./signup";
 import { TotpEnroll } from "./totp/enroll";
 import { TotpVerify } from "./totp/verify";
@@ -138,18 +138,4 @@ describe("TotpVerify — i18n", () => {
   });
 });
 
-// ─── Task 3.5: home greeting + interpolation ─────────────────────────────
-describe("Home — i18n", () => {
-  test("renders zh-TW greeting eyebrow + interpolated name", async () => {
-    await wrap(<Home />);
-    await waitFor(() => expect(screen.getByText("已登入")).toBeDefined());
-    expect(screen.getByText(/Hello, Sean/)).toBeDefined();
-  });
-
-  test("renders en greeting eyebrow after changeLanguage('en')", async () => {
-    await i18n.changeLanguage("en");
-    await wrap(<Home />);
-    await waitFor(() => expect(screen.getByText("Signed in")).toBeDefined());
-    expect(screen.getByText(/Hello, Sean/)).toBeDefined();
-  });
-});
+// Slice-18: Home — i18n describe block removed with legacy Home component.

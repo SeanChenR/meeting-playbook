@@ -89,13 +89,69 @@ class MeetingRepository:
         await self._session.refresh(meeting)
         return meeting
 
-    async def list_by_user(self, user_id: str) -> list[Meeting]:
-        # Slice-17: kept for callers that don't need the tag join (e.g. the
-        # rerun runtime). `list_for_user` is the slice-17 entry point that
-        # returns Meeting + tags via selectinload.
-        result = await self._session.execute(
-            select(Meeting).where(Meeting.user_id == user_id).order_by(Meeting.created_at.desc())
-        )
+    async def list_by_user(
+        self,
+        user_id: str,
+        *,
+        scheduled_date: str | None = None,
+        status: str | None = None,
+        pending: bool = False,
+        order: str | None = None,
+        limit: int | None = None,
+    ) -> list[Meeting]:
+        """List meetings for a user with optional home-page filters (slice-18).
+
+        Slice-17 note: `list_for_user` (separate method below) is the
+        tag-aware entry point that returns Meeting + tags via
+        selectinload. This method stays "no tag join" — used by the
+        rerun runtime and any caller that doesn't need tags. All filter
+        params default to None so legacy callers keep working without
+        a signature change.
+
+        - `scheduled_date`: `YYYY-MM-DD` in `Asia/Taipei` — filters by the
+          calendar date of `scheduled_start_at AT TIME ZONE 'Asia/Taipei'`.
+        - `status`: filter by exact meeting status string.
+        - `pending`: when True, return meetings that are `status = 'completed'`
+          AND have no associated `summary` row. Ingest-pending is out of scope
+          (offline-ingest tracks its own state).
+        - `order`: `<field>:<dir>` where field is `created_at`,
+          `scheduled_start_at`, or `updated_at`, and dir is `asc` or `desc`.
+          Default (None) preserves the historical `created_at DESC`.
+        - `limit`: integer cap; `None` means no limit.
+        """
+        stmt = select(Meeting).where(Meeting.user_id == user_id)
+        if scheduled_date is not None:
+            # Filter on the Asia/Taipei calendar date of scheduled_start_at.
+            stmt = stmt.where(
+                text(
+                    "(meeting.scheduled_start_at AT TIME ZONE 'Asia/Taipei')::date"
+                    " = (:scheduled_date)::date"
+                ).bindparams(scheduled_date=scheduled_date)
+            )
+        if status is not None:
+            stmt = stmt.where(Meeting.status == status)
+        if pending:
+            stmt = stmt.where(
+                Meeting.status == "completed",
+                text("NOT EXISTS (SELECT 1 FROM summary WHERE summary.meeting_id = meeting.id)"),
+            )
+
+        allowed_order_fields = {"created_at", "scheduled_start_at", "updated_at"}
+        if order is not None:
+            field, _, direction = order.partition(":")
+            if field not in allowed_order_fields or direction not in {"asc", "desc"}:
+                raise ValueError(f"Unsupported order: {order!r}")
+            # `updated_at` lives on the DB row but is intentionally not on the
+            # ORM mapper; we sort via raw text since the column name is safe
+            # (validated against `allowed_order_fields`).
+            stmt = stmt.order_by(text(f"meeting.{field} {direction.upper()}"))
+        else:
+            stmt = stmt.order_by(Meeting.created_at.desc())
+
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
     async def list_for_user(

@@ -16,9 +16,81 @@
     "backToList": "返回列表",
     "home": "首頁",
     "meetings": "會議",
+    "dashboard": "儀表板",
+    "settings": "設定"
+  },
+  "home": {
+    "today": {
+      "title": "今日會議",
+      "empty": "今天沒有排定會議",
+      "loading": "載入中…",
+      "error": "載入今日會議失敗"
+    },
+    "in_progress": {
+      "title": "進行中錄音",
+      "empty": "目前沒有進行中的錄音",
+      "loading": "載入中…",
+      "error": "載入進行中錄音失敗"
+    },
+    "pending": {
+      "title": "待處理",
+      "empty": "沒有等待處理的項目",
+      "loading": "載入中…",
+      "error": "載入待處理項目失敗"
+    },
+    "recently_edited": {
+      "title": "最近編輯",
+      "empty": "尚無最近編輯的會議",
+      "loading": "載入中…",
+      "error": "載入最近編輯失敗"
+    },
+    "quick_actions": {
+      "title": "Quick Actions",
+      "new_meeting": "新會議",
+      "import_calendar": "從 Calendar 匯入"
+    },
+    "two_factor": {
+      "title": "尚未啟用兩階段驗證",
+      "body": "建議啟用 2FA 以保護你的會議資料。",
+      "cta": "前往安全設定"
+    }
+  },
+  "dashboard": {
+    "title": "儀表板",
+    "stat_cards": {
+      "monthly_meetings": "本月會議數",
+      "average_duration": "平均時長",
+      "total_duration": "總時長",
+      "vs_previous": "vs 上月",
+      "deltaSuffix": "場"
+    },
+    "charts": {
+      "top_counterparties": "對方排行",
+      "tag_distribution": "標籤分佈",
+      "daily_trend": "日趨勢",
+      "hour_distribution": "時段分布",
+      "calendar_heatmap": "本月分佈",
+      "totalLabel": "共 {{count}} 場",
+      "dayLabel": "{{day}} 日",
+      "hourLabel": "{{hour}}",
+      "dayCellTitle": "{{day}} 日：{{count}} 場",
+      "legendLow": "少",
+      "legendHigh": "多"
+    },
+    "period": {
+      "previousMonth": "上一個月",
+      "nextMonth": "下一個月"
+    },
+    "empty": "此期間尚無資料",
+    "loading": "載入中…",
+    "error": "載入儀表板資料失敗"
+  },
+  "user_menu": {
+    "trigger": "開啟使用者選單",
     "settings": "設定",
-    "settingsTags": "標籤",
-    "settingsVoice": "聲紋"
+    "locale": "切換語系",
+    "theme": "切換主題",
+    "logout": "登出"
   },
   "auth": {
     "shell": {
@@ -452,6 +524,69 @@
       "permissionDenied": "瀏覽器麥克風權限被拒，請開啟後重試。",
       "previouslyEnrolled": "聲紋已登錄（最後更新於 {{timestamp}}）",
       "reRecordToOverwrite": "重新錄製覆蓋"
+    },
+    "security": {
+      "title": "安全設定",
+      "intro": "管理兩階段驗證（2FA）以保護你的帳號。",
+      "enroll": "啟用 2FA",
+      "enabledTitle": "兩階段驗證已啟用",
+      "enabledBody": "登入時將需要驗證器產生的一次性密碼，帳號保護已上線。",
+      "statusEnabled": "已啟用",
+      "statusDisabled": "尚未啟用",
+      "oauthOnlyHint": "你目前以 Google 登入，2FA 由 Google 帳號管理。如需啟用，請至 Google 安全性設定。"
+    },
+    "nav": {
+      "menu_entry": "設定",
+      "profile": "個人資料",
+      "security": "安全",
+      "integrations": "外部整合",
+      "voice": "聲紋",
+      "tags": "標籤",
+      "preferences": "偏好",
+      "data": "資料"
+    },
+    "profile": {
+      "title": "個人資料",
+      "subhead": "目前登入的帳號資訊（唯讀）。",
+      "name_label": "名稱",
+      "email_label": "Email",
+      "verifiedLabel": "Email 已驗證",
+      "accountTitle": "帳號與身分提供者",
+      "accountSubhead": "已連結的登入方式與帳號建立時間。",
+      "providerLabel": "登入方式",
+      "providerCredential": "Email + 密碼",
+      "verificationLabel": "Email 驗證",
+      "verifiedYes": "已驗證",
+      "verifiedNo": "尚未驗證",
+      "memberSinceLabel": "建立於"
+    },
+    "integrations": {
+      "title": "外部整合",
+      "subhead": "管理與外部服務的連線。"
+    },
+    "preferences": {
+      "title": "偏好",
+      "subhead": "個人化使用體驗。",
+      "language_label": "語系",
+      "theme_label": "主題",
+      "asr_label": "預設 ASR Provider",
+      "asr_value": "Qwen3-ASR",
+      "coming_soon": "即將推出"
+    },
+    "data": {
+      "title": "資料管理",
+      "subhead": "錄音保留與帳號資料控制。",
+      "retention_label": "錄音保留期",
+      "retentionLabel": "錄音保留期",
+      "retentionBody": "30 天後自動清除錄音檔，逐字稿與摘要保留",
+      "retention_value": "30 天",
+      "export_all": "匯出全部會議",
+      "exportBody": "下載所有會議的 playbook、逐字稿與摘要打包檔",
+      "delete_account": "刪除帳號",
+      "deleteBody": "永久移除帳號、會議與所有相關資料，無法復原",
+      "coming_soon_title": "即將推出",
+      "coming_soon_body": "此功能正在開發中，敬請期待。",
+      "coming_soon_close": "了解"
     }
   },
   "transcript": {
@@ -536,6 +671,9 @@
     "common": {
       "unknown": "發生未知錯誤",
       "internal_error": "伺服器錯誤，請稍後再試"
+    },
+    "stats": {
+      "invalid_range": "未知的時間範圍，請選擇本週 / 本月 / 過去 6 個月"
     },
     "auth": {
       "gateway_bypass": "請從正確的入口登入",

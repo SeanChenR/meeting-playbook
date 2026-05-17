@@ -96,33 +96,37 @@ def test_validate_upload_rejects_non_whitelisted(content_type, filename):
     assert exc_info.value.error_code == "attachment.unsupported_format"
 
 
-def test_validate_upload_rejects_sixth_attachment_with_too_many():
-    """When the meeting already has 5 active attachments, the 6th is rejected."""
+def test_validate_upload_rejects_eleventh_attachment_with_too_many():
+    """When the meeting already has 10 active attachments, the 11th is rejected.
+
+    Per design D12 (slice-24), per-meeting quota aligns with staging quota
+    (10 files / 60 MiB) so users see a consistent cap across both dropzones.
+    """
     from meeting_playbook.attachments.validation import (
         AttachmentValidationError,
         validate_upload,
     )
 
-    existing = [_Existing(bytes=1024) for _ in range(5)]
+    existing = [_Existing(bytes=1024) for _ in range(10)]
     with pytest.raises(AttachmentValidationError) as exc_info:
         validate_upload(
             content_type="application/pdf",
-            filename="sixth.pdf",
+            filename="eleventh.pdf",
             declared_bytes=1024,
             existing_attachments=existing,
         )
     assert exc_info.value.error_code == "attachment.too_many"
 
 
-def test_validate_upload_rejects_when_cumulative_bytes_exceed_30_mib():
-    """Sum of existing + new bytes > 30 MiB → quota_exceeded."""
+def test_validate_upload_rejects_when_cumulative_bytes_exceed_60_mib():
+    """Sum of existing + new bytes > 60 MiB → quota_exceeded (design D12)."""
     from meeting_playbook.attachments.validation import (
         AttachmentValidationError,
         validate_upload,
     )
 
-    # 3 existing rows totalling 28 MiB; new 3 MiB upload pushes to 31 MiB.
-    existing = [_Existing(bytes=int(28 * 1024 * 1024 / 3)) for _ in range(3)]
+    # 3 existing rows totalling 58 MiB; new 3 MiB upload pushes to 61 MiB.
+    existing = [_Existing(bytes=int(58 * 1024 * 1024 / 3)) for _ in range(3)]
     with pytest.raises(AttachmentValidationError) as exc_info:
         validate_upload(
             content_type="application/pdf",
@@ -133,15 +137,15 @@ def test_validate_upload_rejects_when_cumulative_bytes_exceed_30_mib():
     assert exc_info.value.error_code == "attachment.quota_exceeded"
 
 
-def test_validate_upload_quota_boundary_exactly_30_mib_accepted():
-    """A new file whose total reaches exactly 30 MiB is accepted (boundary)."""
+def test_validate_upload_quota_boundary_exactly_60_mib_accepted():
+    """A new file whose total reaches exactly 60 MiB is accepted (boundary)."""
     from meeting_playbook.attachments.validation import validate_upload
 
-    existing = [_Existing(bytes=20 * 1024 * 1024)]  # 20 MiB
+    existing = [_Existing(bytes=40 * 1024 * 1024)]  # 40 MiB
     kind = validate_upload(
         content_type="application/pdf",
         filename="boundary.pdf",
-        declared_bytes=10 * 1024 * 1024,  # +10 MiB → exactly 30 MiB
+        declared_bytes=20 * 1024 * 1024,  # +20 MiB → exactly 60 MiB
         existing_attachments=existing,
     )
     assert kind == "pdf"
@@ -232,8 +236,8 @@ def test_validate_staging_upload_rejects_unsupported_mime():
     assert exc_info.value.error_code == "attachment.unsupported_format"
 
 
-def test_validate_staging_upload_rejects_single_file_over_30_mib():
-    """Per-file size cap (30 MiB) still applies to staging uploads."""
+def test_validate_staging_upload_rejects_single_file_over_60_mib():
+    """Per-file size cap (60 MiB, aligned with per-meeting per D12) applies to staging."""
     from meeting_playbook.attachments.validation import (
         AttachmentValidationError,
         validate_staging_upload,
@@ -243,7 +247,7 @@ def test_validate_staging_upload_rejects_single_file_over_30_mib():
         validate_staging_upload(
             content_type="application/pdf",
             filename="huge.pdf",
-            declared_bytes=31 * 1024 * 1024,
+            declared_bytes=61 * 1024 * 1024,
             staged_count=0,
             staged_bytes=0,
         )

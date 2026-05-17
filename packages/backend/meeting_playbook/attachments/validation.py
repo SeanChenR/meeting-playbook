@@ -6,8 +6,12 @@ byte quota":
 
   (1) Content-Type ∉ mime whitelist AND extension ∉ extension whitelist
       → AttachmentValidationError("attachment.unsupported_format").
-  (2) ≥ 5 active rows for this meeting → "attachment.too_many".
-  (3) sum(existing bytes) + new bytes > 30 MiB → "attachment.quota_exceeded".
+  (2) ≥ 10 active rows for this meeting → "attachment.too_many".
+  (3) sum(existing bytes) + new bytes > 60 MiB → "attachment.quota_exceeded".
+
+The 10 / 60 MiB caps were aligned with the per-user staging quota in slice-24
+(design D12) — see openspec/specs/meeting-attachment/spec.md "Upload validation"
+for the requirement text. Earlier values were 5 / 30 MiB (slice-20a).
 
 When validation passes, the function returns the inferred `kind`:
   - mime first (per content_type whitelist mapping)
@@ -22,12 +26,12 @@ from typing import Final, Literal, Protocol
 AttachmentKind = Literal["image", "pdf", "docx", "text", "markdown"]
 
 
-MAX_ATTACHMENTS_PER_MEETING: Final[int] = 5
-MAX_BYTES_PER_MEETING: Final[int] = 30 * 1024 * 1024  # 30 MiB
-# Slice-24 design D6: per-user staging quota is 2x the per-meeting limit
-# so a user can prep several meetings' worth of files at once. Single-file
-# size cap stays the same (MAX_BYTES_PER_MEETING) so a 31 MiB file is
-# rejected regardless of whether it would fit in the cumulative budget.
+MAX_ATTACHMENTS_PER_MEETING: Final[int] = 10
+MAX_BYTES_PER_MEETING: Final[int] = 60 * 1024 * 1024  # 60 MiB
+# Slice-24 design D12: per-user staging quota equals the per-meeting cap
+# so users see a consistent "10 / 60 MiB" mental model across both dropzones.
+# Single-file size cap stays the same (MAX_BYTES_PER_MEETING) so a single
+# 61 MiB file is rejected regardless of cumulative budget headroom.
 MAX_STAGED_ATTACHMENTS_PER_USER: Final[int] = 10
 MAX_STAGED_BYTES_PER_USER: Final[int] = 60 * 1024 * 1024  # 60 MiB
 
@@ -172,7 +176,7 @@ def validate_staging_upload(
     Same whitelist + MIME → kind mapping as `validate_upload`, but the
     quota check is per-user (slice-24 design D6 — 10 files / 60 MiB)
     rather than per-meeting. A single file still cannot exceed
-    `MAX_BYTES_PER_MEETING` (30 MiB).
+    `MAX_BYTES_PER_MEETING` (60 MiB; aligned with per-meeting by D12).
 
     `staged_count` and `staged_bytes` are the user's current active
     staged totals BEFORE this upload — the handler should call

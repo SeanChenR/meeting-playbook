@@ -56,6 +56,23 @@ S24 補上 staging 層 ——「先上傳到暫存、建立會議時一併綁定
     DELETE
   - 上傳進度顯示、whitelist + quota 錯誤訊息透過 `localizedErrorMessage`
     本地化
+  - **批次上傳**：`<input multiple>` + drag-drop 支援多 file；若 N 個 file
+    會超過剩餘 quota（`已 staged + N > 10` 或 `已 staged bytes + sum > 60 MiB`），
+    前端 truncate 到能塞下的前 K 個，inline 顯示「拖入 N 個，配額只上傳前 K 個」
+    warning。Backend per-file quota 仍然會 enforce（雙保險）
+  - **Quota counter**：dropzone 內嵌「`X / 10 個 · Y / 60 MiB`」即時 counter，
+    從 staged rows 直接算；達 10 個或 60 MiB 時 dropzone disabled + 顯示
+    「已達暫存區上限」
+- **Backend：per-meeting attachment quota 對齊 staging quota（10 個 / 60 MiB）**
+  - `MAX_ATTACHMENTS_PER_MEETING` 從 `5` → `10`、`MAX_BYTES_PER_MEETING`
+    從 `30 MiB` → `60 MiB`，跟 staging 上限一致
+  - 動機：UX 一致性 —— `/meetings/new` 的 staging dropzone 跟
+    `/meetings/{id}` 的既有 attachment dropzone 兩個 dropzone 都顯示「上限」訊號，
+    使用者沒理由要記「這裡 5 個、那裡 10 個」。對齊後 staging 跟 per-meeting
+    都是 10 個 / 60 MiB
+  - i18n: `errors.attachment.too_many`（5 → 10）、`errors.attachment.quota_exceeded`
+    （30MB → 60 MiB）、`meetings.detail.attachments.hintLimit`（5 / 30MB → 10 / 60 MiB）
+    三個 key 各兩份 locale 同步
 - **Frontend：`/meetings/new` 換掉 invisible picker**
   - 移除既有 `AttachmentPicker` empty-state-only 元件
   - 改 mount `<StagedAttachmentDropzone>` —— 一律 render（不論有沒有 staged）

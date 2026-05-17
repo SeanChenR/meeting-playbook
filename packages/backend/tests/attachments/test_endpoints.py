@@ -304,12 +304,13 @@ def test_upload_bmp_is_rejected_unsupported_format(_migrated_db_url, tmp_path, m
         assert list(meeting_dir.iterdir()) == []
 
 
-def test_upload_35mb_docx_is_rejected_quota_exceeded(_migrated_db_url, tmp_path, monkeypatch):
+def test_upload_65mb_docx_is_rejected_quota_exceeded(_migrated_db_url, tmp_path, monkeypatch):
+    """Per design D12 the per-meeting byte cap is 60 MiB; a 65 MiB upload is rejected."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_seed_user_meeting(_async_url(_migrated_db_url), user_id="u_q", meeting_id="m_q"))
 
     client = _build_client(_migrated_db_url, tmp_path, monkeypatch)
-    body = _build_payload(35 * 1024 * 1024)
+    body = _build_payload(65 * 1024 * 1024)
     resp = client.post(
         "/api/meetings/m_q/attachments",
         headers={"X-User-Id": "u_q"},
@@ -328,12 +329,13 @@ def test_upload_35mb_docx_is_rejected_quota_exceeded(_migrated_db_url, tmp_path,
         assert list(meeting_dir.iterdir()) == []
 
 
-def test_upload_sixth_file_is_rejected_too_many(_migrated_db_url, tmp_path, monkeypatch):
+def test_upload_eleventh_file_is_rejected_too_many(_migrated_db_url, tmp_path, monkeypatch):
+    """Per design D12 the per-meeting file cap is 10; the 11th file is rejected."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_seed_user_meeting(_async_url(_migrated_db_url), user_id="u_6", meeting_id="m_6"))
 
     client = _build_client(_migrated_db_url, tmp_path, monkeypatch)
-    for i in range(5):
+    for i in range(10):
         resp = client.post(
             "/api/meetings/m_6/attachments",
             headers={"X-User-Id": "u_6"},
@@ -344,7 +346,7 @@ def test_upload_sixth_file_is_rejected_too_many(_migrated_db_url, tmp_path, monk
     resp = client.post(
         "/api/meetings/m_6/attachments",
         headers={"X-User-Id": "u_6"},
-        files={"file": ("sixth.txt", b"hi" * 100, "text/plain")},
+        files={"file": ("eleventh.txt", b"hi" * 100, "text/plain")},
     )
     assert resp.status_code == 422
     assert resp.json()["error_code"] == "attachment.too_many"

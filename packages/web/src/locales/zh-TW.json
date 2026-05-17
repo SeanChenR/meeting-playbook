@@ -243,7 +243,9 @@
         "dropzone_label": "拖檔到這裡上傳到暫存區",
         "empty_hint": "尚未暫存任何附件，拖檔到下方即可上傳",
         "remove_button": "移除",
-        "uploading_label": "上傳中… {{percent}}%"
+        "uploading_label": "上傳中… {{percent}}%",
+        "counter_label": "{{used}} / {{max}} 個 · {{bytesUsed}} / {{bytesMax}}",
+        "at_limit": "已達暫存區上限（10 個 / 60 MiB）"
       }
     },
     "edit": {
@@ -811,12 +813,13 @@
     },
     "attachment": {
       "unsupported_format": "檔案格式不支援（僅接受圖片 / PDF / Word / 純文字 / Markdown）",
-      "too_many": "每場會議最多可上傳 5 個附件",
-      "quota_exceeded": "已超過每場會議 30MB 上限",
+      "too_many": "每場會議最多可上傳 10 個附件",
+      "quota_exceeded": "已超過每場會議 60 MiB 上限",
       "expired": "附件已過期或不存在",
       "not_found": "找不到此附件",
       "not_attachable": "選取的附件目前無法附加到這場會議（可能已被別場會議使用或不屬於你）",
       "staging_quota_exceeded": "暫存附件已達上限（10 個或 60 MiB），請先移除舊的再上傳",
+      "staging_batch_truncated": "拖入 {{dropped}} 個檔，配額只上傳前 {{accepted}} 個",
       "invalid_status_filter": "不支援的附件 status 查詢值",
       "uploadFailed": "上傳失敗，請稍後再試",
       "network_error": "上傳過程網路錯誤，請重試"
@@ -829,7 +832,7 @@
   },
   "attachments": {
     "heading": "附件",
-    "hintLimit": "最多 5 個檔案，30MB 上限",
+    "hintLimit": "最多 10 個檔案，60 MiB 上限",
     "uploadButton": "選擇檔案",
     "dropzoneLabel": "拖檔到這裡上傳",
     "emptyState": "尚未上傳附件",

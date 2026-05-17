@@ -58,4 +58,23 @@ describe("localizedErrorMessage", () => {
       "These meetings are already linked",
     );
   });
+
+  test("attachment.staging_batch_truncated interpolates dropped + accepted counts (zh-TW)", () => {
+    expect(
+      localizedErrorMessage("attachment.staging_batch_truncated", i18n.t.bind(i18n), {
+        dropped: 5,
+        accepted: 2,
+      }),
+    ).toBe("拖入 5 個檔，配額只上傳前 2 個");
+  });
+
+  test("attachment.staging_batch_truncated interpolates dropped + accepted counts (en)", async () => {
+    await i18n.changeLanguage("en");
+    expect(
+      localizedErrorMessage("attachment.staging_batch_truncated", i18n.t.bind(i18n), {
+        dropped: 5,
+        accepted: 2,
+      }),
+    ).toBe("Dropped 5 files, only the first 2 fit the staging quota");
+  });
 });

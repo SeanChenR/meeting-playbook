@@ -70,6 +70,57 @@ function _formatBytes(bytes: number | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const STAGING_MAX_COUNT = 10;
+const STAGING_MAX_BYTES = 60 * 1024 * 1024;
+
+/**
+ * Skip-and-continue (accept-what-fits) truncation per design D10.
+ *
+ * Iterate dropped files in drop order. For each file, accept iff
+ *   running_count + 1 <= maxCount AND running_bytes + file.size <= maxBytes
+ * Otherwise skip (count toward `dropped`) and continue — a large file that
+ * would overflow does NOT short-circuit subsequent small files that still fit.
+ */
+export function _truncateToQuota(
+  files: readonly File[],
+  currentCount: number,
+  currentBytes: number,
+  maxCount: number = STAGING_MAX_COUNT,
+  maxBytes: number = STAGING_MAX_BYTES,
+): { accepted: File[]; dropped: number } {
+  const accepted: File[] = [];
+  let count = currentCount;
+  let bytes = currentBytes;
+  for (const f of files) {
+    if (count + 1 <= maxCount && bytes + f.size <= maxBytes) {
+      accepted.push(f);
+      count += 1;
+      bytes += f.size;
+    }
+  }
+  return { accepted, dropped: files.length - accepted.length };
+}
+
+/**
+ * Derive `{ count, bytes, atLimit }` from the current staged rows per design D11.
+ *
+ * `atLimit` is true when either dimension hits the cap. When true, the dropzone
+ * disables drop / file-pick affordances and renders an at-limit hint instead
+ * of the normal empty/dropzone label. Backend per-file enforcement remains the
+ * authoritative gate — this is a UX optimization.
+ */
+export function _computeUsage(
+  rows: readonly PendingAttachment[],
+  maxCount: number = STAGING_MAX_COUNT,
+  maxBytes: number = STAGING_MAX_BYTES,
+): { count: number; bytes: number; atLimit: boolean } {
+  const count = rows.length;
+  const bytes = rows.reduce((sum, r) => sum + (r.bytes ?? 0), 0);
+  return { count, bytes, atLimit: count >= maxCount || bytes >= maxBytes };
+}
+
+const STAGING_MAX_BYTES_LABEL = `${STAGING_MAX_BYTES / (1024 * 1024)} MiB`;
+
 export function StagedAttachmentDropzone({
   selectedIds,
   onChange,
@@ -89,6 +140,7 @@ export function StagedAttachmentDropzone({
   });
 
   const rows: PendingAttachment[] = listQuery.data ?? [];
+  const usage = _computeUsage(rows);
 
   // Per design D9: `/meetings/new` submit sends every staged row's id.
   // Sync `selectedIds` to the live staged list — any drift (e.g. an
@@ -146,12 +198,42 @@ export function StagedAttachmentDropzone({
     },
   });
 
-  function _handleFiles(files: FileList | null) {
+  async function _handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const file = files[0];
-    if (!file) return;
     setErrorMessage(null);
-    uploadMutation.mutate(file);
+    const currentCount = rows.length;
+    const currentBytes = rows.reduce((sum, r) => sum + (r.bytes ?? 0), 0);
+    const droppedFiles = Array.from(files);
+    const { accepted } = _truncateToQuota(droppedFiles, currentCount, currentBytes);
+    const truncated = droppedFiles.length > accepted.length;
+    // Sequential upload — one POST completes before the next starts so the
+    // shared progress UI is meaningful, and the server isn't slammed with
+    // 10 parallel multipart requests.
+    let perFileFailed = false;
+    for (const file of accepted) {
+      try {
+        await uploadMutation.mutateAsync(file);
+      } catch {
+        // Per-file error already surfaced via mutation's onError handler
+        // (sets errorMessage). Stop the batch so the user can address it
+        // rather than racing through the rest.
+        perFileFailed = true;
+        break;
+      }
+    }
+    // Set the batch-wide truncation warning AFTER the loop — each successful
+    // upload's onSuccess clears errorMessage, which would otherwise wipe the
+    // warning mid-batch. A per-file failure already owns the error slot.
+    // `dropped` in i18n params is the total drop-action count (per spec
+    // scenario "GIVEN drop 5 files, message names `dropped: 5, accepted: 2`").
+    if (truncated && !perFileFailed) {
+      setErrorMessage(
+        localizedErrorMessage("attachment.staging_batch_truncated", t, {
+          dropped: droppedFiles.length,
+          accepted: accepted.length,
+        }),
+      );
+    }
   }
 
   return (
@@ -207,16 +289,30 @@ export function StagedAttachmentDropzone({
         </Alert>
       )}
 
-      {/* Dropzone always renders, regardless of whether staged rows exist */}
+      {/* Quota counter — always rendered so user knows headroom at a glance. */}
+      <p data-testid="staged-counter" className="text-xs text-(--color-muted-foreground)">
+        {t("meetings.new.staging.counter_label", {
+          used: usage.count,
+          max: STAGING_MAX_COUNT,
+          bytesUsed: _formatBytes(usage.bytes),
+          bytesMax: STAGING_MAX_BYTES_LABEL,
+        })}
+      </p>
+
+      {/* Dropzone always renders, regardless of whether staged rows exist.
+          When `usage.atLimit`, drop / pick affordances are disabled and an
+          at-limit hint replaces the normal label (design D11). */}
       <Card>
         <CardContent
           data-testid="staged-dropzone-area"
           onDragOver={(e) => {
+            if (usage.atLimit) return;
             e.preventDefault();
             setDragOver(true);
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
+            if (usage.atLimit) return;
             e.preventDefault();
             setDragOver(false);
             _handleFiles(e.dataTransfer.files);
@@ -227,14 +323,25 @@ export function StagedAttachmentDropzone({
               : "flex flex-col items-center justify-center gap-2 border-2 border-dashed border-(--color-border) p-6 text-center"
           }
         >
-          <p className="text-sm text-(--color-muted-foreground)">
-            {rows.length === 0
-              ? t("meetings.new.staging.empty_hint")
-              : t("meetings.new.staging.dropzone_label")}
-          </p>
+          {usage.atLimit ? (
+            <p
+              data-testid="staged-at-limit-hint"
+              className="text-sm text-(--color-muted-foreground)"
+            >
+              {t("meetings.new.staging.at_limit")}
+            </p>
+          ) : (
+            <p className="text-sm text-(--color-muted-foreground)">
+              {rows.length === 0
+                ? t("meetings.new.staging.empty_hint")
+                : t("meetings.new.staging.dropzone_label")}
+            </p>
+          )}
           <input
             ref={inputRef}
             type="file"
+            multiple
+            disabled={usage.atLimit}
             data-testid="staged-file-input"
             className="sr-only"
             onChange={(e) => _handleFiles(e.target.files)}
@@ -242,6 +349,7 @@ export function StagedAttachmentDropzone({
           <button
             type="button"
             data-testid="staged-upload-button"
+            disabled={usage.atLimit}
             onClick={() => inputRef.current?.click()}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >

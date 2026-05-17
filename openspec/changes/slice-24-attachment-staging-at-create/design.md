@@ -107,12 +107,15 @@ staging**、row 的 `meeting_id` 重設回 NULL。
 
 ### D6. Per-user staging quota：10 files / 60 MiB
 
-選擇：每個 user 同時可有 10 files / 60 MiB staged（per-meeting 上限的 2x）。
+選擇：每個 user 同時可有 10 files / 60 MiB staged。**D12（後續決策）把
+per-meeting quota 也對齊到 10 / 60，所以 staging 跟 per-meeting 是同一組數字、
+維度不交叉**（staging = 「user 此刻的暫存區大小」、per-meeting = 「單場
+meeting 累計附件量」）。
 超過則 422 `attachment.staging_quota_exceeded`。
 
 **理由**
 - 使用者可能同時準備多場會議的素材（calendar 預覽好幾場一次處理）
-- 2x 一邊不至於讓 disk 失控、一邊保留實用空間
+- 60 MiB / 10 files 對 reference 文件（PDF、screenshot）是寬鬆的上限
 - single-user app，沒有 multi-tenant 公平性顧慮
 
 **Alternative considered**：staging 無上限，靠 24h cleanup 控量 —— 否決，
@@ -154,6 +157,77 @@ presentational sub-component（後續優化）。
 - 已 staged = user 已表達意圖
 - 少一層 mental overhead
 - 跟「拖檔就是要附加」的直覺一致
+
+### D10. Dropzone batch upload 採前端 truncation + sequential POST
+
+選擇：拖入 / 多選的 N 個 file 由前端先做 quota truncation。
+**演算法是 skip-and-continue（accept-what-fits）：iterate files in drop order，
+逐個試算「加上去後 count 是否 > 10、bytes 是否 > 60 MiB」；不合就跳過該檔、
+繼續看下一個；合就收進 accepted 並累加 running count / bytes**。
+任何被 skip 的檔都計入 `dropped` 計數，最後 `dropped > 0` 就 inline 顯示
+「拖入 N 個檔，配額只上傳前 K 個」warning（N = files.length, K = accepted.length）。
+送出去的 K 個檔走 sequential `POST /api/attachments/staging`
+（一個跑完才下一個），共用同一個 upload-progress UI。
+
+**例子**：已 staged 1 個 58 MiB 檔，拖入 `[3 MiB, 1 MiB]`（drop-action total = 2）：
+- iter 0：3 MiB → `58 + 3 = 61 > 60` → skip
+- iter 1：1 MiB → `58 + 1 = 59 ≤ 60` 且 count 2 ≤ 10 → accept
+- 結果：accepted = `[1 MiB 那個]`（K = 1）；warning 顯示「拖入 2 個檔，配額只上傳前 1 個」
+  （`dropped` i18n param = drop-action total = 2、`accepted` = 1）
+
+**理由**
+- 跟既有 per-file backend route 完全相容，**無需新 endpoint 或 backend 改動**
+- Truncation 給使用者清晰 feedback —— 比讓 backend 接收 11 個然後第 11 個
+  422 失敗（前 10 個還是會佔配額）更好
+- Sequential 比 parallel 易讀 progress（單一進度條照舊），且避免 server
+  同時收 10 個 multipart request 的 IO 壓力
+- Truncation 是**前端優化**，不取代 backend per-file enforcement —
+  backend `validate_staging_upload` 仍會在每個 POST 檢查 quota（雙保險、
+  跟 D6 一致）
+
+**Alternative considered**：parallel `Promise.allSettled` — 否決，
+progress bar UI 需要重設計成 per-file rows，scope 大；批次 3-5 個檔
+sequential 用時 ≈ 2-5s，可接受。
+
+### D11. Quota counter 直接從 staged list 計算、達上限即 disable dropzone
+
+選擇：dropzone 內嵌 `<used>/10 個 · <bytesUsed>/60 MiB` counter，從
+`rows` 直接 derive（count + reduce bytes）。`used === 10` 或
+`bytesUsed >= 60 * 1024 * 1024` 時，dropzone 的 drop-area + file-input button
+都標 `disabled` + 顯示「已達暫存區上限」hint。
+
+**理由**
+- 「為什麼上傳不了」變成「dropzone 一眼就看得到」，避開使用者拖檔之後
+  才看到 quota 422 的 dead-end UX
+- Counter 從 client cache 算（`useQuery(pendingAttachmentsQueryOptions)`），
+  無新 API call
+- Disabled state 不取代 backend 422 enforcement —— `addEventListener('drop')`
+  即使被略過，backend 仍會擋
+
+**Alternative considered**：counter 從 backend `GET /api/attachments/quota`
+之類新 endpoint 拿 —— 否決，多一輪 round-trip 沒價值；client 已有 list
+就夠算。
+
+### D12. Per-meeting attachment quota 對齊 staging quota（10 個 / 60 MiB）
+
+選擇：把既有 `MAX_ATTACHMENTS_PER_MEETING = 5` 提高到 `10`、
+`MAX_BYTES_PER_MEETING = 30 MiB` 提高到 `60 MiB`，跟 D6 的 staging quota
+完全對齊。原本 D6 的「staging = per-meeting × 2」rationale（user 同時準備
+多場 meeting）改寫成「per-meeting = staging = 10 個 / 60 MiB，user 一次
+上傳的經驗值上限」。
+
+**理由**
+- UX 一致性：在 `/meetings/new` 看到「10 / 10 個 · 60 / 60 MiB」counter、
+  在 `/meetings/{id}` 卻 hit「最多 5 個」的 422 → 使用者沒理由背兩組數字
+- 「在哪上傳跟結果上限該一樣」是直覺的 mental model；原本 2x 設計只服務
+  「同時準備多場 meeting」這個 edge case，但 UI 沒呈現這個 design intent
+- Disk 影響可控：60 MiB / meeting × 平常 meeting 數 ≪ 100 GB 級的 audio
+  recording disk usage（recording 才是 disk 主消費者）
+
+**Trade-off**：對「每場 meeting 只放少量 reference 文件」場景 over-provision，
+但這不傷使用者 —— 只是上限沒被打到。原 D6「staging = per-meeting × 2」
+intent 被 D12 取代後，staging quota 的 rationale 改為「per-user 一次性
+作業空間」，跟 per-meeting 維度互不交叉。
 
 ## Risks / Trade-offs
 
@@ -227,6 +301,15 @@ SET NOT NULL 會炸）
 - `attachments-api.ts` 新增 `uploadStagedAttachment`、
   `deleteStagedAttachment`，既有 `listPendingAttachments` 行為不變但現在
   接到真實 endpoint
+- Dropzone 的 `<input type="file">` 標 `multiple`；drop / pick N 個 file
+  時，若 `current_count + N > 10` 或 `current_bytes + Σnew_bytes > 60 * 1024 * 1024`，
+  只送前 K 個（最多塞下的數量）、跳過其餘、inline 顯示 `staging.batch_truncated`
+  warning（含 dropped N、accepted K 兩個變數）
+- Dropzone 永遠 render 一個 counter `<used>/10 個 · <bytesUsed>/60 MiB`
+  derived from `rows`；`used === 10` 或 `bytesUsed >= 60 * 1024 * 1024`
+  時 drop-area + upload button `disabled` + render `staging.at_limit` hint
+- Sequential upload：批次內每個 POST 都是 `await uploadStagedAttachment(file)`
+  跑完才下一個；單一 progress bar 顯示「當前檔 X / 總共 N · {percent}%」
 
 ## Scope Boundaries
 

@@ -243,7 +243,9 @@
         "dropzone_label": "Drop files here to stage them",
         "empty_hint": "No staged attachments yet — drop files below to upload",
         "remove_button": "Remove",
-        "uploading_label": "Uploading… {{percent}}%"
+        "uploading_label": "Uploading… {{percent}}%",
+        "counter_label": "{{used}} / {{max}} files · {{bytesUsed}} / {{bytesMax}}",
+        "at_limit": "Staging limit reached (10 files / 60 MiB)"
       }
     },
     "edit": {
@@ -811,12 +813,13 @@
     },
     "attachment": {
       "unsupported_format": "Unsupported file type (accepts image / PDF / Word / text / markdown)",
-      "too_many": "Each meeting allows at most 5 attachments",
-      "quota_exceeded": "Per-meeting 30MB quota exceeded",
+      "too_many": "Each meeting allows at most 10 attachments",
+      "quota_exceeded": "Per-meeting 60 MiB quota exceeded",
       "expired": "Attachment has expired or is unavailable",
       "not_found": "Attachment not found",
       "not_attachable": "The selected attachment can't be attached (it may already belong to another meeting or to a different user)",
       "staging_quota_exceeded": "Staged attachments at quota (10 files or 60 MiB) — remove some before uploading",
+      "staging_batch_truncated": "Dropped {{dropped}} files, only the first {{accepted}} fit the staging quota",
       "invalid_status_filter": "Unsupported attachment status filter",
       "uploadFailed": "Upload failed; please try again",
       "network_error": "Network error during upload; please retry"
@@ -829,7 +832,7 @@
   },
   "attachments": {
     "heading": "Attachments",
-    "hintLimit": "Max 5 files, 30MB total",
+    "hintLimit": "Max 10 files, 60 MiB total",
     "uploadButton": "Choose files",
     "dropzoneLabel": "Drop files here to upload",
     "emptyState": "No attachments yet",

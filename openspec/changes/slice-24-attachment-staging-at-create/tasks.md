@@ -182,3 +182,98 @@
       backend pytest → web bun test。
       **驗證**：backend pass count 比 main 多至少 12 個（new staging + attach flow + retention + validation + config tests）、
       web pass count 比 main 多至少 7 個（new dropzone + api client tests + new.tsx）、0 fail。
+
+## 11. Frontend：Dropzone batch upload + quota counter (pre-merge UX expansion)
+
+> 涵蓋 spec requirement「Frontend StagedAttachmentDropzone uploads to staging and lists current staged」新加的 multi-file / truncation / counter / at-limit 行為（meeting-attachment）。
+> 對應 design 決策「D10. Dropzone batch upload 採前端 truncation + sequential POST」與「D11. Quota counter 直接從 staged list 計算、達上限即 disable dropzone」。
+> **Backend 不動** —— per-file `validate_staging_upload` 已在 task 2.2 落地、繼續是 quota 真相來源；truncation 純前端 UX 優化。
+
+- [x] 11.1 `packages/web/src/components/staged-attachment-dropzone.tsx` —— 批次上傳：
+      `<input type="file">` 加 `multiple` attribute；
+      `_handleFiles(files: FileList)` 從只取 `files[0]` 改成 `Array.from(files)` 處理整批；
+      新加純函式 `_truncateToQuota(files, currentCount, currentBytes, maxCount=10, maxBytes=60*1024*1024) -> { accepted: File[], dropped: number }`：
+      **skip-and-continue 演算法** —— iterate files in drop order，維護 running `count` 跟 `bytes`；
+      每個 file 試算「`count + 1 <= maxCount` 且 `bytes + file.size <= maxBytes`」，
+      若兩條件都滿足則 push 進 accepted 並更新 running；否則跳過該檔（記入 dropped）、繼續看下一個；
+      回 `{ accepted, dropped: files.length - accepted.length }`；
+      上傳改 sequential `for...of` 配 `uploadMutation.mutateAsync(file)`（一個 await 完才下一個），共用同一個 progress UI；
+      `dropped > 0` 時 `setErrorMessage` 為 `localizedErrorMessage("attachment.staging_batch_truncated", t, { dropped, accepted: accepted.length })`。
+      **驗證**：擴 `packages/web/src/components/staged-attachment-dropzone.test.tsx` 三個 case —
+      `test_drop_three_files_uploads_all_sequentially_within_quota`（assert 3 個 mutationFn call 依序、list 3 筆、單一 progress bar）、
+      `test_drop_exceeds_count_quota_truncates_to_remainder`（mock 8 staged + drop 5 → assert 只 mutate 2 次 + warning render dropped=5 accepted=2）、
+      `test_drop_exceeds_byte_quota_truncates_by_byte_prefix`（mock 已 58 MiB + drop [3 MiB, 1 MiB] → assert 只 mutate 1 MiB 那個）。
+
+- [x] 11.2 `packages/web/src/components/staged-attachment-dropzone.tsx` —— quota counter + at-limit:
+      新加純函式 `_computeUsage(rows) -> { count: number, bytes: number, atLimit: boolean }`（`atLimit = count >= 10 || bytes >= 60 * 1024 * 1024`）；
+      dropzone CardContent 內**永遠 render** counter 一行：`<used>/10 個 · <bytesUsedFormatted>/60 MiB`（透過既有 `_formatBytes`），不論 rows 有沒有；
+      `atLimit === true` 時：drop area 的 `onDragOver` handler 提早 return（不 setDragOver）、`onDrop` handler 提早 return（不 call `_handleFiles`）、`<input>` + upload button 加 `disabled` attr、
+      empty-state / dropzone-label 文字換成 `t("meetings.new.staging.at_limit")`。
+      **驗證**：擴同檔 test 四個 case —
+      `test_counter_renders_current_count_and_bytes_formatted`（mock 3 staged 1+2+3 MiB → assert counter 文字 `3/10 個 · 6.0 MB / 60 MiB` 樣式）、
+      `test_at_count_limit_disables_dropzone_and_renders_hint`（mock 10 staged → drop event 不觸發 mutate + button disabled + at-limit text render）、
+      `test_at_byte_limit_disables_dropzone`（mock 1 staged @ 60 MiB → 同 disabled）、
+      `test_remove_from_at_limit_state_reenables_dropzone`（mock 10 → click remove → button enabled + counter 9/10）。
+
+- [x] 11.3 i18n: 兩份 locale 同步加 3 個 keys (parity test 會擋漏邊):
+      `meetings.new.staging.counter_label` —
+      zh-TW: `"{{used}} / {{max}} 個 · {{bytesUsed}} / {{bytesMax}}"`；
+      en: `"{{used}} / {{max}} files · {{bytesUsed}} / {{bytesMax}}"`。
+      `meetings.new.staging.at_limit` —
+      zh-TW: `"已達暫存區上限（10 個 / 60 MiB）"`；
+      en: `"Staging limit reached (10 files / 60 MiB)"`。
+      `errors.attachment.staging_batch_truncated` —
+      zh-TW: `"拖入 {{dropped}} 個檔，配額只上傳前 {{accepted}} 個"`；
+      en: `"Dropped {{dropped}} files, only the first {{accepted}} fit the staging quota"`。
+      `staging_batch_truncated` 是純前端 error code（backend 不會回），放 `errors.attachment.*` 維持命名 namespace 一致。
+      **驗證**：`bun --filter @meeting-playbook/web test src/locales/locales.test.ts`（deep-equal parity test）綠燈；
+      新測 `packages/web/src/lib/i18n-errors.test.ts` 加 `test_localized_message_for_staging_batch_truncated_interpolates_counts`（call `localizedErrorMessage("attachment.staging_batch_truncated", t, { dropped: 5, accepted: 2 })` → assert 中文回 `"拖入 5 個檔，配額只上傳前 2 個"`）。
+
+- [ ] 11.4 手動 E2E (補充 task 10.1 的 four-flow checklist):
+      A) `/meetings/new` 拖 3 個檔（PDF + PNG + DOCX、合計 < 60 MiB）→ counter 從 `0/10 · 0 B/60 MiB` 走到 `3/10 · X MB/60 MiB`、list 3 筆、單一 progress bar 順序遞進。
+      B) 接著拖 5 個（共 8 個尚未達上限）→ counter 變 `8/10`；再拖 5 個 → 看 truncation warning「拖入 5 個檔，配額只上傳前 2 個」、counter 變 `10/10`、dropzone 變 disabled（drag-over 不亮、button 不可按）、empty-state 變「已達暫存區上限（10 個 / 60 MiB）」。
+      C) 點任一筆 remove 按鈕 → counter 變 `9/10`、dropzone 重新 enabled、可繼續拖。
+      D) 按「建立」送 form → 新 meeting detail 「附件」section 顯示 9 個檔；回 `/meetings/new` → dropzone 變回 `0/10` 空 state（pendingAttachments query 重 fetch）。
+      **驗證**：本 task 是手動 checklist；PR 描述 / commit 訊息要寫明 A/B/C/D 四條 flow 都過。
+
+## 12. Backend + i18n：per-meeting quota 對齊 staging quota (UX consistency follow-up)
+
+> Sean 在 task 11.4 手測時發現 `/meetings/new` 顯示「10 / 10」counter、但
+> `/meetings/{id}` 既有 dropzone 仍 hit「最多 5 個」422 — 兩個 dropzone 數字
+> 不一致的 UX 訊號讓使用者困惑。對應 design 決策「D12. Per-meeting attachment
+> quota 對齊 staging quota（10 個 / 60 MiB）」，spec 用 MODIFIED 改 main
+> capability `meeting-attachment` 的 "Upload validation enforces..." 跟
+> "AttachmentDropzone component renders list..." 兩個 requirement。
+> Frontend `<AttachmentDropzone>` 元件依賴 i18n key 顯示 hint、沒 hardcode
+> 數字，所以這 group 沒 frontend code 改動，只改 backend constants + i18n。
+
+- [x] 12.1 `packages/backend/meeting_playbook/attachments/validation.py`：
+      `MAX_ATTACHMENTS_PER_MEETING: Final[int] = 5` → `10`；
+      `MAX_BYTES_PER_MEETING: Final[int] = 30 * 1024 * 1024` → `60 * 1024 * 1024  # 60 MiB`。
+      File 頂部 docstring 第 (2) / (3) 點數字同步 (5 → 10、30 MiB → 60 MiB)。
+      `validate_upload` 函式內的 docstring 提到 `30 MiB` 處同步。
+      **驗證**：擴 `packages/backend/tests/attachments/test_validation.py` —
+      把 `test_rejects_sixth_attachment` rename 成
+      `test_rejects_eleventh_attachment` + assert per-meeting 10 個 row 後第 11 個拋
+      `attachment.too_many`；把 `test_rejects_when_total_exceeds_30mib` rename 成
+      `test_rejects_when_total_exceeds_60mib` + assert 58 MiB 既有 + 3 MiB 新檔
+      拋 `attachment.quota_exceeded`；既有「接受 5 個內」test rename 成
+      「接受 10 個內」。
+
+- [x] 12.2 i18n: 兩份 locale 同步改 3 個 keys（parity test 會擋漏邊）:
+      `errors.attachment.too_many` —
+      zh-TW: `"每場會議最多可上傳 5 個附件"` → `"每場會議最多可上傳 10 個附件"`；
+      en: `"Each meeting allows at most 5 attachments"` → `"Each meeting allows at most 10 attachments"`。
+      `errors.attachment.quota_exceeded` —
+      zh-TW: `"已超過每場會議 30MB 上限"` → `"已超過每場會議 60 MiB 上限"`；
+      en: `"Per-meeting 30MB quota exceeded"` → `"Per-meeting 60 MiB quota exceeded"`。
+      `meetings.detail.attachments.hintLimit` —
+      zh-TW: `"最多 5 個檔案，30MB 上限"` → `"最多 10 個檔案，60 MiB 上限"`；
+      en: `"Max 5 files, 30MB total"` → `"Max 10 files, 60 MiB total"`。
+      **驗證**：`bun --filter @meeting-playbook/web test src/locales/locales.test.ts`（deep-equal parity）綠燈。
+
+- [ ] 12.3 手動 E2E：開既有 meeting detail 頁、在 attachment section 拖 10 個檔
+      → 都成功上傳；拖第 11 個 → backend 回 422 `attachment.too_many` + 前端
+      顯示「每場會議最多可上傳 10 個附件」。Dropzone hint 文字應顯示
+      「最多 10 個檔案，60 MiB 上限」。
+      **驗證**：本 task 是手動 checklist；PR 描述記錄 OK。

@@ -170,7 +170,7 @@
 
 ## 10. 端到端驗證
 
-- [ ] 10.1 手動 E2E：開既有 meeting list → 按「新會議」→ `/meetings/new` 出現 dropzone（即使 staged 是空）→
+- [x] 10.1 手動 E2E：開既有 meeting list → 按「新會議」→ `/meetings/new` 出現 dropzone（即使 staged 是空）→
       拖一個 PDF + 一張圖 → 看到 list 兩筆 + 上傳進度 → 改填表單其他欄位 → 按「建立」→
       navigate 到新 meeting → meeting detail 「附件」section 應該已經有那兩個檔。
       重複一次但這次 calendar preview 路徑（從 /calendar/upcoming 點 import）→ dropzone 也應該渲染、行為一致。
@@ -229,7 +229,7 @@
       **驗證**：`bun --filter @meeting-playbook/web test src/locales/locales.test.ts`（deep-equal parity test）綠燈；
       新測 `packages/web/src/lib/i18n-errors.test.ts` 加 `test_localized_message_for_staging_batch_truncated_interpolates_counts`（call `localizedErrorMessage("attachment.staging_batch_truncated", t, { dropped: 5, accepted: 2 })` → assert 中文回 `"拖入 5 個檔，配額只上傳前 2 個"`）。
 
-- [ ] 11.4 手動 E2E (補充 task 10.1 的 four-flow checklist):
+- [x] 11.4 手動 E2E (補充 task 10.1 的 four-flow checklist):
       A) `/meetings/new` 拖 3 個檔（PDF + PNG + DOCX、合計 < 60 MiB）→ counter 從 `0/10 · 0 B/60 MiB` 走到 `3/10 · X MB/60 MiB`、list 3 筆、單一 progress bar 順序遞進。
       B) 接著拖 5 個（共 8 個尚未達上限）→ counter 變 `8/10`；再拖 5 個 → 看 truncation warning「拖入 5 個檔，配額只上傳前 2 個」、counter 變 `10/10`、dropzone 變 disabled（drag-over 不亮、button 不可按）、empty-state 變「已達暫存區上限（10 個 / 60 MiB）」。
       C) 點任一筆 remove 按鈕 → counter 變 `9/10`、dropzone 重新 enabled、可繼續拖。
@@ -272,7 +272,7 @@
       en: `"Max 5 files, 30MB total"` → `"Max 10 files, 60 MiB total"`。
       **驗證**：`bun --filter @meeting-playbook/web test src/locales/locales.test.ts`（deep-equal parity）綠燈。
 
-- [ ] 12.3 手動 E2E：開既有 meeting detail 頁、在 attachment section 拖 10 個檔
+- [x] 12.3 手動 E2E：開既有 meeting detail 頁、在 attachment section 拖 10 個檔
       → 都成功上傳；拖第 11 個 → backend 回 422 `attachment.too_many` + 前端
       顯示「每場會議最多可上傳 10 個附件」。Dropzone hint 文字應顯示
       「最多 10 個檔案，60 MiB 上限」。

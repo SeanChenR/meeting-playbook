@@ -118,14 +118,22 @@ class MeetingLinkRepository:
             await self._session.commit()
         except IntegrityError as exc:
             await self._session.rollback()
-            # The CHECK constraint on `from_meeting_id <> to_meeting_id` is
-            # defense-in-depth; the application-level check above normally
-            # catches self-reference first, but route through here too in
-            # case a caller bypasses it.
+            # Gemini PR #39 review #1: narrow the IntegrityError mapping
+            # to the two violations we actually want to translate into
+            # domain exceptions. Any other IntegrityError (e.g. a FK
+            # violation from a concurrently-deleted meeting) re-raises
+            # so the router surfaces a 500 instead of misleading the
+            # caller with `meeting_link.duplicate`.
             text_exc = str(exc.orig) if exc.orig is not None else str(exc)
             if "meeting_link_no_self_reference" in text_exc:
+                # CHECK constraint defense-in-depth; the application-
+                # level check above normally catches self-reference
+                # first, but route through here too in case a caller
+                # bypasses it.
                 raise MeetingLinkSelfReference(text_exc) from exc
-            raise MeetingLinkDuplicate(text_exc) from exc
+            if "meeting_link_pair_uidx" in text_exc:
+                raise MeetingLinkDuplicate(text_exc) from exc
+            raise
 
         # Build a model instance from the returning row so callers get the
         # same shape as a SQLAlchemy-loaded object.

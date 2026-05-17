@@ -51,7 +51,7 @@ def upgrade() -> None:
         "meeting_link",
         sa.Column(
             "id",
-            sa.dialects.postgresql.UUID(as_uuid=False),
+            sa.dialects.postgresql.UUID(as_uuid=True),
             primary_key=True,
             server_default=sa.text("gen_random_uuid()"),
             nullable=False,

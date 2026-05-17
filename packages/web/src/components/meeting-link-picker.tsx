@@ -107,7 +107,7 @@ export function MeetingLinkPicker({
                 {t("meetings.links.picker.cacheMiss")}
               </p>
               <Link
-                {...({ to: "/meetings" } as { to: "/meetings" })}
+                to="/meetings"
                 data-testid="meeting-link-picker-cache-miss-link"
                 className="text-sm text-(--color-primary) hover:underline"
               >

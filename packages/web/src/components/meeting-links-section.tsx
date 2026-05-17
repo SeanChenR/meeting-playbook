@@ -98,6 +98,18 @@ export function MeetingLinksSection({ meetingId }: MeetingLinksSectionProps) {
               key={link.link_id}
               className="flex items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-(--color-muted)/60"
             >
+              {/*
+                Gemini PR #39 review #3 suggested `to="/meetings/$id"
+                params={...}` for type safety. Reverted because TanStack
+                Router's Link doesn't interpolate $params to a real `href`
+                under the test setup (jsdom + ad-hoc router built in
+                tests) — the rendered DOM gets `href="/meetings/$id"`
+                literal and breaks the e2e-shaped assertion in
+                `meeting-links-section.test.tsx (b)`. `meeting-card.tsx`
+                uses the same cast workaround for the same reason; once
+                the test infra grows a router-context provider that knows
+                about typed routes, both call sites can switch.
+              */}
               <Link
                 {...({
                   to: `/meetings/${link.other_meeting_id}`,

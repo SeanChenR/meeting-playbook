@@ -13,7 +13,14 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-_EXPECTED_COLUMNS = {"id", "meeting_id", "markdown", "generated_at"}
+_EXPECTED_COLUMNS = {
+    "id",
+    "meeting_id",
+    "markdown",
+    "generated_at",
+    # Slice-20c: nullable on legacy rows; treated as empty-set canonical hash.
+    "attachment_hash_snapshot",
+}
 _NOT_NULL_COLUMNS = {"id", "meeting_id", "markdown", "generated_at"}
 
 

@@ -31,10 +31,12 @@ _EXPECTED_COLUMNS = {
     "red_lines",
     "created_at",
     "updated_at",
+    # Slice-20c: nullable on legacy rows; treated as empty-set canonical hash.
+    "attachment_hash_snapshot",
 }
 
-# All columns are NOT NULL — content fields default to '', timestamps default to now().
-_NOT_NULL_COLUMNS = _EXPECTED_COLUMNS
+# Slice-20c: `attachment_hash_snapshot` is nullable; every other column is NOT NULL.
+_NOT_NULL_COLUMNS = _EXPECTED_COLUMNS - {"attachment_hash_snapshot"}
 
 
 @pytest.mark.asyncio

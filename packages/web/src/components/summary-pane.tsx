@@ -190,8 +190,22 @@ export function SummaryPane({ meetingId, meeting }: SummaryPaneProps) {
           ) : (
             <>
               {data.is_stale && (
-                <Alert data-testid="summary-stale-alert" variant="warning" role="note">
-                  {t("meetings.summary.staleAlert")}
+                <Alert
+                  data-testid="summary-stale-alert"
+                  variant="warning"
+                  role="note"
+                  className="flex flex-wrap items-center gap-3"
+                >
+                  <span className="flex-1">{t("meetings.summary.staleAttachmentsChanged")}</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    data-testid="summary-stale-regenerate-button"
+                    onClick={_trigger}
+                    disabled={isMutating}
+                  >
+                    {t("meetings.summary.staleRegenerateButton")}
+                  </Button>
                 </Alert>
               )}
               {postError && <p className="text-xs text-(--color-destructive)">{postError}</p>}

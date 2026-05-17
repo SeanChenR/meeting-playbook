@@ -115,3 +115,24 @@ def test_audio_range_max_bytes_env_override(monkeypatch):
 
     settings = Settings(_env_file=None)
     assert settings.audio_range_max_bytes == 1_048_576
+
+
+# ─── Slice 20a: meeting attachment storage ──────────────────────────
+
+
+def test_attachment_dir_default(monkeypatch):
+    """Default attachment directory is `~/MeetingPlaybook/attachments`."""
+    _set_required(monkeypatch)
+    monkeypatch.delenv("ATTACHMENT_DIR", raising=False)
+
+    settings = Settings(_env_file=None)
+    assert settings.attachment_dir == "~/MeetingPlaybook/attachments"
+
+
+def test_attachment_dir_env_override(monkeypatch):
+    """Env var ATTACHMENT_DIR overrides the default."""
+    _set_required(monkeypatch)
+    monkeypatch.setenv("ATTACHMENT_DIR", "/tmp/test-attachments")
+
+    settings = Settings(_env_file=None)
+    assert settings.attachment_dir == "/tmp/test-attachments"

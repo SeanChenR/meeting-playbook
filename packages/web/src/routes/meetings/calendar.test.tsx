@@ -135,10 +135,19 @@ describe("MeetingsCalendar route", () => {
         headers: { "content-type": "application/json" },
       });
 
+    const user = userEvent.setup();
     await renderWithRouter(<MeetingsCalendar />, {
       initialEntries: ["/meetings/calendar"],
       path: "/meetings/calendar",
     });
+
+    // Switch to month view: week view positions events via measured
+    // pixel height (getBoundingClientRect) which happy-dom reports as
+    // zero, so events never render in the test environment. Month view
+    // uses a CSS grid and renders events as ordinary DOM children, which
+    // works under happy-dom.
+    const monthTab = await screen.findByTestId("calendar-tab-month");
+    await user.click(monthTab);
 
     await waitFor(() => {
       const events = document.querySelectorAll(".rbc-event");

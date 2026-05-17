@@ -13,9 +13,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Awaitable, Callable
-from typing import TypedDict
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any, TypedDict
 
+from meeting_playbook.attachments.multimodal_context import (
+    EMPTY_SET_SNAPSHOT_HASH,
+    AttachmentRef,
+    MultimodalContextBuilder,
+)
+from meeting_playbook.attachments.processor import AttachmentProcessor
 from meeting_playbook.calendar.client import CalendarEvent
 from meeting_playbook.config import get_settings
 from meeting_playbook.playbook_generation.prompts import (
@@ -53,7 +59,15 @@ class PlaybookGenerationFailed(Exception):
     """Raised when the upstream returned a response we cannot parse / validate."""
 
 
-CallModel = Callable[[str], Awaitable[str]]
+CallModel = Callable[[Any], Awaitable[str]]
+"""Generic LLM dispatcher signature.
+
+The contents payload is either a plain prompt string (text-only path,
+unchanged from pre-slice-20c behaviour) or a list of google-genai
+`Part` objects (slice-20c multimodal path). Production wires this via
+`_default_call_model()`; tests inject mocks that accept a string in
+the empty-attachments path.
+"""
 
 
 def _default_call_model() -> CallModel:
@@ -63,7 +77,7 @@ def _default_call_model() -> CallModel:
     (which inject a fake) never need GCP credentials configured.
     """
 
-    async def _call(prompt: str) -> str:
+    async def _call(prompt: Any) -> str:
         # Local import keeps the module load-light; tests mocking the SDK
         # never exercise this path.
         from google import genai
@@ -174,9 +188,18 @@ class PlaybookGenerator:
         *,
         viewer_email: str,
         viewer_name: str,
+        attachment_refs: Sequence[AttachmentRef] = (),
     ) -> PlaybookDraft:
+        """Generate a 7-field playbook draft for the given calendar event.
+
+        Slice-20c: when `attachment_refs` is non-empty, the LLM call uses
+        a multimodal `Parts` list (images as `Part.from_bytes`, extracted
+        text appended to the prompt). Empty `attachment_refs` keeps the
+        pre-slice path byte-identical.
+        """
         primary_prompt = build_primary_prompt(event, viewer_email, viewer_name)
-        primary_raw = await self._call_with_timeout(primary_prompt)
+        primary_contents = self._wrap_with_attachments(primary_prompt, attachment_refs)
+        primary_raw = await self._call_with_timeout(primary_contents)
         draft = _parse_draft(primary_raw)
 
         empties = _empty_fields(draft)
@@ -184,7 +207,8 @@ class PlaybookGenerator:
             return draft
 
         fallback_prompt = build_fallback_prompt(event, empties, viewer_email, viewer_name)
-        fallback_raw = await self._call_with_timeout(fallback_prompt)
+        fallback_contents = self._wrap_with_attachments(fallback_prompt, attachment_refs)
+        fallback_raw = await self._call_with_timeout(fallback_contents)
         fallback_draft = _parse_draft(fallback_raw)
 
         # Merge: prefer the fallback value for fields that were empty;
@@ -204,13 +228,36 @@ class PlaybookGenerator:
 
         return PlaybookDraft(**merged)  # type: ignore[arg-type]
 
-    async def _call_with_timeout(self, prompt: str) -> str:
+    async def _call_with_timeout(self, contents: Any) -> str:
         try:
-            return await asyncio.wait_for(self._call_model(prompt), timeout=self._timeout)
+            return await asyncio.wait_for(self._call_model(contents), timeout=self._timeout)
         except TimeoutError as exc:
             raise PlaybookGenerationTimeout(
                 f"Vertex AI call exceeded {self._timeout}s deadline."
             ) from exc
+
+    @staticmethod
+    def _wrap_with_attachments(prompt: str, attachment_refs: Sequence[AttachmentRef]) -> Any:
+        """Return a multimodal Parts list when attachments exist, else the plain prompt.
+
+        Empty `attachment_refs` short-circuits with the plain prompt
+        string so the pre-slice-20c call path is byte-identical.
+        """
+        if not attachment_refs:
+            return prompt
+        settings = get_settings()
+        builder = MultimodalContextBuilder(
+            AttachmentProcessor(
+                text_extraction_timeout_seconds=(
+                    settings.attachment_text_extraction_timeout_seconds
+                ),
+            )
+        )
+        context = builder.build(
+            text_context=prompt,
+            attachments=list(attachment_refs),
+        )
+        return context.parts
 
 
 __all__ = [

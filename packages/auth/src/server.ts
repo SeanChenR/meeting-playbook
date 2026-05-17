@@ -324,6 +324,11 @@ if (import.meta.main) {
   const port = Number(process.env.PORT ?? 3001);
   Bun.serve<BridgeData, undefined>({
     port,
+    // Default 10s is too short for Gemini 2.5 Pro multimodal calls
+    // (Playbook + Summary regenerate with attachments routinely take
+    // 15-45s). 255 is Bun.serve's documented max — going past it would
+    // require switching to streaming, which we don't need yet.
+    idleTimeout: 255,
     async fetch(req, server) {
       const url = new URL(req.url);
       const isApiNonAuth =

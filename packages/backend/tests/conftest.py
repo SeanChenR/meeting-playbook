@@ -140,6 +140,8 @@ async def migrated_engine(_migrated_db_url: str) -> AsyncIterator[AsyncEngine]:
         await conn.execute(text('TRUNCATE TABLE "transcript_chunk" RESTART IDENTITY CASCADE'))
         await conn.execute(text('TRUNCATE TABLE "recording" RESTART IDENTITY CASCADE'))
         await conn.execute(text('TRUNCATE TABLE "playbook" RESTART IDENTITY CASCADE'))
+        # Slice-20a: meeting_attachment also needs to be drained for test isolation.
+        await conn.execute(text('TRUNCATE TABLE "meeting_attachment" RESTART IDENTITY CASCADE'))
         # Slice-13: drain voice enrollment too so test isolation extends to
         # the user → voice_enrollment relationship.
         await conn.execute(text('TRUNCATE TABLE "voice_enrollment" RESTART IDENTITY CASCADE'))

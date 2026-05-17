@@ -28,6 +28,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AdvisorPane } from "../../components/advisor-pane";
+import { AttachmentDropzone } from "../../components/attachment-dropzone";
 import { AsrProviderSelector } from "../../components/asr-provider-selector";
 import { CaptureIndicator } from "../../components/capture-indicator";
 import { HeadphonesHint } from "../../components/headphones-hint";
@@ -82,6 +83,19 @@ export function MeetingDetail() {
   const [offlineIngestOpen, setOfflineIngestOpen] = useState(false);
   const [editFormOpen, setEditFormOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Slice-20a: collapsible Attachments section. Default expanded; the
+  // collapsed/expanded choice is persisted to localStorage so a reload
+  // (or layout switch) doesn't reset it.
+  const [attachmentsExpanded, setAttachmentsExpanded] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const v = window.localStorage.getItem("meeting-detail.attachments-expanded");
+    return v === null ? true : v === "true";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("meeting-detail.attachments-expanded", String(attachmentsExpanded));
+  }, [attachmentsExpanded]);
   const [layout, setLayout] = useDetailLayout();
 
   const meeting = query.data ?? null;
@@ -283,6 +297,33 @@ export function MeetingDetail() {
             </button>
           </div>
         )}
+
+        {meeting && (
+          <section
+            data-testid="meeting-detail-attachments-section"
+            data-expanded={attachmentsExpanded}
+            className="rounded-md border border-(--color-border) bg-(--color-card)"
+          >
+            <button
+              type="button"
+              data-testid="meeting-detail-attachments-toggle"
+              aria-expanded={attachmentsExpanded}
+              onClick={() => setAttachmentsExpanded((v) => !v)}
+              className="flex w-full items-center justify-between px-4 py-2 text-sm font-semibold text-(--color-foreground) hover:bg-(--color-muted)/40"
+            >
+              <span>{t("attachments.heading")}</span>
+              <span aria-hidden className="text-xs text-(--color-muted-foreground)">
+                {attachmentsExpanded ? "−" : "+"}
+              </span>
+            </button>
+            {attachmentsExpanded && (
+              <div className="border-t border-(--color-border) p-4">
+                <AttachmentDropzone meetingId={meetingId} />
+              </div>
+            )}
+          </section>
+        )}
+
         {meeting && (
           <Dialog open={editFormOpen} onOpenChange={setEditFormOpen}>
             <DialogContent className="max-w-2xl">

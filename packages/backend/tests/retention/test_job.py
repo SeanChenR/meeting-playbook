@@ -55,6 +55,41 @@ async def _seed(
         )
 
 
+async def _insert_attachment(
+    engine: AsyncEngine,
+    *,
+    att_id: str,
+    meeting_id: str,
+    file_path: Path,
+    age_days: float,
+    kind: str = "pdf",
+    original_name: str = "x.pdf",
+    bytes_: int = 100,
+) -> None:
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                INSERT INTO meeting_attachment (
+                    id, meeting_id, file_path, kind, original_name, bytes,
+                    uploaded_at
+                )
+                VALUES (:aid, :mid, :fp, :kind, :name, :bytes,
+                    now() - (:age || ' days')::interval)
+                """
+            ),
+            {
+                "aid": att_id,
+                "mid": meeting_id,
+                "fp": str(file_path),
+                "kind": kind,
+                "name": original_name,
+                "bytes": bytes_,
+                "age": str(age_days),
+            },
+        )
+
+
 async def _insert_recording(
     engine: AsyncEngine,
     *,
@@ -296,3 +331,239 @@ async def test_cleanup_treats_offline_source_recordings_identically(
     assert row.deleted_at is not None, (
         "offline-source row's deleted_at MUST be stamped after cleanup"
     )
+
+
+# ─── Slice 20a: meeting_attachment sweep ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cleanup_deletes_old_attachment_and_leaves_fresh(
+    migrated_engine: AsyncEngine, tmp_path: Path
+) -> None:
+    """Slice-20a: attachment-only scenario. 31-day deleted; 5-day untouched;
+    45-day self-heal when file missing.
+    """
+    Session = async_sessionmaker(migrated_engine, expire_on_commit=False)
+
+    await _seed(migrated_engine, user_id="u_att", meeting_id="m_att")
+
+    old = tmp_path / "att_31d.pdf"
+    old.write_bytes(b"\x00" * 100)
+    fresh = tmp_path / "att_5d.pdf"
+    fresh.write_bytes(b"\x00" * 100)
+    missing = tmp_path / "att_45d_missing.pdf"
+
+    await _insert_attachment(
+        migrated_engine,
+        att_id="a_31d",
+        meeting_id="m_att",
+        file_path=old,
+        age_days=31,
+    )
+    await _insert_attachment(
+        migrated_engine,
+        att_id="a_5d",
+        meeting_id="m_att",
+        file_path=fresh,
+        age_days=5,
+    )
+    await _insert_attachment(
+        migrated_engine,
+        att_id="a_45d",
+        meeting_id="m_att",
+        file_path=missing,
+        age_days=45,
+    )
+
+    now = datetime.now(UTC)
+    deleted_count = await cleanup(
+        now=now,
+        retention_days=30,
+        recordings_dir=tmp_path,
+        attachments_dir=tmp_path,
+        session_factory=Session,
+    )
+    assert deleted_count == 2, f"expected 2 (31d unlink + 45d self-heal); got {deleted_count}"
+    assert not old.exists()
+    assert fresh.exists()
+
+    async with migrated_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    "SELECT id, deleted_at FROM meeting_attachment "
+                    "WHERE id IN ('a_31d', 'a_5d', 'a_45d') ORDER BY id"
+                )
+            )
+        ).all()
+    by_id = {r.id: r.deleted_at for r in rows}
+    assert by_id["a_31d"] is not None
+    assert by_id["a_5d"] is None
+    assert by_id["a_45d"] is not None
+
+
+@pytest.mark.asyncio
+async def test_cleanup_processes_recordings_and_attachments_together(
+    migrated_engine: AsyncEngine, tmp_path: Path
+) -> None:
+    """Mixed sweep: 2 old recordings + 2 old attachments → returns 4."""
+    Session = async_sessionmaker(migrated_engine, expire_on_commit=False)
+
+    await _seed(migrated_engine, user_id="u_mix", meeting_id="m_mix_a")
+    await _seed(migrated_engine, user_id="u_mix", meeting_id="m_mix_b")
+
+    wav_a = tmp_path / "rec_a.wav"
+    wav_a.write_bytes(b"\x00" * 100)
+    wav_b = tmp_path / "rec_b.wav"
+    wav_b.write_bytes(b"\x00" * 100)
+    att_a = tmp_path / "att_a.pdf"
+    att_a.write_bytes(b"\x00" * 100)
+    att_b = tmp_path / "att_b.pdf"
+    att_b.write_bytes(b"\x00" * 100)
+
+    await _insert_recording(
+        migrated_engine,
+        rec_id="r_mix_a",
+        meeting_id="m_mix_a",
+        stream="me",
+        file_path=wav_a,
+        age_days=35,
+    )
+    await _insert_recording(
+        migrated_engine,
+        rec_id="r_mix_b",
+        meeting_id="m_mix_b",
+        stream="me",
+        file_path=wav_b,
+        age_days=35,
+    )
+    await _insert_attachment(
+        migrated_engine,
+        att_id="a_mix_a",
+        meeting_id="m_mix_a",
+        file_path=att_a,
+        age_days=35,
+    )
+    await _insert_attachment(
+        migrated_engine,
+        att_id="a_mix_b",
+        meeting_id="m_mix_b",
+        file_path=att_b,
+        age_days=35,
+    )
+
+    now = datetime.now(UTC)
+    count = await cleanup(
+        now=now,
+        retention_days=30,
+        recordings_dir=tmp_path,
+        attachments_dir=tmp_path,
+        session_factory=Session,
+    )
+    assert count == 4
+    for f in (wav_a, wav_b, att_a, att_b):
+        assert not f.exists()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_attachment_idempotent_second_call_returns_zero(
+    migrated_engine: AsyncEngine, tmp_path: Path
+) -> None:
+    """Idempotency: running cleanup twice with the same `now` is a no-op the
+    second time around for attachments too.
+    """
+    Session = async_sessionmaker(migrated_engine, expire_on_commit=False)
+
+    await _seed(migrated_engine, user_id="u_idem_a", meeting_id="m_idem_a")
+    att = tmp_path / "idem_att.pdf"
+    att.write_bytes(b"\x00" * 100)
+    await _insert_attachment(
+        migrated_engine,
+        att_id="a_idem",
+        meeting_id="m_idem_a",
+        file_path=att,
+        age_days=45,
+    )
+
+    now = datetime.now(UTC)
+    first = await cleanup(
+        now=now,
+        retention_days=30,
+        recordings_dir=tmp_path,
+        attachments_dir=tmp_path,
+        session_factory=Session,
+    )
+    second = await cleanup(
+        now=now,
+        retention_days=30,
+        recordings_dir=tmp_path,
+        attachments_dir=tmp_path,
+        session_factory=Session,
+    )
+    assert first == 1
+    assert second == 0
+    assert not att.exists()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_unlink_failure_does_not_abort_transaction(
+    migrated_engine: AsyncEngine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One attachment unlink raising PermissionError must not stop the loop —
+    the other row should still get its `deleted_at` stamped.
+    """
+    Session = async_sessionmaker(migrated_engine, expire_on_commit=False)
+
+    await _seed(migrated_engine, user_id="u_perm", meeting_id="m_perm")
+    bad = tmp_path / "bad.pdf"
+    bad.write_bytes(b"\x00" * 100)
+    good = tmp_path / "good.pdf"
+    good.write_bytes(b"\x00" * 100)
+    await _insert_attachment(
+        migrated_engine,
+        att_id="a_bad",
+        meeting_id="m_perm",
+        file_path=bad,
+        age_days=45,
+    )
+    await _insert_attachment(
+        migrated_engine,
+        att_id="a_good",
+        meeting_id="m_perm",
+        file_path=good,
+        age_days=45,
+    )
+
+    real_unlink = Path.unlink
+
+    def _selective_unlink(self, *args, **kwargs):
+        if self == bad:
+            raise PermissionError("simulated FS denial")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", _selective_unlink)
+
+    now = datetime.now(UTC)
+    count = await cleanup(
+        now=now,
+        retention_days=30,
+        recordings_dir=tmp_path,
+        attachments_dir=tmp_path,
+        session_factory=Session,
+    )
+    assert count == 1
+    assert bad.exists()  # still on disk because unlink raised
+    assert not good.exists()
+
+    async with migrated_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    "SELECT id, deleted_at FROM meeting_attachment "
+                    "WHERE id IN ('a_bad', 'a_good') ORDER BY id"
+                )
+            )
+        ).all()
+    by_id = {r.id: r.deleted_at for r in rows}
+    assert by_id["a_bad"] is None, "bad row deleted_at must remain NULL"
+    assert by_id["a_good"] is not None, "good row deleted_at must be stamped"

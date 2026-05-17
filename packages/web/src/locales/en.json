@@ -246,8 +246,8 @@
       "dialogDescription": "Update title, schedule, and display names"
     },
     "detail": {
-      "heading": "Meeting detail",
       "back": "← Back to list",
+      "heading": "Meeting detail",
       "counterpartyLabel": "Counterparty",
       "meLabel": "Me",
       "statusLabel": "Status",
@@ -260,9 +260,21 @@
       "deleteConfirm": "Delete",
       "deleteCancel": "Cancel",
       "errorFallback": "Action failed",
-      "prevTitle": "Previous meeting",
-      "nextTitle": "Next meeting",
-      "prevNextDisabled": "Visit the meetings list first to enable previous / next"
+      "advisorPlaceholder": "Tactical advisor lands in Slice 8",
+      "asrProviderSwitchHint": "Takes effect on the next meeting",
+      "recordingLabel": "Recording",
+      "recordingAvailable": "Recording available",
+      "recordingExpired": "Recording expired",
+      "rerunButton": "Re-run transcription",
+      "rerunPending": "Re-running transcription…",
+      "layout": {
+        "stack": "Stack layout",
+        "columns": "Columns layout"
+      },
+      "tabs": {
+        "workspace": "Workspace",
+        "summary": "Summary"
+      }
     },
     "status": {
       "scheduled": "Scheduled",
@@ -292,37 +304,6 @@
       "speaker": {
         "cluster": "Speaker {{n}}",
         "cluster_unknown": "Speaker (unidentified)"
-      }
-    },
-    "detail": {
-      "back": "← Back to list",
-      "heading": "Meeting detail",
-      "counterpartyLabel": "Counterparty",
-      "meLabel": "Me",
-      "statusLabel": "Status",
-      "asrProviderLabel": "ASR provider",
-      "createdAtLabel": "Created at",
-      "scheduledWindowLabel": "Scheduled",
-      "deleteButton": "Delete meeting",
-      "deleteDialogTitle": "Delete this meeting?",
-      "deleteDialogDescription": "This cannot be undone. The associated transcripts, playbook, and recordings will also be removed.",
-      "deleteConfirm": "Delete",
-      "deleteCancel": "Cancel",
-      "errorFallback": "Action failed",
-      "advisorPlaceholder": "Tactical advisor lands in Slice 8",
-      "asrProviderSwitchHint": "Takes effect on the next meeting",
-      "recordingLabel": "Recording",
-      "recordingAvailable": "Recording available",
-      "recordingExpired": "Recording expired",
-      "rerunButton": "Re-run transcription",
-      "rerunPending": "Re-running transcription…",
-      "layout": {
-        "stack": "Stack layout",
-        "columns": "Columns layout"
-      },
-      "tabs": {
-        "workspace": "Workspace",
-        "summary": "Summary"
       }
     },
     "list": {
@@ -405,6 +386,8 @@
       "copied": "Copied",
       "exportMd": "Export .md",
       "staleAlert": "Content has been updated; consider regenerating",
+      "staleAttachmentsChanged": "Attachments changed — regenerate summary?",
+      "staleRegenerateButton": "Regenerate",
       "emptyState": "No summary yet",
       "generate": "Generate summary",
       "sidebarMeta": "Meeting info",
@@ -461,10 +444,21 @@
     "save": {
       "idle": "Save",
       "saving": "Saving…",
-      "saved": "Saved ✓"
+      "saved": "Saved ✓",
+      "saved_toast": "Playbook saved"
     },
     "errors": {
       "fallback": "Save failed, please try again"
+    },
+    "stale": {
+      "attachments_changed": "Attachments changed — regenerate playbook?",
+      "regenerate_button": "Regenerate",
+      "regenerating": "Regenerating…",
+      "regenerate_failed": "Regenerate failed, please try again",
+      "confirm_title": "Regenerate playbook?",
+      "confirm_description": "The current playbook content will be overwritten with a fresh AI draft. Any unsaved edits will be lost.",
+      "confirm_confirm": "Regenerate",
+      "confirm_cancel": "Cancel"
     }
   },
   "tags": {
@@ -771,6 +765,33 @@
       "too_many_for_meeting": "This meeting already has 10 tags; detach one before adding another",
       "unknown_id": "One or more selected tag ids no longer exist",
       "not_found": "Tag not found"
+    },
+    "attachment": {
+      "unsupported_format": "Unsupported file type (accepts image / PDF / Word / text / markdown)",
+      "too_many": "Each meeting allows at most 5 attachments",
+      "quota_exceeded": "Per-meeting 30MB quota exceeded",
+      "expired": "Attachment has expired or is unavailable",
+      "not_found": "Attachment not found",
+      "uploadFailed": "Upload failed; please try again",
+      "network_error": "Network error during upload; please retry"
+    }
+  },
+  "attachments": {
+    "heading": "Attachments",
+    "hintLimit": "Max 5 files, 30MB total",
+    "uploadButton": "Choose files",
+    "dropzoneLabel": "Drop files here to upload",
+    "emptyState": "No attachments yet",
+    "downloadButton": "Download",
+    "deleteButton": "Delete",
+    "deleteConfirm": "Delete this attachment? This action cannot be undone.",
+    "uploadingLabel": "Uploading… {{percent}}%",
+    "kind": {
+      "image": "Image",
+      "pdf": "PDF",
+      "docx": "Word doc",
+      "text": "Text",
+      "markdown": "Markdown"
     }
   }
 }

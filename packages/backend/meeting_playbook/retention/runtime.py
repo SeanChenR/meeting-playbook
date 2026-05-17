@@ -41,6 +41,7 @@ async def run_forever(
                 now=datetime.now(UTC),
                 retention_days=settings.recording_retention_days,
                 recordings_dir=Path(settings.recordings_dir).expanduser(),
+                attachments_dir=Path(settings.attachment_dir).expanduser(),
                 session_factory=session_factory,
             )
         except asyncio.CancelledError:

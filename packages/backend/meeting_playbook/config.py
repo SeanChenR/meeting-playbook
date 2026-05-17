@@ -132,6 +132,21 @@ class Settings(BaseSettings):
     # inputs can stay under the byte budget while exceeding wall time.
     offline_upload_max_duration_seconds: int = 10_800
 
+    # Slice 20a — meeting attachment storage.
+    # Per-meeting attachments (image / pdf / docx / text / markdown) are stored
+    # under `{attachment_dir}/{meeting_id}/{attachment_id}.<ext>`. Default sits
+    # alongside the recordings dir so a single user folder holds all meeting
+    # artifacts. Quota is per-meeting (5 files / 30 MiB) — see ADR-0020 and the
+    # 30-day retention semantics shared with recordings (cleanup job sweeps
+    # both tables in one transaction).
+    attachment_dir: str = "~/MeetingPlaybook/attachments"
+
+    # Slice 20c — per-attachment text extraction timeout (PDF / docx). Caps
+    # the time `AttachmentProcessor` spends pulling text from a single file
+    # before raising `attachment.extraction_timeout`. Override via env to
+    # bump for slow disks or very large PDFs.
+    attachment_text_extraction_timeout_seconds: int = 15
+
     # Slice 16 — audio playback Range cap.
     # Single Range request body is capped here (default 2 MiB ≈ 64 seconds of
     # 16 kHz mono 16-bit PCM). Browsers chase up with a follow-up Range when

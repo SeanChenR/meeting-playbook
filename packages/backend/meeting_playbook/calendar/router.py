@@ -205,6 +205,18 @@ async def import_from_calendar(
         # Spec: meeting persists; surface generator error code.
         raise _generator_error_to_http(exc) from exc
 
-    await PlaybookRepository(session).upsert_for_meeting(meeting.id, draft)
+    # Slice-20c: stamp the empty-set canonical snapshot at the initial
+    # generation — calendar import lands no attachments. Later attachment
+    # adds/removes flip `is_stale` until the user clicks "Regenerate".
+    from meeting_playbook.attachments.multimodal_context import EMPTY_SET_SNAPSHOT_HASH
+
+    upsert_payload: dict[str, object] = {
+        **draft,
+        "attachment_hash_snapshot": EMPTY_SET_SNAPSHOT_HASH,
+    }
+    await PlaybookRepository(session).upsert_for_meeting(
+        meeting.id,
+        upsert_payload,  # type: ignore[arg-type]
+    )
 
     return FromCalendarResponse(meeting_id=meeting.id)

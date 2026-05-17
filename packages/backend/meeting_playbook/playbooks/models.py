@@ -32,3 +32,7 @@ class Playbook(Base):
 
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    # Slice-20c: snapshot of the attachment-set hash captured at generation
+    # time. NULL on legacy rows; the application layer treats NULL as the
+    # canonical empty-set hash when computing the `is_stale` flag.
+    attachment_hash_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)

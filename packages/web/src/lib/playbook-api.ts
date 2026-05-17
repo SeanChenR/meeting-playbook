@@ -21,6 +21,12 @@ export interface Playbook {
   red_lines: string;
   created_at: string;
   updated_at: string;
+  /**
+   * Slice-20c: `true` when the live attachment-set hash differs from the
+   * snapshot captured at generation time. The pane shows a "regenerate"
+   * banner when this is true.
+   */
+  is_stale?: boolean;
 }
 
 export interface PlaybookUpsertPayload {
@@ -86,6 +92,29 @@ export function useUpsertPlaybookMutation(meetingId: string) {
     mutationFn: (payload: PlaybookUpsertPayload) => upsertPlaybook(meetingId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["playbook", meetingId] });
+    },
+  });
+}
+
+/**
+ * Slice-20c: trigger an LLM regeneration of the playbook against the
+ * meeting's current attachment set. Used by the stale-banner button.
+ * Backend returns the new draft + clears the `is_stale` flag.
+ */
+export async function regeneratePlaybook(meetingId: string): Promise<Playbook> {
+  const resp = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}/playbook/regenerate`, {
+    method: "POST",
+  });
+  if (!resp.ok) throw await _envelopeError(resp);
+  return (await resp.json()) as Playbook;
+}
+
+export function useRegeneratePlaybookMutation(meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => regeneratePlaybook(meetingId),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["playbook", meetingId], data);
     },
   });
 }

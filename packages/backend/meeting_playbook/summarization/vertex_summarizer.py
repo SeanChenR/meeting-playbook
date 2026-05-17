@@ -92,7 +92,15 @@ class VertexProSummarizer:
         return self._client
 
     async def summarize(self, meeting_id: str) -> str:
-        """Fetch context, call Vertex 2.5 Pro, validate headings, return markdown."""
+        """Fetch context, call Vertex 2.5 Pro, validate headings, return markdown.
+
+        Slice-20c: when the meeting carries active attachments, the call
+        flips from a text-only `contents=user_message` to a multimodal
+        `contents=[Part, ...]` payload — images as `Part.from_bytes` and
+        extracted text appended to the existing four-section system
+        context. A single corrupt attachment is skipped (warning logged)
+        instead of aborting the whole call.
+        """
         # Phase 1: fetch context inside a short-lived session.
         async with self._session_factory() as session:
             # MeetingRepository's read accessors require user_id — but here
@@ -106,13 +114,23 @@ class VertexProSummarizer:
             chunks = await SessionRepository(session).list_chunks_for_meeting(meeting_id)
             playbook = await PlaybookRepository(session).get_or_create_for_meeting(meeting_id)
             chat_history = await ChatMessageRepository(session).list_for_meeting(meeting_id)
+            # Slice-20c: list_for_meeting_internal skips the user-scope
+            # check; safe here because summarize() runs in a trusted
+            # background context after the meeting owner is already
+            # resolved by the spawn caller.
+            from meeting_playbook.attachments.repository import AttachmentRepository
+
+            attachments = await AttachmentRepository(session).list_for_meeting_internal(
+                meeting_id=meeting_id,
+            )
 
         logger.info(
-            "summary meeting=%s chunks=%d chat_history=%d locale=%s",
+            "summary meeting=%s chunks=%d chat_history=%d locale=%s attachments=%d",
             meeting_id,
             len(chunks),
             len(chat_history),
             self._locale,
+            len(attachments),
         )
 
         # Phase 2: build prompt + call Vertex (no DB connection held).
@@ -125,13 +143,46 @@ class VertexProSummarizer:
             locale=self._locale,
         )
 
+        # Slice-20c: when attachments exist build a multimodal Parts list;
+        # otherwise stay byte-identical to the pre-slice path (string
+        # contents = user_message).
+        contents: Any
+        if attachments:
+            from meeting_playbook.attachments.multimodal_context import (
+                MultimodalContextBuilder,
+            )
+            from meeting_playbook.attachments.processor import AttachmentProcessor
+            from meeting_playbook.config import get_settings
+
+            settings = get_settings()
+            builder = MultimodalContextBuilder(
+                AttachmentProcessor(
+                    text_extraction_timeout_seconds=(
+                        settings.attachment_text_extraction_timeout_seconds
+                    ),
+                )
+            )
+            context = builder.build(
+                text_context=user_message,
+                attachments=list(attachments),
+            )
+            contents = context.parts
+            if context.skipped_attachment_ids:
+                logger.warning(
+                    "summary meeting=%s skipped_attachments=%s",
+                    meeting_id,
+                    context.skipped_attachment_ids,
+                )
+        else:
+            contents = user_message
+
         client = self._get_client()
         config = self._build_config(system_instruction)
 
         async with asyncio.timeout(_STREAM_TIMEOUT_S):
             response = await client.aio.models.generate_content(
                 model=self._model_id,
-                contents=user_message,
+                contents=contents,
                 config=config,
             )
 

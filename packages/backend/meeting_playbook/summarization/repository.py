@@ -17,6 +17,7 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from meeting_playbook.attachments.multimodal_context import EMPTY_SET_SNAPSHOT_HASH
 from meeting_playbook.summarization.models import Summary
 
 
@@ -44,6 +45,7 @@ _STALE_QUERY = text(
       s.meeting_id,
       s.markdown,
       s.generated_at,
+      s.attachment_hash_snapshot,
       (
         s.generated_at < COALESCE(
           (SELECT MAX(created_at) FROM transcript_chunk WHERE meeting_id = s.meeting_id),
@@ -57,7 +59,7 @@ _STALE_QUERY = text(
           (SELECT MAX(created_at) FROM chat_message WHERE meeting_id = s.meeting_id),
           '-infinity'::timestamptz
         )
-      ) AS is_stale
+      ) AS is_stale_timestamps
     FROM summary s
     WHERE s.meeting_id = :meeting_id
     """
@@ -75,8 +77,18 @@ class SummaryRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_with_stale_flag(self, meeting_id: str) -> SummaryWithStale | None:
+    async def get_with_stale_flag(
+        self,
+        meeting_id: str,
+        *,
+        current_attachment_snapshot_hash: str | None = None,
+    ) -> SummaryWithStale | None:
         """Single SQL fetch of the summary row + computed is_stale flag.
+
+        Slice-20c: `is_stale` is now also True when the live attachment-set
+        hash (`current_attachment_snapshot_hash`) differs from the snapshot
+        captured at generation time. When the caller omits the parameter,
+        the legacy timestamp-only definition is preserved.
 
         Returns None when no summary row exists for the meeting.
         """
@@ -84,36 +96,51 @@ class SummaryRepository:
         row = result.first()
         if row is None:
             return None
+        is_stale = bool(row.is_stale_timestamps)
+        if current_attachment_snapshot_hash is not None:
+            stored = row.attachment_hash_snapshot or EMPTY_SET_SNAPSHOT_HASH
+            if stored != current_attachment_snapshot_hash:
+                is_stale = True
         return SummaryWithStale(
             id=row.id,
             meeting_id=row.meeting_id,
             markdown=row.markdown,
             generated_at=row.generated_at,
-            is_stale=bool(row.is_stale),
+            is_stale=is_stale,
         )
 
-    async def upsert(self, *, meeting_id: str, markdown: str) -> Summary:
+    async def upsert(
+        self,
+        *,
+        meeting_id: str,
+        markdown: str,
+        attachment_hash_snapshot: str | None = None,
+    ) -> Summary:
         """Atomic upsert via PostgreSQL ON CONFLICT (meeting_id) DO UPDATE.
 
         On conflict, replaces `markdown` and stamps `generated_at = now()`.
+        Slice-20c: when `attachment_hash_snapshot` is provided, the snapshot
+        column is written too; otherwise the existing value is preserved.
         Always returns the resulting (inserted or updated) row.
         """
         new_id = f"sm_{secrets.token_urlsafe(16)}"
         # Use SQL `now()` for both first-insert and conflict-update so the
         # timestamp is monotonic per the DB clock (avoids client-side time
         # drift between calls landing in the same wall-clock millisecond).
+        values: dict[str, object] = {
+            "id": new_id,
+            "meeting_id": meeting_id,
+            "markdown": markdown,
+            "generated_at": text("now()"),
+        }
+        set_dict: dict[str, object] = {"markdown": markdown, "generated_at": text("now()")}
+        if attachment_hash_snapshot is not None:
+            values["attachment_hash_snapshot"] = attachment_hash_snapshot
+            set_dict["attachment_hash_snapshot"] = attachment_hash_snapshot
         stmt = (
             pg_insert(Summary)
-            .values(
-                id=new_id,
-                meeting_id=meeting_id,
-                markdown=markdown,
-                generated_at=text("now()"),
-            )
-            .on_conflict_do_update(
-                index_elements=["meeting_id"],
-                set_={"markdown": markdown, "generated_at": text("now()")},
-            )
+            .values(**values)
+            .on_conflict_do_update(index_elements=["meeting_id"], set_=set_dict)
             .returning(Summary)
         )
         # `populate_existing=True` overwrites the session's identity-map row

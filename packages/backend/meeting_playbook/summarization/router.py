@@ -90,7 +90,28 @@ async def get_summary(
     if meeting is None:
         raise _meeting_not_found()
 
-    summary = await SummaryRepository(session).get_with_stale_flag(meeting_id)
+    # Slice-20c: compute the live attachment-set hash and feed it to the
+    # repository so `is_stale` reflects attachment churn alongside the
+    # legacy transcript / playbook / chat timestamp signals.
+    from meeting_playbook.attachments.multimodal_context import (
+        EMPTY_SET_SNAPSHOT_HASH,
+        compute_attachment_snapshot_hash,
+    )
+    from meeting_playbook.attachments.repository import AttachmentRepository
+
+    attachments = await AttachmentRepository(session).list_for_meeting_internal(
+        meeting_id=meeting_id,
+    )
+    current_hash = (
+        compute_attachment_snapshot_hash(list(attachments))
+        if attachments
+        else EMPTY_SET_SNAPSHOT_HASH
+    )
+
+    summary = await SummaryRepository(session).get_with_stale_flag(
+        meeting_id,
+        current_attachment_snapshot_hash=current_hash,
+    )
     if summary is not None:
         return {
             "id": summary.id,

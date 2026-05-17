@@ -53,8 +53,30 @@ async def _run(
     """
     try:
         markdown = await summarizer.summarize(meeting_id)
+        # Slice-20c: stamp the attachment-set snapshot so the GET endpoint's
+        # `is_stale` flag can detect later attachment churn. Computed in the
+        # same session_factory scope so the snapshot reflects the
+        # attachments visible at the time the summary was generated.
+        from meeting_playbook.attachments.multimodal_context import (
+            EMPTY_SET_SNAPSHOT_HASH,
+            compute_attachment_snapshot_hash,
+        )
+        from meeting_playbook.attachments.repository import AttachmentRepository
+
         async with session_factory() as session:
-            await SummaryRepository(session).upsert(meeting_id=meeting_id, markdown=markdown)
+            attachments = await AttachmentRepository(session).list_for_meeting_internal(
+                meeting_id=meeting_id,
+            )
+            snapshot = (
+                compute_attachment_snapshot_hash(list(attachments))
+                if attachments
+                else EMPTY_SET_SNAPSHOT_HASH
+            )
+            await SummaryRepository(session).upsert(
+                meeting_id=meeting_id,
+                markdown=markdown,
+                attachment_hash_snapshot=snapshot,
+            )
         logger.info("summary meeting=%s persisted", meeting_id)
     except asyncio.CancelledError:
         logger.info("summary meeting=%s cancelled", meeting_id)

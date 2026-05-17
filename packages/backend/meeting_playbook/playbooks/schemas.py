@@ -36,5 +36,9 @@ class PlaybookRead(BaseModel):
     red_lines: str
     created_at: datetime
     updated_at: datetime
+    # Slice-20c: `True` when the live attachment-set hash differs from the
+    # snapshot captured at generation time. The UI shows a "regenerate"
+    # banner when this is true.
+    is_stale: bool = False
 
     model_config = {"from_attributes": True}

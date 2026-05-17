@@ -20,6 +20,7 @@ import { MarkdownPreview } from "../lib/markdown-preview";
 import {
   PlaybookApiError,
   playbookQueryOptions,
+  useRegeneratePlaybookMutation,
   useUpsertPlaybookMutation,
 } from "../lib/playbook-api";
 import { Pane } from "./pane";
@@ -44,6 +45,7 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
   const { t } = useTranslation();
   const query = useQuery(playbookQueryOptions(meetingId));
   const mutation = useUpsertPlaybookMutation(meetingId);
+  const regenerateMutation = useRegeneratePlaybookMutation(meetingId);
 
   const [freeformMode, setFreeformMode] = useState<"edit" | "preview">("edit");
   const [draft, setDraft] = useState<string>("");
@@ -131,6 +133,26 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
           <p className="text-sm text-(--color-muted-foreground)">{t("playbook.loading")}</p>
         )}
         {error && <Alert variant="destructive">{error}</Alert>}
+
+        {query.data?.is_stale && (
+          <Alert
+            data-testid="playbook-stale-attachments-banner"
+            variant="warning"
+            role="note"
+            className="flex flex-wrap items-center gap-3"
+          >
+            <span className="flex-1">{t("playbook.stale.attachments_changed")}</span>
+            <Button
+              type="button"
+              size="sm"
+              data-testid="playbook-stale-regenerate-button"
+              disabled={regenerateMutation.isPending}
+              onClick={() => regenerateMutation.mutate()}
+            >
+              {t("playbook.stale.regenerate_button")}
+            </Button>
+          </Alert>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="playbook-freeform">{t("playbook.freeform.label")}</Label>

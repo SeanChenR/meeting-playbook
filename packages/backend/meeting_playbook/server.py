@@ -34,6 +34,7 @@ from meeting_playbook.calendar.router import router as calendar_router
 from meeting_playbook.chat.router import router as chat_router
 from meeting_playbook.config import get_settings
 from meeting_playbook.dashboard_stats.router import router as dashboard_stats_router
+from meeting_playbook.export.router import router as export_router
 from meeting_playbook.meeting_links.router import router as meeting_links_router
 from meeting_playbook.meetings.router import router as meetings_router
 from meeting_playbook.offline_ingest import pipeline as _offline_ingest_pipeline  # noqa: F401 — auto-registers tus completion handler
@@ -181,6 +182,7 @@ def create_app() -> FastAPI:
     app.include_router(meetings_router)
     app.include_router(tags_router)
     app.include_router(meeting_links_router)
+    app.include_router(export_router)
     app.include_router(playbooks_router)
     app.include_router(calendar_router)
     app.include_router(sessions_router)

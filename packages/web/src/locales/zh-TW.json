@@ -278,6 +278,9 @@
       "recordingExpired": "錄音已過期",
       "rerunButton": "重新轉錄",
       "rerunPending": "重新轉錄中…",
+      "export": "匯出",
+      "exporting": "匯出中…",
+      "exportFailed": "匯出失敗",
       "layout": {
         "stack": "上下三層佈局",
         "columns": "三欄佈局"

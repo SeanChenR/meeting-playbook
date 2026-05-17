@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { PlaybookPane } from "./playbook-pane";
@@ -9,7 +9,7 @@ let fetchHandler: (url: string, init?: RequestInit) => Promise<Response> = async
   new Response("{}", { status: 200 });
 const originalFetch = globalThis.fetch;
 
-const SAMPLE = (overrides: Partial<Record<string, string>> = {}) => ({
+const SAMPLE = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: "pb_test",
   meeting_id: "m_test",
   free_form_markdown: "",
@@ -21,6 +21,9 @@ const SAMPLE = (overrides: Partial<Record<string, string>> = {}) => ({
   red_lines: "",
   created_at: "2026-05-07T10:00:00Z",
   updated_at: "2026-05-07T10:00:00Z",
+  previous_free_form_markdown: null as string | null,
+  previous_updated_at: null as string | null,
+  has_previous_version: false,
   ...overrides,
 });
 
@@ -135,5 +138,114 @@ describe("PlaybookPane", () => {
     expect((screen.getByLabelText(/自由格式 Markdown/) as HTMLTextAreaElement).value).toBe(
       "# Goals",
     );
+  });
+
+  // ─── Slice-23: diff sub-mode integration ──────────────────────────────
+
+  test("(5.1) diff sub-tab is NOT rendered when has_previous_version is false", async () => {
+    // SAMPLE default has has_previous_version=false; baseline.
+    await renderPane();
+    expect(screen.getByTestId("freeform-edit-tab")).toBeDefined();
+    expect(screen.getByTestId("freeform-preview-tab")).toBeDefined();
+    expect(screen.queryByTestId("freeform-diff-tab")).toBeNull();
+  });
+
+  test("(5.1) diff sub-tab IS rendered when has_previous_version is true", async () => {
+    fetchHandler = async () =>
+      new Response(
+        JSON.stringify(
+          SAMPLE({
+            free_form_markdown: "v2",
+            previous_free_form_markdown: "v1",
+            has_previous_version: true,
+          }),
+        ),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    await renderPane();
+    expect(screen.getByTestId("freeform-edit-tab")).toBeDefined();
+    expect(screen.getByTestId("freeform-preview-tab")).toBeDefined();
+    expect(screen.getByTestId("freeform-diff-tab")).toBeDefined();
+  });
+
+  test("(5.2) regenerate auto-switches to diff mode when content changed", async () => {
+    const user = userEvent.setup();
+    // First GET: stale (so regenerate button shows) + no snapshot yet.
+    // Then POST regenerate: returns new content with previous_* populated.
+    let regenerateCalled = false;
+    fetchHandler = async (_url, init) => {
+      if (init?.method === "POST") {
+        regenerateCalled = true;
+        return new Response(
+          JSON.stringify(
+            SAMPLE({
+              free_form_markdown: "v2",
+              previous_free_form_markdown: "v1",
+              has_previous_version: true,
+              is_stale: false,
+            }),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify(
+          SAMPLE({
+            free_form_markdown: "v1",
+            is_stale: true,
+          }),
+        ),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+    await renderPane();
+
+    // Banner present → click regenerate → confirm dialog opens.
+    await user.click(screen.getByTestId("playbook-stale-regenerate-button"));
+    const dialog = await screen.findByRole("alertdialog");
+    // Click the confirm button INSIDE the dialog.
+    await user.click(within(dialog).getByRole("button", { name: "重新生成" }));
+
+    await waitFor(() => {
+      expect(regenerateCalled).toBe(true);
+    });
+    // After regenerate the pane should auto-switch to diff mode.
+    await waitFor(() => {
+      expect(screen.getByTestId("playbook-diff-viewer")).toBeDefined();
+    });
+  });
+
+  test("(5.2) regenerate does NOT auto-switch when current === previous", async () => {
+    const user = userEvent.setup();
+    fetchHandler = async (_url, init) => {
+      if (init?.method === "POST") {
+        return new Response(
+          JSON.stringify(
+            SAMPLE({
+              free_form_markdown: "v1",
+              previous_free_form_markdown: "v1",
+              has_previous_version: true,
+              is_stale: false,
+            }),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify(SAMPLE({ free_form_markdown: "v1", is_stale: true })), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    await renderPane();
+
+    await user.click(screen.getByTestId("playbook-stale-regenerate-button"));
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: "重新生成" }));
+
+    // No auto-switch — diff viewer should NOT mount.
+    await waitFor(() => {
+      // Sub-tab might show (has_previous_version=true) but viewer should not.
+      expect(screen.queryByTestId("playbook-diff-viewer")).toBeNull();
+    });
   });
 });

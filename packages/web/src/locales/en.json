@@ -461,9 +461,19 @@
       "regenerating": "Regenerating…",
       "regenerate_failed": "Regenerate failed, please try again",
       "confirm_title": "Regenerate playbook?",
-      "confirm_description": "The current playbook content will be overwritten with a fresh AI draft. Any unsaved edits will be lost.",
+      "confirm_description": "Your **saved** Playbook will become the previous version — you can compare and restore it in Diff mode. **Unsaved edits in the textarea will be lost.**",
       "confirm_confirm": "Regenerate",
       "confirm_cancel": "Cancel"
+    },
+    "diff": {
+      "tab": "Diff",
+      "acceptAllNew": "Accept all new",
+      "restoreAllPrevious": "Restore all previous",
+      "applyMerged": "Apply selection",
+      "useNew": "Use new",
+      "usePrevious": "Use previous",
+      "undecidedHint": "{{count}} segment(s) still undecided",
+      "emptyHint": "The new draft is identical to the previous version — no changes to show."
     }
   },
   "tags": {
@@ -692,7 +702,8 @@
     },
     "playbook": {
       "generation_timeout": "Playbook generation timed out (>60s) — please try again",
-      "generation_failed": "Playbook generation failed — the LLM response could not be parsed"
+      "generation_failed": "Playbook generation failed — the LLM response could not be parsed",
+      "no_previous_version": "No previous version to compare or restore"
     },
     "session": {
       "no_audio_device": "No microphone found — check system permissions",

@@ -461,9 +461,19 @@
       "regenerating": "重新生成中…",
       "regenerate_failed": "重新生成失敗，請稍後再試",
       "confirm_title": "確定要重新生成？",
-      "confirm_description": "目前的 Playbook 內容會被新版 AI 草稿覆蓋，未儲存的修改也會一起遺失。",
+      "confirm_description": "目前**已儲存**的 Playbook 會存為「上一版」，您可以在 Diff 模式對照、選擇保留或還原。**尚未儲存的編輯不會保留**。",
       "confirm_confirm": "重新生成",
       "confirm_cancel": "取消"
+    },
+    "diff": {
+      "tab": "Diff",
+      "acceptAllNew": "全部採用新版",
+      "restoreAllPrevious": "全部回到舊版",
+      "applyMerged": "套用挑選",
+      "useNew": "保留新版",
+      "usePrevious": "保留舊版",
+      "undecidedHint": "還有 {{count}} 段未挑選",
+      "emptyHint": "新版和上一版內容相同，無變動可顯示。"
     }
   },
   "tags": {
@@ -692,7 +702,8 @@
     },
     "playbook": {
       "generation_timeout": "Playbook 生成逾時（>60 秒）— 請稍後再試",
-      "generation_failed": "Playbook 生成失敗 — LLM 回傳內容無法解析"
+      "generation_failed": "Playbook 生成失敗 — LLM 回傳內容無法解析",
+      "no_previous_version": "沒有可比對或還原的上一版"
     },
     "session": {
       "no_audio_device": "找不到麥克風 — 請確認系統權限",

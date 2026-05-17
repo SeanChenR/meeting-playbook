@@ -21,15 +21,17 @@ import { MarkdownPreview } from "../lib/markdown-preview";
 import {
   PlaybookApiError,
   playbookQueryOptions,
+  useDiscardPreviousPlaybookMutation,
   useRegeneratePlaybookMutation,
+  useRestorePreviousPlaybookMutation,
   useUpsertPlaybookMutation,
 } from "../lib/playbook-api";
 import { Pane } from "./pane";
+import { PlaybookDiffViewer, type HunkDecisions } from "./playbook-diff-viewer";
 import { Alert } from "./ui/alert";
 import { AlertDialog } from "./ui/alert-dialog";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Label } from "./ui/label";
 import { cn } from "../lib/utils";
 
 interface PlaybookPaneProps {
@@ -48,16 +50,30 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
   const query = useQuery(playbookQueryOptions(meetingId));
   const mutation = useUpsertPlaybookMutation(meetingId);
   const regenerateMutation = useRegeneratePlaybookMutation(meetingId);
+  // Slice-23: discard / restore mutations wired to PlaybookDiffViewer callbacks.
+  const discardPreviousMutation = useDiscardPreviousPlaybookMutation(meetingId);
+  const restorePreviousMutation = useRestorePreviousPlaybookMutation(meetingId);
 
-  const [freeformMode, setFreeformMode] = useState<"edit" | "preview">("edit");
+  // Slice-23: extend sub-mode state with a third "diff" entry. The toggle
+  // button for diff is only rendered when `has_previous_version === true`
+  // (per spec `playbook-versioning`: "diff button SHALL only appear
+  // when has_previous_version === true").
+  const [freeformMode, setFreeformMode] = useState<"edit" | "preview" | "diff">("edit");
   const [draft, setDraft] = useState<string>("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
+  // Slice-23 / Gemini PR #36 review #4: lift the per-hunk decision map
+  // out of <PlaybookDiffViewer> so switching to "edit" or "preview"
+  // (which unmounts the viewer) doesn't discard cherry-pick progress.
+  // Reset together with the textarea when the playbook row's
+  // updated_at moves (new regenerate → new snapshot → stale decisions).
+  const [diffDecisions, setDiffDecisions] = useState<HunkDecisions>({});
 
   useEffect(() => {
     if (!query.data) return;
     setDraft(query.data.free_form_markdown);
     setSavedAt(null);
+    setDiffDecisions({});
     // Re-sync on `updated_at` so regenerate (which keeps the playbook
     // row id but writes a new `updated_at`) replaces the textarea with
     // the freshly generated markdown. Watching only `id` left the
@@ -66,6 +82,30 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
     // like a no-op.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.data?.id, query.data?.updated_at]);
+
+  // Slice-23 / design D6: after a successful regenerate, if the new
+  // `free_form_markdown` differs from the snapshot just captured, auto-
+  // switch to diff mode so the user immediately sees the comparison.
+  // If the content didn't change (rare: identical regeneration), stay
+  // on the current mode.
+  useEffect(() => {
+    const data = regenerateMutation.data;
+    if (!data) return;
+    if (
+      data.previous_free_form_markdown &&
+      data.previous_free_form_markdown !== data.free_form_markdown
+    ) {
+      setFreeformMode("diff");
+    }
+  }, [regenerateMutation.data]);
+
+  // If the row drops its snapshot (e.g. discard_previous succeeded), the
+  // user can't be sitting on a diff that no longer exists.
+  useEffect(() => {
+    if (freeformMode === "diff" && query.data && !query.data.has_previous_version) {
+      setFreeformMode("edit");
+    }
+  }, [freeformMode, query.data]);
 
   async function handleSave() {
     try {
@@ -82,6 +122,42 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
       toast.success(t("playbook.save.saved_toast"));
     } catch {
       // mutation.error surfaced below; nothing else to do here.
+    }
+  }
+
+  // Slice-23: diff viewer callbacks. See design D5 — cherry-pick walks
+  // through user-save upsert (`useUpsertPlaybookMutation`) then clears
+  // the snapshot via `discard_previous`.
+  function handleAcceptAllNew() {
+    discardPreviousMutation.mutate(undefined, {
+      onSuccess: () => setFreeformMode("edit"),
+    });
+  }
+
+  function handleRestoreAllPrevious() {
+    restorePreviousMutation.mutate(undefined, {
+      onSuccess: () => setFreeformMode("edit"),
+    });
+  }
+
+  async function handleApplyMerged(merged: string) {
+    try {
+      await mutation.mutateAsync({
+        free_form_markdown: merged,
+        objective: query.data?.objective ?? "",
+        counterparty_profile: query.data?.counterparty_profile ?? "",
+        anticipated_topics: query.data?.anticipated_topics ?? "",
+        anticipated_objections: query.data?.anticipated_objections ?? "",
+        talking_points: query.data?.talking_points ?? "",
+        red_lines: query.data?.red_lines ?? "",
+      });
+      // Cherry-picked merge is conceptually "accept this version" — clear
+      // the snapshot so the diff mode auto-exits.
+      discardPreviousMutation.mutate(undefined, {
+        onSuccess: () => setFreeformMode("edit"),
+      });
+    } catch {
+      // mutation.error is surfaced via `error` below.
     }
   }
 
@@ -140,6 +216,24 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
           >
             {t("playbook.freeform.previewTab")}
           </Button>
+          {/*
+            Slice-23: diff sub-tab — only mounted when the server reports
+            `has_previous_version === true` (spec `playbook-versioning`).
+            Hiding it on empty snapshots prevents users from clicking
+            into a meaningless "no diff" pane.
+          */}
+          {query.data?.has_previous_version === true && (
+            <Button
+              type="button"
+              size="sm"
+              variant={freeformMode === "diff" ? "primary" : "ghost"}
+              aria-pressed={freeformMode === "diff"}
+              data-testid="freeform-diff-tab"
+              onClick={() => setFreeformMode("diff")}
+            >
+              {t("playbook.diff.tab")}
+            </Button>
+          )}
         </div>
       }
       bodyClassName="px-3.5 py-3.5"
@@ -181,10 +275,10 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="playbook-freeform">{t("playbook.freeform.label")}</Label>
-          {freeformMode === "edit" ? (
+          {freeformMode === "edit" && (
             <textarea
               id="playbook-freeform"
+              aria-label={t("playbook.freeform.label")}
               className={TEXTAREA_CLASSNAME}
               placeholder={t("playbook.freeform.placeholder")}
               value={draft}
@@ -194,16 +288,33 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
               }}
               rows={12}
             />
-          ) : (
-            <MarkdownPreview source={draft} />
+          )}
+          {freeformMode === "preview" && <MarkdownPreview source={draft} />}
+          {freeformMode === "diff" && query.data?.has_previous_version === true && (
+            <PlaybookDiffViewer
+              previous={query.data.previous_free_form_markdown ?? ""}
+              current={query.data.free_form_markdown}
+              decisions={diffDecisions}
+              onDecisionsChange={setDiffDecisions}
+              onAcceptAllNew={handleAcceptAllNew}
+              onRestoreAllPrevious={handleRestoreAllPrevious}
+              onApplyMerged={handleApplyMerged}
+              isPending={
+                discardPreviousMutation.isPending ||
+                restorePreviousMutation.isPending ||
+                mutation.isPending
+              }
+            />
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button type="button" onClick={handleSave} disabled={mutation.isPending} size="sm">
-            {saveLabel}
-          </Button>
-        </div>
+        {freeformMode !== "diff" && (
+          <div className="flex items-center gap-3">
+            <Button type="button" onClick={handleSave} disabled={mutation.isPending} size="sm">
+              {saveLabel}
+            </Button>
+          </div>
+        )}
       </div>
 
       <AlertDialog

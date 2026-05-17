@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TypedDict
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -131,6 +131,126 @@ class PlaybookRepository:
 
         # Bypass any cached ORM instance from a prior get_or_create call so
         # the returned Playbook reflects the values just written.
+        result = await self._session.execute(
+            select(Playbook)
+            .where(Playbook.meeting_id == meeting_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one()
+
+    async def snapshot_then_upsert(
+        self, meeting_id: str, payload: PlaybookUpsertPayload
+    ) -> Playbook:
+        """Slice-23: snapshot the current row, then write the new payload.
+
+        Per design D2 (snapshot only on the regenerate path):
+
+        - In a single transaction, copy the row's CURRENT
+          `free_form_markdown` / `updated_at` / `attachment_hash_snapshot`
+          into the corresponding `previous_*` columns.
+        - Then upsert the new content fields exactly like
+          `upsert_for_meeting` would.
+
+        If no row exists for `meeting_id` yet, the snapshot step is a
+        no-op and the row is inserted with `previous_* = NULL`. This is
+        the "first-ever regenerate" case from the spec.
+        """
+        # Per Gemini PR #36 review #2: snapshot via column-expression
+        # UPDATE — `previous_x = playbook.x` — so we skip the SELECT
+        # roundtrip. `UPDATE ... WHERE meeting_id = :id` is a clean
+        # no-op when no row exists, which correctly handles the
+        # "first-ever regenerate" case (row gets inserted by the
+        # downstream upsert with previous_* = NULL by default).
+        await self._session.execute(
+            update(Playbook)
+            .where(Playbook.meeting_id == meeting_id)
+            .values(
+                previous_free_form_markdown=Playbook.free_form_markdown,
+                previous_updated_at=Playbook.updated_at,
+                previous_attachment_hash_snapshot=Playbook.attachment_hash_snapshot,
+            )
+        )
+        # Don't commit yet — let upsert_for_meeting commit both steps
+        # together (it ends in a commit). The UPDATE above leaves the
+        # non-previous_* columns alone; the upsert then overwrites them
+        # with the new payload.
+        return await self.upsert_for_meeting(meeting_id, payload)
+
+    async def discard_previous(self, meeting_id: str) -> Playbook | None:
+        """Slice-23: clear the three `previous_*` columns.
+
+        Returns the updated row, or `None` when:
+        - no row exists for the meeting, OR
+        - `previous_free_form_markdown` is already NULL (nothing to discard).
+
+        Per spec `playbook-versioning`:
+            `POST .../playbook/discard_previous` SHALL clear the snapshot
+            without changing the current draft.
+
+        The router translates `None` into HTTP 404 with error_code
+        `playbook.no_previous_version`.
+        """
+        existing = (
+            await self._session.execute(select(Playbook).where(Playbook.meeting_id == meeting_id))
+        ).scalar_one_or_none()
+        if existing is None or existing.previous_free_form_markdown is None:
+            return None
+
+        await self._session.execute(
+            update(Playbook)
+            .where(Playbook.meeting_id == meeting_id)
+            .values(
+                previous_free_form_markdown=None,
+                previous_updated_at=None,
+                previous_attachment_hash_snapshot=None,
+            )
+        )
+        await self._session.commit()
+
+        result = await self._session.execute(
+            select(Playbook)
+            .where(Playbook.meeting_id == meeting_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one()
+
+    async def restore_previous(self, meeting_id: str) -> Playbook | None:
+        """Slice-23: swap previous_* back into the current draft.
+
+        Returns the updated row, or `None` when:
+        - no row exists, OR
+        - `previous_free_form_markdown IS NULL` (nothing to restore).
+
+        Per spec `playbook-versioning` the swap is atomic:
+        - `free_form_markdown` ← `previous_free_form_markdown`
+        - `attachment_hash_snapshot` ← `previous_attachment_hash_snapshot`
+        - `updated_at` ← now()
+        - all three `previous_*` columns → NULL
+
+        The 6 structured fields are left untouched because S23 never
+        snapshotted them.
+        """
+        existing = (
+            await self._session.execute(select(Playbook).where(Playbook.meeting_id == meeting_id))
+        ).scalar_one_or_none()
+        if existing is None or existing.previous_free_form_markdown is None:
+            return None
+
+        now = datetime.now(UTC)
+        await self._session.execute(
+            update(Playbook)
+            .where(Playbook.meeting_id == meeting_id)
+            .values(
+                free_form_markdown=existing.previous_free_form_markdown,
+                attachment_hash_snapshot=existing.previous_attachment_hash_snapshot,
+                updated_at=now,
+                previous_free_form_markdown=None,
+                previous_updated_at=None,
+                previous_attachment_hash_snapshot=None,
+            )
+        )
+        await self._session.commit()
+
         result = await self._session.execute(
             select(Playbook)
             .where(Playbook.meeting_id == meeting_id)

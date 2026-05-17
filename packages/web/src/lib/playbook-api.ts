@@ -27,6 +27,19 @@ export interface Playbook {
    * banner when this is true.
    */
   is_stale?: boolean;
+  /**
+   * Slice-23: previous-version snapshot fields. Populated only after a
+   * regenerate run; user-save (`PUT /playbook`) NEVER touches them. The
+   * UI computes the diff client-side from
+   * `previous_free_form_markdown` vs `free_form_markdown`.
+   *
+   * `has_previous_version` is derived server-side
+   * (`= previous_free_form_markdown !== null`) so the UI never has to
+   * null-check inline.
+   */
+  previous_free_form_markdown?: string | null;
+  previous_updated_at?: string | null;
+  has_previous_version?: boolean;
 }
 
 export interface PlaybookUpsertPayload {
@@ -113,6 +126,53 @@ export function useRegeneratePlaybookMutation(meetingId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => regeneratePlaybook(meetingId),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["playbook", meetingId], data);
+    },
+  });
+}
+
+/**
+ * Slice-23: clear the previous-version snapshot ("accept new draft").
+ * Backend returns the updated `PlaybookRead` with `previous_*` = null.
+ */
+export async function discardPreviousPlaybook(meetingId: string): Promise<Playbook> {
+  const resp = await fetch(
+    `/api/meetings/${encodeURIComponent(meetingId)}/playbook/discard_previous`,
+    { method: "POST" },
+  );
+  if (!resp.ok) throw await _envelopeError(resp);
+  return (await resp.json()) as Playbook;
+}
+
+/**
+ * Slice-23: swap the previous-version snapshot back into the current
+ * draft ("restore old version"). Backend overwrites `free_form_markdown`
+ * + `attachment_hash_snapshot` and clears `previous_*`.
+ */
+export async function restorePreviousPlaybook(meetingId: string): Promise<Playbook> {
+  const resp = await fetch(
+    `/api/meetings/${encodeURIComponent(meetingId)}/playbook/restore_previous`,
+    { method: "POST" },
+  );
+  if (!resp.ok) throw await _envelopeError(resp);
+  return (await resp.json()) as Playbook;
+}
+
+export function useDiscardPreviousPlaybookMutation(meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => discardPreviousPlaybook(meetingId),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["playbook", meetingId], data);
+    },
+  });
+}
+
+export function useRestorePreviousPlaybookMutation(meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => restorePreviousPlaybook(meetingId),
     onSuccess: (data) => {
       queryClient.setQueryData(["playbook", meetingId], data);
     },

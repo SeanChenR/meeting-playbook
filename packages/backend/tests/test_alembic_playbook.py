@@ -33,10 +33,21 @@ _EXPECTED_COLUMNS = {
     "updated_at",
     # Slice-20c: nullable on legacy rows; treated as empty-set canonical hash.
     "attachment_hash_snapshot",
+    # Slice-23: previous-version snapshot (all nullable); only the
+    # regenerate path + discard/restore endpoints touch these.
+    "previous_free_form_markdown",
+    "previous_updated_at",
+    "previous_attachment_hash_snapshot",
 }
 
-# Slice-20c: `attachment_hash_snapshot` is nullable; every other column is NOT NULL.
-_NOT_NULL_COLUMNS = _EXPECTED_COLUMNS - {"attachment_hash_snapshot"}
+# Slice-20c + slice-23: only the snapshot columns are nullable; the rest are NOT NULL.
+_NULLABLE_COLUMNS = {
+    "attachment_hash_snapshot",
+    "previous_free_form_markdown",
+    "previous_updated_at",
+    "previous_attachment_hash_snapshot",
+}
+_NOT_NULL_COLUMNS = _EXPECTED_COLUMNS - _NULLABLE_COLUMNS
 
 
 @pytest.mark.asyncio

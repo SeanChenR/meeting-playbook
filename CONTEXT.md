@@ -36,6 +36,7 @@ Three lifecycle phases of one meeting:
 | **Transcript color scheme** | One of five hard-coded palettes (default / vivid / pastel / high-contrast / grayscale) the user can apply to `speaker_cluster_<N>` rendering; per-cluster overrides land in `localStorage`. `me` and `counterparty` keep their semantic colours and are not customisable (slice-16) |
 | **Tag (標籤)** | Per-user 自訂的扁平分類標籤；可掛到 meeting 上做 list / kanban / calendar 過濾。Per-user case-insensitive 唯一；單一 meeting 最多 10 個；色票從 preset palette 挑（per slice-17）|
 | **Meeting attachment (會議附件)** | User-uploaded image / PDF / docx / txt / md attached to a meeting via `/api/meetings/{id}/attachments`. Per-meeting quota: 5 files / 30 MB. Sweeps under the same 30-day `Recording window` retention as raw audio; row + on-disk file removed together (slice-20a) |
+| **Meeting link** | A user-curated `related` connection between two meetings, persisted as one row in the `meeting_link` schema with bidirectional semantics (writing one row makes the link visible from either side). v1.1 freezes `link_type` to `"related"`; the column is pre-allocated for future v1.2 follow-up / prep-for semantics (slice-21) |
 
 ## Boundaries
 - **Single user.** No team / sharing / multi-tenant.

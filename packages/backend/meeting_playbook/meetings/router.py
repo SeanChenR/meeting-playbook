@@ -219,6 +219,34 @@ async def create_meeting(
         attachment_ids=body.attachments,
     )
 
+    # (2b) Slice-21: validate every `links[]` target is owned by the caller
+    # BEFORE creating the meeting row so a bad id leaves no orphan meeting.
+    # De-dup the input here; the INSERT below uses the unique-on-pair index
+    # but the pre-check gives a cleaner error code than IntegrityError.
+    link_targets: list[str] = []
+    if body.links:
+        deduped = list(dict.fromkeys(body.links))
+        owned_rows = await session.execute(
+            text(
+                """
+                SELECT id FROM meeting
+                 WHERE id = ANY(:ids) AND user_id = :uid
+                """
+            ),
+            {"ids": deduped, "uid": user_id},
+        )
+        owned = {r.id for r in owned_rows}
+        missing = [mid for mid in deduped if mid not in owned]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error_code": "meeting.not_found",
+                    "message": "One or more linked meetings are not owned by this user.",
+                },
+            )
+        link_targets = deduped
+
     # (3) Calendar fetch BEFORE meeting create (so calendar errors do not
     # leave an orphan meeting). Captured event is reused at step (6).
     calendar_event = None
@@ -260,6 +288,26 @@ async def create_meeting(
                 """
             ),
             {"mid": meeting.id, "ids": body.attachments, "uid": user_id},
+        )
+        await session.commit()
+
+    # (5b) Slice-21: insert link rows. The DB unique-on-pair index would
+    # collapse duplicates anyway, but the pre-validation already de-duped
+    # so this is a straight batch INSERT. We don't use
+    # `MeetingLinkRepository.create` here because that method commits per
+    # call; bulk-inserting in one execute keeps the round-trip count flat.
+    if link_targets:
+        # Explicit `text[]` cast — asyncpg can't infer the array element
+        # type from a bare parameter and would otherwise complain about an
+        # ambiguous `unnest(unknown)` overload.
+        await session.execute(
+            text(
+                """
+                INSERT INTO meeting_link (from_meeting_id, to_meeting_id, link_type)
+                SELECT :mid, unnest(CAST(:ids AS text[])), 'related'
+                """
+            ),
+            {"mid": meeting.id, "ids": link_targets},
         )
         await session.commit()
 

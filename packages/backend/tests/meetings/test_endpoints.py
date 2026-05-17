@@ -455,9 +455,7 @@ async def test_patch_title_only_returns_updated_row(
 
 
 @pytest.mark.asyncio
-async def test_patch_multi_field_updates_all(
-    api_client: AsyncClient, migrated_engine: AsyncEngine
-):
+async def test_patch_multi_field_updates_all(api_client: AsyncClient, migrated_engine: AsyncEngine):
     """Slice-15: multi-field PATCH writes them all in one request."""
     await _seed_user(migrated_engine, "user_patch_multi")
     mid = await _create_test_meeting(api_client, "user_patch_multi")
@@ -483,9 +481,7 @@ async def test_patch_multi_field_updates_all(
 
 
 @pytest.mark.asyncio
-async def test_patch_empty_body_is_noop_200(
-    api_client: AsyncClient, migrated_engine: AsyncEngine
-):
+async def test_patch_empty_body_is_noop_200(api_client: AsyncClient, migrated_engine: AsyncEngine):
     """Slice-15: empty `{}` body returns current row idempotently."""
     await _seed_user(migrated_engine, "user_patch_empty")
     mid = await _create_test_meeting(api_client, "user_patch_empty")
@@ -541,9 +537,7 @@ async def test_patch_end_with_existing_start_after_returns_422(
 
 
 @pytest.mark.asyncio
-async def test_patch_cross_user_returns_404(
-    api_client: AsyncClient, migrated_engine: AsyncEngine
-):
+async def test_patch_cross_user_returns_404(api_client: AsyncClient, migrated_engine: AsyncEngine):
     """Cross-user PATCH MUST return 404 without leaking existence."""
     await _seed_user(migrated_engine, "user_owner_p")
     await _seed_user(migrated_engine, "user_intruder_p")
@@ -575,3 +569,112 @@ async def test_patch_asr_provider_only_still_works(
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["asr_provider"] == "whisper"
+
+
+@pytest.mark.asyncio
+async def test_post_meeting_with_links_inserts_link_rows(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Slice-21: POST /api/meetings with `links[]` pre-attaches related meetings.
+
+    Two existing meetings (target_a, target_b) owned by the same user are
+    pre-created. The third POST request includes both ids in `links[]`
+    and the response is 201; the database then contains one
+    `meeting_link` row for each id pointing from the new meeting to
+    the targets.
+    """
+    await _seed_user(migrated_engine, "user_link")
+
+    target_a = (
+        await api_client.post(
+            "/api/meetings",
+            headers={"X-User-Id": "user_link"},
+            json={
+                "title": "Target A",
+                "counterparty_display_name": "對方A",
+                "me_display_name": "Sean",
+                "scheduled_start_at": "2026-06-15T14:00:00Z",
+            },
+        )
+    ).json()
+    target_b = (
+        await api_client.post(
+            "/api/meetings",
+            headers={"X-User-Id": "user_link"},
+            json={
+                "title": "Target B",
+                "counterparty_display_name": "對方B",
+                "me_display_name": "Sean",
+                "scheduled_start_at": "2026-06-16T14:00:00Z",
+            },
+        )
+    ).json()
+
+    resp = await api_client.post(
+        "/api/meetings",
+        headers={"X-User-Id": "user_link"},
+        json={
+            "title": "New meeting with links",
+            "counterparty_display_name": "對方C",
+            "me_display_name": "Sean",
+            "scheduled_start_at": "2026-06-17T14:00:00Z",
+            "links": [target_a["id"], target_b["id"]],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    new_meeting_id = resp.json()["id"]
+
+    # The new meeting's link list (returned by the GET endpoint) carries
+    # both targets — order doesn't matter, so compare as sets.
+    links_resp = await api_client.get(
+        f"/api/meetings/{new_meeting_id}/links",
+        headers={"X-User-Id": "user_link"},
+    )
+    assert links_resp.status_code == 200, links_resp.text
+    linked_ids = {entry["other_meeting_id"] for entry in links_resp.json()["links"]}
+    assert linked_ids == {target_a["id"], target_b["id"]}
+
+
+@pytest.mark.asyncio
+async def test_post_meeting_with_links_to_other_user_returns_404(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Slice-21: a `links[]` id owned by another user surfaces 404
+    `meeting.not_found` and the meeting row is NOT created."""
+    await _seed_user(migrated_engine, "user_a")
+    await _seed_user(migrated_engine, "user_b")
+
+    foreign = (
+        await api_client.post(
+            "/api/meetings",
+            headers={"X-User-Id": "user_b"},
+            json={
+                "title": "user_b's meeting",
+                "counterparty_display_name": "X",
+                "me_display_name": "Y",
+                "scheduled_start_at": "2026-06-15T14:00:00Z",
+            },
+        )
+    ).json()
+
+    # user_a tries to link to user_b's meeting → 404, no orphan meeting.
+    before = await api_client.get("/api/meetings", headers={"X-User-Id": "user_a"})
+    assert before.json() == []
+
+    resp = await api_client.post(
+        "/api/meetings",
+        headers={"X-User-Id": "user_a"},
+        json={
+            "title": "Should never be created",
+            "counterparty_display_name": "X",
+            "me_display_name": "Y",
+            "scheduled_start_at": "2026-06-17T14:00:00Z",
+            "links": [foreign["id"]],
+        },
+    )
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["error_code"] == "meeting.not_found"
+
+    # No meeting row created for user_a.
+    after = await api_client.get("/api/meetings", headers={"X-User-Id": "user_a"})
+    assert after.json() == []

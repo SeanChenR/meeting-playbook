@@ -41,6 +41,12 @@ class MeetingCreate(BaseModel):
     # `meeting_id` to the new meeting id within the same transaction
     # (per spec `POST /api/meetings accepts an attachments list`).
     attachments: list[str] = Field(default_factory=list)
+    # Slice-21: `links[]` lets the create form pre-attach related
+    # meetings without a second round-trip. Each id MUST reference an
+    # existing meeting owned by the current user; the router inserts one
+    # `meeting_link` row per id (de-duped) inside the same transaction
+    # as the meeting create. Failure on any id aborts the whole request.
+    links: list[str] = Field(default_factory=list)
 
     @field_validator("title", "counterparty_display_name", "me_display_name", mode="before")
     @classmethod

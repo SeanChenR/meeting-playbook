@@ -30,6 +30,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from meeting_playbook.attachments.models import MeetingAttachment
 from meeting_playbook.sessions.models import Recording
 
 logger = logging.getLogger(__name__)
@@ -41,17 +42,36 @@ async def cleanup(
     retention_days: int,
     recordings_dir: Path,
     session_factory: async_sessionmaker,
+    attachments_dir: Path | None = None,
 ) -> int:
-    """Sweep `recording` table; unlink old wavs + stamp `deleted_at`.
+    """Sweep `recording` + `meeting_attachment` tables; unlink expired files
+    and stamp `deleted_at`.
 
-    Returns the count of rows whose `deleted_at` was stamped this sweep
-    (= unlinked-from-disk + self-healed-because-missing).
+    Slice-20a expanded the original recording-only sweep to also cover the
+    `meeting_attachment` table:
+      1. Recording rows older than `retention_days` get their WAV unlinked
+         and `deleted_at` stamped.
+      2. MeetingAttachment rows older than `retention_days` get their
+         backing file unlinked and `deleted_at` stamped.
+      3. Both updates commit in a single transaction.
+
+    Returns the total count of rows whose `deleted_at` was stamped this
+    sweep (recording + attachment combined). The function is idempotent:
+    a second call with the same `now` produces zero new stamps.
+
+    `attachments_dir` is accepted for parity with `recordings_dir` (both
+    are passed to the function so future hardening can use them, e.g.
+    cross-checking that the file_path lives under the configured root)
+    but is not strictly required for the sweep — file_path columns carry
+    absolute paths.
     """
+    _ = attachments_dir  # reserved for future containment check
     threshold = now - timedelta(days=retention_days)
     stamped = 0
 
     async with session_factory() as session:
-        rows = (
+        # ── Recording sweep (existing behaviour) ──────────────────────
+        recording_rows = (
             (
                 await session.execute(
                     select(Recording).where(
@@ -64,21 +84,17 @@ async def cleanup(
             .all()
         )
 
-        for rec in rows:
+        for rec in recording_rows:
             wav_path = Path(rec.file_path)
             try:
                 wav_path.unlink()
             except FileNotFoundError:
-                # Self-heal: file already gone (manual rm, partial prior
-                # sweep). Stamp deleted_at so the row's "available" predicate
-                # flips false and the next sweep ignores it.
                 logger.info(
                     "retention self-heal: %s already missing for recording %s",
                     wav_path,
                     rec.id,
                 )
             except OSError as exc:
-                # Don't stamp — let the next sweep retry.
                 logger.warning(
                     "retention skip %s for recording %s: %s",
                     wav_path,
@@ -90,10 +106,46 @@ async def cleanup(
             rec.deleted_at = now
             stamped += 1
 
+        # ── MeetingAttachment sweep (slice-20a addition) ──────────────
+        attachment_rows = (
+            (
+                await session.execute(
+                    select(MeetingAttachment).where(
+                        MeetingAttachment.uploaded_at < threshold,
+                        MeetingAttachment.deleted_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        for att in attachment_rows:
+            file_path = Path(att.file_path)
+            try:
+                file_path.unlink()
+            except FileNotFoundError:
+                logger.info(
+                    "retention self-heal: %s already missing for attachment %s",
+                    file_path,
+                    att.id,
+                )
+            except OSError as exc:
+                logger.warning(
+                    "retention skip %s for attachment %s: %s",
+                    file_path,
+                    att.id,
+                    exc,
+                )
+                continue
+
+            att.deleted_at = now
+            stamped += 1
+
         await session.commit()
 
     if stamped:
-        logger.info("retention sweep: stamped deleted_at on %d recording row(s)", stamped)
+        logger.info("retention sweep: stamped deleted_at on %d row(s)", stamped)
     return stamped
 
 

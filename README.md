@@ -162,6 +162,17 @@ CONTEXT.md  — domain language, project goals
 CLAUDE.md   — instructions for AI assistants
 ```
 
+### Attachment storage (slice-20a)
+
+User-uploaded meeting attachments (image / PDF / docx / txt / md) land on
+disk under `ATTACHMENT_DIR` (default `~/Library/Application Support/meeting-playbook/attachments/`).
+Quota is enforced per meeting: at most **5 files** and **30 MB total**.
+Rows in the `meeting_attachment` table plus the underlying file are swept by
+the existing 30-day `Recording window` retention job so attachments age out
+together with the raw audio they reference.
+
+Override the directory by setting `ATTACHMENT_DIR=/path/to/dir` in `.env`.
+
 ### License
 
 Private. Not for redistribution.

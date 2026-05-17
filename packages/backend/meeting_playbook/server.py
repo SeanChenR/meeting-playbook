@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from meeting_playbook.attachments.router import router as attachments_router
 from meeting_playbook.audio_playback.router import router as audio_playback_router
 from meeting_playbook.transcript_edit.router import router as transcript_edit_router
 from meeting_playbook.calendar.router import router as calendar_router
@@ -187,6 +188,7 @@ def create_app() -> FastAPI:
     app.include_router(offline_ingest_router)
     app.include_router(audio_playback_router)
     app.include_router(transcript_edit_router)
+    app.include_router(attachments_router)
     return app
 
 

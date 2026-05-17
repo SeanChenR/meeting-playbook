@@ -246,22 +246,35 @@
       "dialogDescription": "修改 meeting 的標題、排定時間與顯示名稱"
     },
     "detail": {
-      "heading": "Meeting 詳細",
       "back": "← 返回列表",
+      "heading": "Meeting 詳細",
       "counterpartyLabel": "對方",
       "meLabel": "我方",
       "statusLabel": "狀態",
       "asrProviderLabel": "ASR 引擎",
       "createdAtLabel": "建立時間",
+      "scheduledWindowLabel": "會議時間",
       "deleteButton": "刪除 Meeting",
       "deleteDialogTitle": "確定要刪除這個 Meeting？",
       "deleteDialogDescription": "刪除後無法復原。所屬的逐字稿、playbook 與錄音也會一併移除。",
       "deleteConfirm": "確定刪除",
       "deleteCancel": "取消",
       "errorFallback": "操作失敗",
-      "prevTitle": "上一個會議",
-      "nextTitle": "下一個會議",
-      "prevNextDisabled": "從會議列表進入以啟用前後切換"
+      "advisorPlaceholder": "Tactical advisor 將在 Slice 8 上線",
+      "asrProviderSwitchHint": "切換下一場會議生效",
+      "recordingLabel": "錄音",
+      "recordingAvailable": "錄音可用",
+      "recordingExpired": "錄音已過期",
+      "rerunButton": "重新轉錄",
+      "rerunPending": "重新轉錄中…",
+      "layout": {
+        "stack": "上下三層佈局",
+        "columns": "三欄佈局"
+      },
+      "tabs": {
+        "workspace": "工作區",
+        "summary": "摘要"
+      }
     },
     "status": {
       "scheduled": "已排程",
@@ -291,37 +304,6 @@
       "speaker": {
         "cluster": "與會者 {{n}}",
         "cluster_unknown": "與會者（未辨識）"
-      }
-    },
-    "detail": {
-      "back": "← 返回列表",
-      "heading": "Meeting 詳細",
-      "counterpartyLabel": "對方",
-      "meLabel": "我方",
-      "statusLabel": "狀態",
-      "asrProviderLabel": "ASR 引擎",
-      "createdAtLabel": "建立時間",
-      "scheduledWindowLabel": "會議時間",
-      "deleteButton": "刪除 Meeting",
-      "deleteDialogTitle": "確定要刪除這個 Meeting？",
-      "deleteDialogDescription": "刪除後無法復原。所屬的逐字稿、playbook 與錄音也會一併移除。",
-      "deleteConfirm": "確定刪除",
-      "deleteCancel": "取消",
-      "errorFallback": "操作失敗",
-      "advisorPlaceholder": "Tactical advisor 將在 Slice 8 上線",
-      "asrProviderSwitchHint": "切換下一場會議生效",
-      "recordingLabel": "錄音",
-      "recordingAvailable": "錄音可用",
-      "recordingExpired": "錄音已過期",
-      "rerunButton": "重新轉錄",
-      "rerunPending": "重新轉錄中…",
-      "layout": {
-        "stack": "上下三層佈局",
-        "columns": "三欄佈局"
-      },
-      "tabs": {
-        "workspace": "工作區",
-        "summary": "摘要"
       }
     },
     "list": {
@@ -404,6 +386,8 @@
       "copied": "已複製",
       "exportMd": "匯出 .md",
       "staleAlert": "內容已更新，建議重新生成",
+      "staleAttachmentsChanged": "附件已更新 — 重新生成摘要？",
+      "staleRegenerateButton": "重新生成",
       "emptyState": "尚無摘要",
       "generate": "生成摘要",
       "sidebarMeta": "會議資料",
@@ -464,6 +448,10 @@
     },
     "errors": {
       "fallback": "儲存失敗，請稍後再試"
+    },
+    "stale": {
+      "attachments_changed": "附件已更新 — 重新生成 Playbook？",
+      "regenerate_button": "重新生成"
     }
   },
   "tags": {
@@ -770,6 +758,33 @@
       "too_many_for_meeting": "此會議已有 10 個標籤，請先移除一個再新增",
       "unknown_id": "選取的標籤 id 已不存在",
       "not_found": "找不到此標籤"
+    },
+    "attachment": {
+      "unsupported_format": "檔案格式不支援（僅接受圖片 / PDF / Word / 純文字 / Markdown）",
+      "too_many": "每場會議最多可上傳 5 個附件",
+      "quota_exceeded": "已超過每場會議 30MB 上限",
+      "expired": "附件已過期或不存在",
+      "not_found": "找不到此附件",
+      "uploadFailed": "上傳失敗，請稍後再試",
+      "network_error": "上傳過程網路錯誤，請重試"
+    }
+  },
+  "attachments": {
+    "heading": "附件",
+    "hintLimit": "最多 5 個檔案，30MB 上限",
+    "uploadButton": "選擇檔案",
+    "dropzoneLabel": "拖檔到這裡上傳",
+    "emptyState": "尚未上傳附件",
+    "downloadButton": "下載",
+    "deleteButton": "刪除",
+    "deleteConfirm": "確定要刪除此附件？此操作無法復原",
+    "uploadingLabel": "上傳中… {{percent}}%",
+    "kind": {
+      "image": "圖片",
+      "pdf": "PDF",
+      "docx": "Word",
+      "text": "文字檔",
+      "markdown": "Markdown"
     }
   }
 }

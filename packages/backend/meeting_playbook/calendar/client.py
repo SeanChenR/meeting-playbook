@@ -23,6 +23,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from meeting_playbook.calendar.token_store import (
+    CalendarEventNotFound,
     CalendarNetworkError,
     CalendarNotConnected,
     CalendarTokenExpired,
@@ -192,8 +193,13 @@ class CalendarClient:
                         f"Calendar API returned {status2} after token refresh."
                     ) from exc2
             if status == 404:
-                # Don't leak whether the event belongs to a different user.
-                raise CalendarNotConnected("Event not visible to this user.") from exc
+                # Slice-20b: surface a typed 404 so the preview-form GET can
+                # show `errors.calendar.event_not_found` instead of the
+                # "please connect" CTA. Don't leak whether the event belongs
+                # to a different user — single error code covers both
+                # "event does not exist" and "event exists under another
+                # user's calendar" per spec.
+                raise CalendarEventNotFound("Event not visible to this user.") from exc
             raise CalendarNetworkError(f"Calendar API returned {status}.") from exc
 
     async def _fetch_event(self, access_token: str, event_id: str) -> CalendarEvent:
@@ -279,6 +285,7 @@ class CalendarClient:
 __all__ = [
     "CalendarClient",
     "CalendarEvent",
+    "CalendarEventNotFound",
     "CalendarNetworkError",
     "CalendarNotConnected",
     "CalendarTokenExpired",

@@ -19,14 +19,27 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from meeting_playbook.asr.factory import get_asr_providers_for_meeting
+from meeting_playbook.calendar.client import (
+    CalendarClient,
+    CalendarEventNotFound,
+    CalendarNetworkError,
+    CalendarNotConnected,
+    CalendarTokenExpired,
+)
+from meeting_playbook.calendar.dependencies import (
+    get_calendar_client_dependency,
+    get_playbook_generator_dependency,
+)
 from meeting_playbook.meetings.dependencies import (
     get_session_dependency,
     get_session_factory_dependency,
+    get_user_email_dependency,
     get_user_id_dependency,
+    get_user_name_dependency,
 )
 from meeting_playbook.meetings.repository import MeetingRepository
 from meeting_playbook.meetings.schemas import (
@@ -36,18 +49,191 @@ from meeting_playbook.meetings.schemas import (
     MeetingRead,
     RecordingSummary,
 )
+from meeting_playbook.playbook_generation.generator import (
+    PlaybookGenerationFailed,
+    PlaybookGenerationTimeout,
+    PlaybookGenerator,
+)
+from meeting_playbook.playbooks.repository import PlaybookRepository
 from meeting_playbook.rerun import runtime as rerun_runtime
 from meeting_playbook.sessions.models import Recording
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
 
+def _calendar_error_to_http(exc: Exception) -> HTTPException:
+    """Slice-20b: shared calendar-domain → HTTP envelope mapper for the
+    meeting create endpoint.
+
+    Mirrors `calendar.router._calendar_error_to_http` so the create endpoint
+    surfaces the same error codes the frontend already knows how to render.
+    Duplicated rather than imported because importing the calendar router's
+    private helper would couple two routers together at the module level —
+    cheaper to keep the mapping local and let the i18n contract enforce
+    the shared error_code namespace.
+    """
+    if isinstance(exc, CalendarNotConnected):
+        return HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "calendar.not_connected",
+                "message": "User has not granted Google Calendar scope.",
+            },
+        )
+    if isinstance(exc, CalendarTokenExpired):
+        return HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "calendar.token_expired",
+                "message": "Stored Calendar token is no longer valid.",
+            },
+        )
+    if isinstance(exc, CalendarEventNotFound):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error_code": "calendar.event_not_found",
+                "message": "Calendar event not found.",
+            },
+        )
+    if isinstance(exc, CalendarNetworkError):
+        return HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error_code": "calendar.network_error",
+                "message": "Could not reach the Google Calendar API.",
+            },
+        )
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail={
+            "error_code": "common.internal_error",
+            "message": "Unexpected calendar-domain error.",
+        },
+    )
+
+
+def _generator_error_to_http(exc: Exception) -> HTTPException:
+    if isinstance(exc, PlaybookGenerationTimeout):
+        return HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail={
+                "error_code": "playbook.generation_timeout",
+                "message": "Playbook generation exceeded the deadline.",
+            },
+        )
+    if isinstance(exc, PlaybookGenerationFailed):
+        return HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error_code": "playbook.generation_failed",
+                "message": "Playbook generation produced an invalid response.",
+            },
+        )
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail={
+            "error_code": "common.internal_error",
+            "message": "Unexpected generator error.",
+        },
+    )
+
+
+async def _validate_attachments_attachable(
+    session: AsyncSession, *, user_id: str, attachment_ids: list[str]
+) -> None:
+    """Slice-20b: enforce ownership + meeting_id IS NULL before meeting create.
+
+    Per spec `POST /api/meetings accepts an attachments list...`: every id
+    MUST reference an attachment owned by the authenticated user AND with
+    `meeting_id IS NULL`. Any failure aborts BEFORE the meeting row is
+    written so the user does not end up with a half-attached meeting.
+
+    The attachment table is owned by slice-20a; this helper does a raw SQL
+    lookup so the meetings router does not need an attachment ORM model
+    to land. If S20a has not deployed the table yet, the query raises
+    `sqlalchemy.exc.ProgrammingError` — the caller surfaces that as a 500,
+    which is the correct signal that the slice dependency is missing in
+    deployment.
+    """
+    if not attachment_ids:
+        return
+    rows = await session.execute(
+        text(
+            """
+            SELECT id, user_id, meeting_id
+              FROM attachment
+             WHERE id = ANY(:ids)
+            """
+        ),
+        {"ids": attachment_ids},
+    )
+    found = {r.id: r for r in rows}
+    for aid in attachment_ids:
+        rec = found.get(aid)
+        if rec is None or rec.user_id != user_id or rec.meeting_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error_code": "attachment.not_attachable",
+                    "message": (
+                        "One or more attachment ids are not owned by the "
+                        "current user or are already attached to another meeting."
+                    ),
+                },
+            )
+
+
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=MeetingRead)
 async def create_meeting(
     body: MeetingCreate,
     user_id: Annotated[str, Depends(get_user_id_dependency)],
+    user_name: Annotated[str, Depends(get_user_name_dependency)],
+    user_email: Annotated[str, Depends(get_user_email_dependency)],
     session: Annotated[AsyncSession, Depends(get_session_dependency)],
+    calendar: Annotated[CalendarClient, Depends(get_calendar_client_dependency)],
+    generator: Annotated[PlaybookGenerator, Depends(get_playbook_generator_dependency)],
 ) -> MeetingRead:
+    """Slice-20b: single create entry point for manual + calendar import paths.
+
+    Order of operations per spec:
+    (1) Pydantic validates request body.
+    (2) If `attachments[]` non-empty → ownership + `meeting_id IS NULL`
+        validation BEFORE meeting create (per spec
+        `POST /api/meetings accepts an attachments list...`). Failure
+        surfaces `attachment.not_attachable` 422 and no meeting is written.
+    (3) If `calendar_event_id` non-null → fetch event detail. Calendar
+        fetch failure surfaces the calendar error code and no meeting is
+        written (matches design `Playbook 生成觸發點下移`).
+    (4) Create meeting row (carries calendar_event_id when set).
+    (5) Write back attachment.meeting_id for each id.
+    (6) If `calendar_event_id` non-null → run generator + upsert playbook.
+        Generator failure surfaces `playbook.generation_timeout` /
+        `playbook.generation_failed` AFTER the meeting + attachment rows
+        are committed (matches slice-05 semantics — meeting is recoverable).
+    """
+    # (2) Attachment validation BEFORE any DB write (per spec).
+    await _validate_attachments_attachable(
+        session,
+        user_id=user_id,
+        attachment_ids=body.attachments,
+    )
+
+    # (3) Calendar fetch BEFORE meeting create (so calendar errors do not
+    # leave an orphan meeting). Captured event is reused at step (6).
+    calendar_event = None
+    if body.calendar_event_id is not None:
+        try:
+            calendar_event = await calendar.get_event(user_id, body.calendar_event_id)
+        except (
+            CalendarNotConnected,
+            CalendarTokenExpired,
+            CalendarEventNotFound,
+            CalendarNetworkError,
+        ) as exc:
+            raise _calendar_error_to_http(exc) from exc
+
+    # (4) Create the meeting row.
     repo = MeetingRepository(session)
     meeting = await repo.create(
         user_id=user_id,
@@ -56,7 +242,42 @@ async def create_meeting(
         me_display_name=body.me_display_name,
         scheduled_start_at=body.scheduled_start_at,
         scheduled_end_at=body.scheduled_end_at,
+        calendar_event_id=body.calendar_event_id,
     )
+
+    # (5) Write back attachment.meeting_id. Already validated above so this
+    # is a straight UPDATE — re-running the IS NULL filter as a defence in
+    # depth against a concurrent attach that snuck in between (2) and here.
+    if body.attachments:
+        await session.execute(
+            text(
+                """
+                UPDATE attachment
+                   SET meeting_id = :mid
+                 WHERE id = ANY(:ids)
+                   AND user_id = :uid
+                   AND meeting_id IS NULL
+                """
+            ),
+            {"mid": meeting.id, "ids": body.attachments, "uid": user_id},
+        )
+        await session.commit()
+
+    # (6) Generator + playbook upsert (only when calendar_event_id is set).
+    if calendar_event is not None:
+        try:
+            draft = await generator.generate(
+                calendar_event,
+                viewer_email=user_email,
+                viewer_name=user_name,
+            )
+        except (PlaybookGenerationTimeout, PlaybookGenerationFailed) as exc:
+            # Meeting + attachments already committed — per spec the failure
+            # MUST leave both persisted so the user can recover through the
+            # manual playbook editor.
+            raise _generator_error_to_http(exc) from exc
+        await PlaybookRepository(session).upsert_for_meeting(meeting.id, draft)
+
     return MeetingRead.model_validate(meeting)
 
 

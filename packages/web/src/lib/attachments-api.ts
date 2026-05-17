@@ -1,7 +1,7 @@
 /**
- * Meeting-attachment REST client — slice-20a task 5.1.
+ * Meeting-attachment REST client.
  *
- * Wraps the 4 endpoints under `/api/meetings/{id}/attachments`:
+ * Wraps the 4 endpoints under `/api/meetings/{id}/attachments` (slice-20a):
  *   - `listAttachments(meetingId)` → GET, returns `Attachment[]`
  *   - `uploadAttachment(meetingId, file, onProgress)` → POST via XHR so the
  *     dropzone can render a 0-100 progress bar. The dropzone subscribes
@@ -9,6 +9,11 @@
  *     rejects with `AttachmentApiError` on any non-2xx.
  *   - `deleteAttachment(meetingId, attachmentId)` → DELETE
  *   - `getDownloadUrl(meetingId, attachmentId)` → relative URL (no fetch)
+ *
+ * Plus a slice-20b stub for the meeting-create preview form:
+ *   - `listPendingAttachments()` → GET `/api/attachments?status=pending`,
+ *     returns `[]` on any non-2xx (graceful degradation while the backend
+ *     endpoint is still missing).
  *
  * Error shape mirrors `meetings-api.ts` — backend `{error_code, message}`
  * envelopes become an `AttachmentApiError` carrying `errorCode` that the
@@ -165,4 +170,52 @@ export async function deleteAttachment(meetingId: string, attachmentId: string):
  */
 export function getDownloadUrl(meetingId: string, attachmentId: string): string {
   return `/api/meetings/${encodeURIComponent(meetingId)}/attachments/${encodeURIComponent(attachmentId)}/download`;
+}
+
+// ─── slice-20b: pending-attachment picker for the meeting preview form ───
+
+/**
+ * A user-uploaded attachment that is not yet attached to a meeting
+ * (`meeting_id IS NULL`). The preview form on `/meetings/new` lists these
+ * so users can tick which ones to attach to the new meeting being created.
+ *
+ * The shape is intentionally narrow — only `id` is required, `filename`
+ * is rendered when present and falls back to the id otherwise.
+ */
+export interface PendingAttachment {
+  id: string;
+  filename?: string;
+}
+
+/**
+ * Fetches the current user's pending (unattached) attachments.
+ *
+ * Degrades gracefully when the backend endpoint is missing: returns `[]`
+ * on any non-2xx response so the preview form renders no attachment
+ * section rather than blocking the user with an inscrutable error. Once
+ * the backend ships the endpoint, the section becomes interactive
+ * automatically.
+ */
+export async function listPendingAttachments(): Promise<PendingAttachment[]> {
+  try {
+    const resp = await fetch("/api/attachments?status=pending");
+    if (!resp.ok) {
+      // Graceful degradation — see function doc.
+      return [];
+    }
+    const body = (await resp.json()) as PendingAttachment[];
+    return Array.isArray(body) ? body : [];
+  } catch {
+    return [];
+  }
+}
+
+export function pendingAttachmentsQueryOptions() {
+  return {
+    queryKey: ["attachments", "pending"] as const,
+    queryFn: listPendingAttachments,
+    // Don't retry — the empty fallback already covers the missing-endpoint
+    // case, and stale data here is harmless.
+    retry: false,
+  };
 }

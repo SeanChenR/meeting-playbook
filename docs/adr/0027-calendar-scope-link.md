@@ -59,3 +59,58 @@ field.
   already shipped without Calendar; existing users would need to log out and
   back in to gain the new scope, and they would face a wider Google consent
   prompt at login time even if they never use Calendar.
+
+## Amended by slice-20b
+
+- **Date**: 2026-05-15
+- **Scope of amendment**: import-flow shape only — the OAuth `linkSocial`
+  scope-grant decision above is unchanged.
+
+### What changed
+
+The original ADR shipped with `POST /api/meetings/from-calendar` as the
+fire-and-forget import surface: one request fetched the event, created the
+meeting, and ran the Playbook generator. Slice-20b introduces an
+attachment capability (S20a) whose value depends on the user attaching
+files *before* the generator runs. The fire-and-forget shape leaves no
+room for that, and also leaves no room to fix the multi-attendee
+counterparty-picker gap (slice-05 had no way to ask the user "which of
+these is the counterparty?" mid-import).
+
+S20b therefore splits the flow into two surfaces:
+
+1. **Navigation**: clicking "匯入" on `/calendar/import` navigates the
+   browser to `/meetings/new?from_calendar=<event_id>`. No `POST` fires
+   on the click; the calendar-domain side is read-only at this stage.
+2. **Single-event detail**: the preview form fetches `GET /api/calendar/events/{event_id}`
+   (new endpoint added by S20b) to pre-fill `title`, schedule, counterparty
+   display name, and me display name. Errors surface inline so the user
+   can still submit a manual create if the calendar fetch fails.
+3. **Meeting create + Playbook generate**: when the user confirms,
+   `POST /api/meetings` is called with `calendar_event_id` and the
+   selected `attachments[]`. The backend runs the same `CalendarClient.get_event`
+   + `PlaybookGenerator` + `PlaybookRepository.upsert_for_meeting` chain
+   the legacy endpoint used, but only AFTER the user has had a chance to
+   stage attachments and correct display names.
+
+The legacy `POST /api/meetings/from-calendar` endpoint is retained only
+to emit HTTP 410 Gone with `error_code: calendar.import_endpoint_removed`
+so stale frontend caches get a clear signal to reload.
+
+### What did NOT change
+
+- OAuth scope grant via Better Auth `linkSocial` — unchanged.
+- The `account` row layout, the gateway internal token endpoint, and the
+  token refresh mechanic — unchanged.
+- Calendar-domain error codes (`calendar.not_connected`,
+  `calendar.token_expired`, `calendar.network_error`) — unchanged; S20b
+  adds one new code (`calendar.event_not_found`) for the typed 404 on
+  the single-event endpoint.
+
+### Why an amendment, not a new ADR
+
+ADR-0027's subject is "how does the user grant the Calendar OAuth scope".
+S20b changes what happens AFTER the scope is granted, but does not touch
+the grant mechanism itself. Splitting into two ADRs would force future
+readers to follow a cross-reference for no semantic gain; the amendment
+keeps the import-flow narrative co-located with its OAuth dependency.

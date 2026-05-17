@@ -25,6 +25,19 @@ class CalendarNetworkError(Exception):
     """Raised when the Calendar API call cannot reach Google."""
 
 
+class CalendarEventNotFound(Exception):
+    """Raised when a single-event lookup against Google Calendar returns 404.
+
+    Slice-20b: distinct from `CalendarNotConnected` (which conflates the
+    "no token" and "404 from API" cases on the legacy from-calendar path).
+    The preview-form GET endpoint needs to surface a typed 404 so the
+    frontend can show `errors.calendar.event_not_found` rather than the
+    "please connect" CTA. The response MUST NOT distinguish between
+    "event does not exist" and "event exists under another user's
+    calendar" — both surface as this single error code per spec.
+    """
+
+
 class TokenStore:
     """Asks the gateway for a user's Google access token (and triggers refresh).
 

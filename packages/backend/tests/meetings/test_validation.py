@@ -167,3 +167,46 @@ def test_meeting_patch_as_update_fields_drops_none():
     body = MeetingPatch(title="kept", asr_provider=None)
     fields = body.as_update_fields()
     assert fields == {"title": "kept"}
+
+
+# ─── Slice-20b: MeetingCreate accepts optional calendar_event_id + attachments
+
+
+def test_meeting_create_accepts_calendar_event_id_and_attachments():
+    """Slice-20b: `MeetingCreate` MUST accept optional `calendar_event_id`
+    and `attachments` fields without raising a validation error.
+
+    Spec contract:
+    - `calendar_event_id: str | None` (None when manual create)
+    - `attachments: list[str]` (default `[]`)
+    """
+    from datetime import UTC, datetime
+
+    from meeting_playbook.meetings.schemas import MeetingCreate
+
+    body = MeetingCreate(
+        title="Q3 review",
+        counterparty_display_name="林經理",
+        me_display_name="Sean",
+        scheduled_start_at=datetime(2026, 6, 15, 14, tzinfo=UTC),
+        calendar_event_id="gcal_evt_42",
+        attachments=["att_1", "att_2"],
+    )
+    assert body.calendar_event_id == "gcal_evt_42"
+    assert body.attachments == ["att_1", "att_2"]
+
+
+def test_meeting_create_defaults_calendar_event_id_to_none():
+    """Backwards-compat: omitting both fields keeps slice-03 behavior."""
+    from datetime import UTC, datetime
+
+    from meeting_playbook.meetings.schemas import MeetingCreate
+
+    body = MeetingCreate(
+        title="manual",
+        counterparty_display_name="林經理",
+        me_display_name="Sean",
+        scheduled_start_at=datetime(2026, 6, 15, 14, tzinfo=UTC),
+    )
+    assert body.calendar_event_id is None
+    assert body.attachments == []

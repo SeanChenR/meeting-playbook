@@ -229,7 +229,12 @@
       "saveDraft": "Save draft",
       "submitting": "Creating…",
       "cancel": "Cancel",
-      "errorFallback": "Create failed"
+      "errorFallback": "Create failed",
+      "preFillBanner": "Pre-filling fields from your Calendar event…",
+      "preFillMultiAttendeeHint": "Multiple non-viewer attendees found — please fill in the Counterparty field manually",
+      "attachmentsLabel": "Attachments",
+      "attachmentsHint": "Pick the files to attach to this meeting; upload new files from the Attachments page first.",
+      "attachmentsEmpty": "No pending attachments available"
     },
     "edit": {
       "title": "Title",
@@ -678,7 +683,12 @@
     "calendar": {
       "not_connected": "Google Calendar is not connected — please connect first",
       "token_expired": "Calendar authorization has expired — please reconnect",
-      "network_error": "Could not reach Google Calendar — please try again later"
+      "network_error": "Could not reach Google Calendar — please try again later",
+      "event_not_found": "Calendar event not found — it may have been deleted",
+      "import_endpoint_removed": "The calendar import flow has changed — please reload the page"
+    },
+    "attachment": {
+      "not_attachable": "The selected attachment can't be attached (it may already belong to another meeting or to a different user)"
     },
     "playbook": {
       "generation_timeout": "Playbook generation timed out (>60s) — please try again",

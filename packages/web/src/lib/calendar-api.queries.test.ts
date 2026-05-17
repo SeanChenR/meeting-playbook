@@ -1,17 +1,24 @@
 /**
  * Calendar query options + error mapping contract.
  *
+ * Slice-20b shape:
  * - upcomingEventsQueryOptions(hours) keys as ['calendar', 'upcoming', hours]
- * - getUpcomingEvents / importFromCalendar raise CalendarApiError on non-2xx
+ * - calendarEventQueryOptions(eventId) keys as ['calendar', 'event', eventId]
+ * - getUpcomingEvents / getCalendarEvent raise CalendarApiError on non-2xx
  * - errorCode of "calendar.not_connected" / "calendar.token_expired" /
- *   "calendar.network_error" surfaces as CalendarApiError.errorCode
+ *   "calendar.network_error" / "calendar.event_not_found" surfaces as
+ *   CalendarApiError.errorCode
+ *
+ * Slice-20b also REMOVES the `importFromCalendar` mutation (the calendar
+ * import flow now navigates to /meetings/new?from_calendar=...).
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   CalendarApiError,
+  calendarEventQueryOptions,
+  getCalendarEvent,
   getUpcomingEvents,
-  importFromCalendar,
   upcomingEventsQueryOptions,
 } from "./calendar-api";
 
@@ -23,11 +30,19 @@ beforeEach(() => {
   globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
     fetchCalls.push({ url, init });
-    if (init?.method === "POST" && url.includes("/api/meetings/from-calendar")) {
-      return new Response(JSON.stringify({ meeting_id: "m_imported" }), {
-        status: 201,
-        headers: { "content-type": "application/json" },
-      });
+    if (url.includes("/api/calendar/events/")) {
+      return new Response(
+        JSON.stringify({
+          id: "gcal_evt_42",
+          title: "Q3 review",
+          start: "2026-05-09T10:00:00Z",
+          end: "2026-05-09T11:00:00Z",
+          description: "quarterly review",
+          attendees: ["Sean <sean@example.com>", "Lin <lin@acme.com>"],
+          organizer: { display_name: "Sean", email: "sean@example.com" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
     }
     if (url.includes("/api/calendar/upcoming")) {
       return new Response(
@@ -121,32 +136,57 @@ describe("getUpcomingEvents error envelope handling", () => {
   });
 });
 
-describe("importFromCalendar", () => {
-  test("POSTs the event_id and returns the new meeting id", async () => {
-    const result = await importFromCalendar("gcal_evt_42");
-    expect(result).toEqual({ meeting_id: "m_imported" });
-    const post = fetchCalls.find((c) => c.init?.method === "POST");
-    expect(post).toBeDefined();
-    expect(post!.url).toContain("/api/meetings/from-calendar");
-    expect(JSON.parse(String(post!.init?.body))).toEqual({ event_id: "gcal_evt_42" });
+// ─── Slice-20b: getCalendarEvent + calendarEventQueryOptions ──────────────
+
+describe("calendarEventQueryOptions", () => {
+  test("queryKey is ['calendar', 'event', eventId]", () => {
+    const opts = calendarEventQueryOptions("gcal_evt_42");
+    expect(opts.queryKey).toEqual(["calendar", "event", "gcal_evt_42"]);
   });
 
-  test("raises CalendarApiError when the upstream returns playbook.generation_timeout", async () => {
+  test("queryFn fetches GET /api/calendar/events/{eventId} and returns the typed detail", async () => {
+    const opts = calendarEventQueryOptions("gcal_evt_42");
+    const result = (await (opts.queryFn as () => Promise<unknown>)()) as {
+      id: string;
+      title: string;
+      organizer: { email: string } | null;
+    };
+    expect(result.id).toBe("gcal_evt_42");
+    expect(result.title).toBe("Q3 review");
+    expect(result.organizer?.email).toBe("sean@example.com");
+    expect(fetchCalls[0]?.url).toContain("/api/calendar/events/gcal_evt_42");
+  });
+});
+
+describe("getCalendarEvent error envelope handling", () => {
+  test("raises CalendarApiError with errorCode 'calendar.event_not_found' on 404", async () => {
     globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify({
-          error_code: "playbook.generation_timeout",
-          message: "Generation exceeded 60s.",
-        }),
-        { status: 504, headers: { "content-type": "application/json" } },
-      )) as unknown as typeof fetch;
+      new Response(JSON.stringify({ error_code: "calendar.event_not_found", message: "..." }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch;
     let caught: unknown = null;
     try {
-      await importFromCalendar("gcal_evt_x");
+      await getCalendarEvent("gcal_missing");
     } catch (e) {
       caught = e;
     }
-    expect(caught).toBeInstanceOf(CalendarApiError);
-    expect((caught as CalendarApiError).errorCode).toBe("playbook.generation_timeout");
+    expect((caught as CalendarApiError).errorCode).toBe("calendar.event_not_found");
+    expect((caught as CalendarApiError).status).toBe(404);
+  });
+
+  test("raises CalendarApiError with errorCode 'calendar.not_connected' on 401", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error_code: "calendar.not_connected", message: "..." }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch;
+    let caught: unknown = null;
+    try {
+      await getCalendarEvent("gcal_evt_42");
+    } catch (e) {
+      caught = e;
+    }
+    expect((caught as CalendarApiError).errorCode).toBe("calendar.not_connected");
   });
 });

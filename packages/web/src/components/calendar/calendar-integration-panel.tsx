@@ -9,7 +9,6 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw } from "../animate-ui/icons/refresh-cw";
 import { Sparkles } from "../animate-ui/icons/sparkles";
@@ -20,7 +19,6 @@ import { authClient } from "../../lib/auth-client";
 import {
   CalendarApiError,
   upcomingEventsQueryOptions,
-  useImportFromCalendarMutation,
   type UpcomingEvent,
 } from "../../lib/calendar-api";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
@@ -55,24 +53,15 @@ export function CalendarIntegrationPanel({
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const query = useQuery(upcomingEventsQueryOptions(24));
-  const importMutation = useImportFromCalendarMutation();
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importingId, setImportingId] = useState<string | null>(null);
 
-  async function handleImport(eventId: string) {
-    setImportError(null);
-    setImportingId(eventId);
-    try {
-      const { meeting_id } = await importMutation.mutateAsync(eventId);
-      navigate({ to: "/meetings/$id", params: { id: meeting_id }, replace: true });
-    } catch (err) {
-      if (err instanceof CalendarApiError && err.errorCode) {
-        setImportError(localizedErrorMessage(err.errorCode, t));
-      } else {
-        setImportError(t("errors.common.unknown"));
-      }
-      setImportingId(null);
-    }
+  // Slice-20b: import is now a preview navigation, not a fire-and-forget
+  // POST. The meeting + Playbook generation happen only when the user
+  // confirms on `/meetings/new?from_calendar=<event_id>`.
+  function handleImport(eventId: string) {
+    navigate({
+      to: "/meetings/new",
+      search: { from_calendar: eventId },
+    });
   }
 
   const isNotConnected =
@@ -85,7 +74,7 @@ export function CalendarIntegrationPanel({
         ? localizedErrorMessage(query.error.errorCode, t)
         : t("errors.common.unknown")
       : null;
-  const error = importError ?? fetchError;
+  const error = fetchError;
 
   if (isNotConnected) {
     return (
@@ -184,8 +173,6 @@ export function CalendarIntegrationPanel({
                   key={evt.id}
                   evt={evt}
                   locale={i18n.language}
-                  importing={importingId === evt.id}
-                  importingAny={importingId !== null}
                   onImport={() => handleImport(evt.id)}
                   isFirst={i === 0}
                   t={t}
@@ -202,16 +189,12 @@ export function CalendarIntegrationPanel({
 function _EventRow({
   evt,
   locale,
-  importing,
-  importingAny,
   onImport,
   isFirst,
   t,
 }: {
   evt: UpcomingEvent;
   locale: string;
-  importing: boolean;
-  importingAny: boolean;
   onImport: () => void;
   isFirst: boolean;
   t: (k: string, v?: Record<string, unknown>) => string;
@@ -234,15 +217,12 @@ function _EventRow({
           {full} · {t("calendar.row.attendees", { count: evt.attendees.length })}
         </p>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        onClick={onImport}
-        disabled={importingAny}
-        data-testid={`calendar-import-${evt.id}`}
-      >
+      {/* Slice-20b: button is now a pure navigation trigger — the preview
+          form fetches the event detail and the Playbook generator runs
+          only when the user confirms on /meetings/new. */}
+      <Button type="button" size="sm" onClick={onImport} data-testid={`calendar-import-${evt.id}`}>
         <Sparkles animateOnHover className="size-3.5" />
-        {importing ? t("calendar.row.importing") : t("calendar.row.import")}
+        {t("calendar.row.import")}
       </Button>
     </li>
   );

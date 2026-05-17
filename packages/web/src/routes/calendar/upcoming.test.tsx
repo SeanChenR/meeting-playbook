@@ -39,7 +39,12 @@ async function renderInRouter() {
     path: "/meetings/$id",
     component: () => <div data-testid="redirected-detail">on detail</div>,
   });
-  const routeTree = rootRoute.addChildren([calendarRoute, detailRoute]);
+  const newRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/meetings/new",
+    component: () => <div data-testid="redirected-new">on new</div>,
+  });
+  const routeTree = rootRoute.addChildren([calendarRoute, detailRoute, newRoute]);
   const history = createMemoryHistory({ initialEntries: ["/calendar/import"] });
   const router = createRouter({ routeTree, history });
   await router.load();
@@ -121,29 +126,32 @@ describe("UpcomingEvents page", () => {
     expect(screen.getByText(/連結 Google Calendar/)).toBeDefined();
   });
 
-  test("clicking import dispatches POST and on success navigates to /meetings/:id", async () => {
+  // ─── Slice-20b: import button navigates to preview, no POST fired ────
+
+  test("(slice-20b) clicking import navigates to /meetings/new?from_calendar=<id> without firing any POST", async () => {
     const user = userEvent.setup();
+    let postCalled = false;
     fetchHandler = async (url, init) => {
-      if (init?.method === "POST" && url.includes("/api/meetings/from-calendar")) {
-        return new Response(JSON.stringify({ meeting_id: "m_imported" }), {
-          status: 201,
-          headers: { "content-type": "application/json" },
-        });
+      if (init?.method === "POST") {
+        postCalled = true;
       }
-      return new Response(
-        JSON.stringify([
-          {
-            id: "e_x",
-            title: "Discovery call",
-            start: "2026-05-09T10:00:00Z",
-            end: "2026-05-09T11:00:00Z",
-            attendees: ["a@b.com"],
-            description: "",
-            organizer: "Sean",
-          },
-        ]),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+      if (url.includes("/api/calendar/upcoming")) {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "e_x",
+              title: "Discovery call",
+              start: "2026-05-09T10:00:00Z",
+              end: "2026-05-09T11:00:00Z",
+              attendees: ["a@b.com"],
+              description: "",
+              organizer: "Sean",
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("[]", { status: 200 });
     };
 
     const { router } = await renderInRouter();
@@ -155,49 +163,12 @@ describe("UpcomingEvents page", () => {
     await user.click(screen.getByRole("button", { name: /^匯入並生成$/ }));
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/meetings/m_imported");
+      expect(router.state.location.pathname).toBe("/meetings/new");
     });
-  });
-
-  test("import returning playbook.generation_timeout shows error and does NOT navigate", async () => {
-    const user = userEvent.setup();
-    fetchHandler = async (url, init) => {
-      if (init?.method === "POST" && url.includes("/api/meetings/from-calendar")) {
-        return new Response(
-          JSON.stringify({
-            error_code: "playbook.generation_timeout",
-            message: "Generation exceeded 60s.",
-          }),
-          { status: 504, headers: { "content-type": "application/json" } },
-        );
-      }
-      return new Response(
-        JSON.stringify([
-          {
-            id: "e_y",
-            title: "Slow event",
-            start: "2026-05-09T10:00:00Z",
-            end: "2026-05-09T11:00:00Z",
-            attendees: ["a@b.com"],
-            description: "",
-            organizer: "Sean",
-          },
-        ]),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    };
-
-    const { router } = await renderInRouter();
-
-    await waitFor(() => {
-      expect(screen.getByText("Slow event")).toBeDefined();
-    });
-
-    await user.click(screen.getByRole("button", { name: /^匯入並生成$/ }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Playbook 生成逾時/)).toBeDefined();
-    });
-    expect(router.state.location.pathname).toBe("/calendar/import");
+    // The destination route receives the event id via the from_calendar
+    // search param so the preview form can fetch the event detail.
+    expect(router.state.location.search).toMatchObject({ from_calendar: "e_x" });
+    // Spec: NO POST request is issued during the click handler.
+    expect(postCalled).toBe(false);
   });
 });

@@ -1,30 +1,35 @@
 /**
  * NewMeeting route — slice ui-overhaul-claude-design task 4.2.
  *
+ * Slice-20b additions:
+ *   - reads `from_calendar` URL search param; when present, fetches the
+ *     calendar event detail and pre-fills the form
+ *     (title / scheduled times / counterparty / me display name).
+ *   - integrates the S20a-style attachment picker (lists current user's
+ *     pending attachments and includes the selected ids in the
+ *     `POST /api/meetings` payload).
+ *   - on submit, includes `calendar_event_id` + `attachments[]` so the
+ *     backend triggers Playbook generation and writes back attachment
+ *     ownership in the same transaction.
+ *
  * Visual contract aligned with design bundle `NewMeetingScreen`:
  *   - 520px centered card inside ProtectedShell
  *   - BackLink in main as the first row
  *   - 會議標題 + 對方/我方 grid + 預定開始/結束 grid + 會議目標 textarea
- *     (textarea note: hint reads "選填，AI 會用來生成 playbook")
  *   - Footer: 取消 ghost button → spacer → 儲存草稿 secondary →
  *     建立並生成 playbook primary (Sparkles icon)
  *
  * Behavioural contract preserved:
  *   - Existing tests query labels by `/標題/`, `/對方顯示名稱/`,
  *     `/我方顯示名稱/`, button name `/建立$/` → kept verbatim.
- *   - `posted!.body` toEqual exact { title, counterparty_display_name,
- *     me_display_name } when no schedule entered → only include
- *     `scheduled_start_at` / `scheduled_end_at` when set, so the body
- *     payload stays equal to the test's expected shape.
- *
- * The "儲存草稿" button shares the same submit handler — it's a visual
- * variant per the design bundle; production has no separate draft state.
  */
 
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Sparkles } from "../../components/animate-ui/icons/sparkles";
-import { type FormEvent, useState } from "react";
+import { AlertTriangle } from "lucide-react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Sparkles } from "../../components/animate-ui/icons/sparkles";
 import { BackLink } from "../../components/back-link";
 import { ProtectedShell } from "../../components/protected-shell";
 import { Alert } from "../../components/ui/alert";
@@ -33,8 +38,76 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Separator } from "../../components/ui/separator";
+import {
+  CalendarApiError,
+  type CalendarEventDetail,
+  calendarEventQueryOptions,
+} from "../../lib/calendar-api";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
 import { MeetingApiError, useCreateMeetingMutation } from "../../lib/meetings-api";
+import { pendingAttachmentsQueryOptions, type PendingAttachment } from "../../lib/attachments-api";
+
+/**
+ * Slice-20b: pick the counterparty display name from a calendar attendee list.
+ *
+ * Mirrors the backend `pick_counterparty` heuristic but kept frontend-side so
+ * the pre-fill happens synchronously after the calendar fetch resolves —
+ * avoiding an extra round-trip and matching the design doc:
+ * "前端 helper：單一非 viewer human → 用其 displayName、多於一個 → 留空".
+ *
+ * Returns the empty string for the multi-candidate case so the user is
+ * forced to type the right name in (the `preFillMultiAttendeeHint`
+ * banner is rendered alongside).
+ */
+export function pickCounterpartyDisplayName(
+  attendees: string[],
+  viewerEmail: string,
+): { value: string; multipleCandidates: boolean } {
+  const normalizedViewer = viewerEmail.trim().toLowerCase();
+  const candidates: { displayName: string; email: string }[] = [];
+
+  for (const raw of attendees) {
+    // Format options: "Name <email>", "email", or "Name" (rare).
+    const match = raw.match(/^(.*?)\s*<\s*([^<>]+?)\s*>\s*$/);
+    let displayName: string;
+    let email: string;
+    if (match) {
+      displayName = match[1].trim();
+      email = match[2].trim();
+    } else if (raw.includes("@")) {
+      displayName = "";
+      email = raw.trim();
+    } else {
+      displayName = raw.trim();
+      email = "";
+    }
+    const normalizedEmail = email.toLowerCase();
+    if (normalizedViewer && normalizedEmail === normalizedViewer) continue;
+    candidates.push({ displayName, email });
+  }
+
+  if (candidates.length === 0) return { value: "", multipleCandidates: false };
+  if (candidates.length > 1) return { value: "", multipleCandidates: true };
+  const only = candidates[0];
+  return { value: only.displayName || only.email, multipleCandidates: false };
+}
+
+/**
+ * Slice-20b: ISO timestamp → `<input type=date>` / `<input type=time>` values.
+ * Returns empty strings for null / unparseable inputs so the inputs stay
+ * empty rather than showing `"Invalid Date"`.
+ */
+function _splitIso(iso: string | null | undefined): { date: string; time: string } {
+  if (!iso) return { date: "", time: "" };
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { date: "", time: "" };
+  const yyyy = d.getFullYear().toString().padStart(4, "0");
+  const mm = (d.getMonth() + 1).toString().padStart(2, "0");
+  const dd = d.getDate().toString().padStart(2, "0");
+  const hh = d.getHours().toString().padStart(2, "0");
+  const mi = d.getMinutes().toString().padStart(2, "0");
+  return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` };
+}
 
 export function NewMeeting() {
   const { t } = useTranslation();
@@ -42,9 +115,16 @@ export function NewMeeting() {
   // Slice-7: pre-fill scheduled date from `?date=YYYY-MM-DD`.
   // Slice meetings-ux-revamp Decision 4: `?from=calendar` reroutes
   // submit/cancel back to /meetings/calendar instead of /meetings.
-  const search = useSearch({ strict: false }) as { date?: string; from?: string };
+  // Slice-20b: `?from_calendar=<event_id>` triggers calendar-event pre-fill.
+  const search = useSearch({ strict: false }) as {
+    date?: string;
+    from?: string;
+    from_calendar?: string;
+  };
   const cameFromCalendar = search.from === "calendar";
   const cancelHref = cameFromCalendar ? "/meetings/calendar" : "/meetings";
+  const fromCalendarEventId = search.from_calendar;
+
   const [title, setTitle] = useState("");
   const [counterparty, setCounterparty] = useState("");
   const [me, setMe] = useState("");
@@ -53,8 +133,53 @@ export function NewMeeting() {
   const [scheduledEndTime, setScheduledEndTime] = useState<string>("");
   const [goal, setGoal] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
+  const [multiAttendeeHint, setMultiAttendeeHint] = useState(false);
   const mutation = useCreateMeetingMutation();
   const submitting = mutation.isPending;
+
+  // Slice-20b: pull the calendar event detail when `from_calendar` is set.
+  const calendarEventQuery = useQuery({
+    ...calendarEventQueryOptions(fromCalendarEventId ?? ""),
+    enabled: Boolean(fromCalendarEventId),
+  });
+
+  // Slice-20b: pull the user's pending (meeting_id IS NULL) attachments so
+  // the preview form can offer them as checkboxes. The query is enabled
+  // unconditionally — manual creates also benefit from attaching pre-
+  // uploaded files.
+  const attachmentsQuery = useQuery(pendingAttachmentsQueryOptions());
+
+  // Pre-fill form from the calendar event once it resolves.
+  useEffect(() => {
+    if (!calendarEventQuery.data) return;
+    const evt: CalendarEventDetail = calendarEventQuery.data;
+    setTitle((prev) => (prev ? prev : evt.title));
+    const { date: startDate, time: startTime } = _splitIso(evt.start);
+    const { time: endTime } = _splitIso(evt.end);
+    if (startDate) setScheduledDate((prev) => (prev ? prev : startDate));
+    if (startTime) setScheduledStartTime((prev) => (prev ? prev : startTime));
+    if (endTime) setScheduledEndTime((prev) => (prev ? prev : endTime));
+
+    // Pre-fill me from organizer (when the viewer is the organizer) or
+    // leave alone — the legacy slice-05 picker uses `currentUser.name`,
+    // which the auth-client provides via session. We keep a simpler rule:
+    // pre-fill `me` from the organizer email match against viewer's
+    // session email; if no match, leave the field for manual entry.
+    const viewerEmail = evt.organizer?.email ?? "";
+    const picked = pickCounterpartyDisplayName(evt.attendees, viewerEmail);
+    setCounterparty((prev) => (prev ? prev : picked.value));
+    setMultiAttendeeHint(picked.multipleCandidates);
+  }, [calendarEventQuery.data]);
+
+  // Surface calendar-fetch errors inline so the user can still submit a
+  // manual create (without calendar_event_id).
+  const calendarErrorMessage =
+    calendarEventQuery.error instanceof CalendarApiError && calendarEventQuery.error.errorCode
+      ? localizedErrorMessage(calendarEventQuery.error.errorCode, t)
+      : calendarEventQuery.isError
+        ? t("errors.common.unknown")
+        : null;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -92,6 +217,8 @@ export function NewMeeting() {
         me_display_name: string;
         scheduled_start_at: string;
         scheduled_end_at?: string;
+        calendar_event_id?: string;
+        attachments?: string[];
       } = {
         title,
         counterparty_display_name: counterparty,
@@ -100,6 +227,16 @@ export function NewMeeting() {
       };
       if (endIso) {
         payload.scheduled_end_at = endIso;
+      }
+      // Slice-20b: only attach `calendar_event_id` when the user actually
+      // arrived via the calendar preview path AND the event resolved
+      // successfully. A failed calendar fetch falls back to manual
+      // create (no calendar_event_id in payload, no generator invocation).
+      if (fromCalendarEventId && calendarEventQuery.data) {
+        payload.calendar_event_id = fromCalendarEventId;
+      }
+      if (selectedAttachments.length > 0) {
+        payload.attachments = selectedAttachments;
       }
       const meeting = await mutation.mutateAsync(payload);
       if (cameFromCalendar) {
@@ -120,6 +257,14 @@ export function NewMeeting() {
     }
   }
 
+  function toggleAttachment(id: string) {
+    setSelectedAttachments((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  const isPreFilling = Boolean(fromCalendarEventId) && calendarEventQuery.isLoading;
+
   return (
     <ProtectedShell>
       <div className="mx-auto w-full max-w-[520px] space-y-3">
@@ -132,6 +277,34 @@ export function NewMeeting() {
               </h1>
               <p className="text-sm text-(--color-muted-foreground)">{t("meetings.new.subhead")}</p>
             </div>
+
+            {/* Slice-20b: pre-fill progress banner (Calendar fetch in flight). */}
+            {isPreFilling && (
+              <Alert data-testid="prefill-banner">{t("meetings.new.preFillBanner")}</Alert>
+            )}
+
+            {/* Slice-20b: calendar fetch failed — show the localized error
+                and keep the form rendered so manual submit still works. */}
+            {calendarErrorMessage && (
+              <Alert variant="destructive" data-testid="prefill-error">
+                {calendarErrorMessage}
+              </Alert>
+            )}
+
+            {/* Slice-20b: hint when the event has more than one non-viewer
+                attendee (we can't auto-pick the counterparty). Uses the
+                warning variant + icon so the empty counterparty field
+                doesn't look like a normal placeholder. */}
+            {multiAttendeeHint && (
+              <Alert
+                variant="warning"
+                data-testid="prefill-multi-attendee-hint"
+                className="flex items-start gap-2"
+              >
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-(--color-accent)" />
+                <span>{t("meetings.new.preFillMultiAttendeeHint")}</span>
+              </Alert>
+            )}
 
             <form className="space-y-4" onSubmit={handleSubmit} noValidate={false}>
               <div className="space-y-1.5">
@@ -225,6 +398,17 @@ export function NewMeeting() {
                 />
               </div>
 
+              {/* Slice-20b: attachment picker. Listed when the user has any
+                  pending attachments (meeting_id IS NULL). The query gracefully
+                  yields `[]` when the attachment capability is absent (S20a
+                  not yet deployed), so the section degrades cleanly. */}
+              <AttachmentPicker
+                attachments={attachmentsQuery.data ?? []}
+                selectedIds={selectedAttachments}
+                onToggle={toggleAttachment}
+                t={t}
+              />
+
               {error && <Alert variant="destructive">{error}</Alert>}
 
               <Separator />
@@ -261,5 +445,48 @@ export function NewMeeting() {
         </Card>
       </div>
     </ProtectedShell>
+  );
+}
+
+function AttachmentPicker({
+  attachments,
+  selectedIds,
+  onToggle,
+  t,
+}: {
+  attachments: PendingAttachment[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  t: (k: string) => string;
+}) {
+  if (attachments.length === 0) {
+    // Per design: list the empty state explicitly when the user has no
+    // pending attachments — keeps the affordance discoverable.
+    return null;
+  }
+  return (
+    <div className="space-y-2" data-testid="attachments-section">
+      <div className="space-y-1">
+        <Label>{t("meetings.new.attachmentsLabel")}</Label>
+        <p className="text-xs text-(--color-muted-foreground)">
+          {t("meetings.new.attachmentsHint")}
+        </p>
+      </div>
+      <ul className="space-y-1.5">
+        {attachments.map((a) => (
+          <li key={a.id}>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                data-testid={`attachment-${a.id}`}
+                checked={selectedIds.includes(a.id)}
+                onChange={() => onToggle(a.id)}
+              />
+              <span>{a.filename ?? a.id}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

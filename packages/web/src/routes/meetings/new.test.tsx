@@ -323,4 +323,199 @@ describe("NewMeeting form", () => {
     });
     expect(postCalled).toBe(false);
   });
+
+  // ─── Slice-20b: ?from_calendar=<id> pre-fills + attaches files ─────────
+
+  test("(slice-20b) single non-viewer attendee pre-fills counterparty", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/api/calendar/events/gcal_evt_42")) {
+        return new Response(
+          JSON.stringify({
+            id: "gcal_evt_42",
+            title: "Q3 review",
+            start: "2026-06-15T14:00:00+00:00",
+            end: "2026-06-15T15:00:00+00:00",
+            description: "quarterly review",
+            attendees: ["Sean <sean@example.com>", "林經理 <lin@acme.com>"],
+            organizer: { display_name: "Sean", email: "sean@example.com" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    await renderInRouter("/meetings/new?from_calendar=gcal_evt_42");
+
+    await waitFor(() => {
+      expect((screen.getByLabelText(/對方顯示名稱/) as HTMLInputElement).value).toBe("林經理");
+    });
+    expect((screen.getByLabelText(/標題/) as HTMLInputElement).value).toBe("Q3 review");
+    // Multi-attendee hint MUST NOT be visible (single non-viewer attendee).
+    expect(screen.queryByTestId("prefill-multi-attendee-hint")).toBeNull();
+  });
+
+  test("(slice-20b) multiple non-viewer attendees leave counterparty empty + hint visible", async () => {
+    fetchHandler = async (url) => {
+      if (url.includes("/api/calendar/events/gcal_evt_88")) {
+        return new Response(
+          JSON.stringify({
+            id: "gcal_evt_88",
+            title: "Group sync",
+            start: "2026-06-16T10:00:00+00:00",
+            end: "2026-06-16T11:00:00+00:00",
+            description: null,
+            attendees: ["Sean <sean@example.com>", "Lin <lin@acme.com>", "Wang <wang@acme.com>"],
+            organizer: { display_name: "Sean", email: "sean@example.com" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    await renderInRouter("/meetings/new?from_calendar=gcal_evt_88");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("prefill-multi-attendee-hint")).toBeDefined();
+    });
+    expect((screen.getByLabelText(/對方顯示名稱/) as HTMLInputElement).value).toBe("");
+  });
+
+  test("(slice-20b) no from_calendar param → no calendar fetch, no banner", async () => {
+    let calendarFetched = false;
+    fetchHandler = async (url) => {
+      if (url.includes("/api/calendar/events/")) {
+        calendarFetched = true;
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    await renderInRouter("/meetings/new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/標題/)).toBeDefined();
+    });
+    expect(calendarFetched).toBe(false);
+    expect(screen.queryByTestId("prefill-banner")).toBeNull();
+  });
+
+  test("(slice-20b) calendar.event_not_found shows banner and manual submit still works", async () => {
+    const user = userEvent.setup();
+    let posted: { url: string; body: unknown } | null = null;
+    fetchHandler = async (url, init) => {
+      if (url.includes("/api/calendar/events/gcal_missing")) {
+        return new Response(
+          JSON.stringify({ error_code: "calendar.event_not_found", message: "missing" }),
+          { status: 404, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (init?.method === "POST" && url.endsWith("/api/meetings")) {
+        posted = { url, body: JSON.parse(String(init.body)) };
+        return new Response(
+          JSON.stringify({
+            id: "m_manual",
+            user_id: "u",
+            title: "manual",
+            counterparty_display_name: "林",
+            me_display_name: "Sean",
+            status: "scheduled",
+            asr_provider: "qwen3",
+            calendar_event_id: null,
+            created_at: "2026-05-15T10:00:00Z",
+            started_at: null,
+            ended_at: null,
+            scheduled_start_at: "2026-06-15T14:00:00Z",
+            scheduled_end_at: null,
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    await renderInRouter("/meetings/new?from_calendar=gcal_missing");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("prefill-error")).toBeDefined();
+    });
+    // Localized message present (zh-TW default).
+    expect(screen.getByTestId("prefill-error").textContent ?? "").toContain("找不到");
+
+    // Manual submit still works — the form did not lock up.
+    await user.type(screen.getByLabelText(/標題/), "manual");
+    await user.type(screen.getByLabelText(/對方顯示名稱/), "林");
+    await user.type(screen.getByLabelText(/我方顯示名稱/), "Sean");
+    fireEvent.change(screen.getByTestId("meeting-date") as HTMLInputElement, {
+      target: { value: "2026-06-15" },
+    });
+    await user.click(screen.getByRole("button", { name: /建立$/ }));
+
+    await waitFor(() => {
+      expect(posted).not.toBeNull();
+    });
+    // Calendar fetch failed → no calendar_event_id forwarded.
+    expect((posted!.body as Record<string, unknown>).calendar_event_id).toBeUndefined();
+  });
+
+  test("(slice-20b) selecting 2 attachments + submit includes attachments[] in payload", async () => {
+    const user = userEvent.setup();
+    let posted: { body: unknown } | null = null;
+    fetchHandler = async (url, init) => {
+      if (url.includes("/api/attachments?status=pending")) {
+        return new Response(
+          JSON.stringify([
+            { id: "att_1", filename: "a.pdf" },
+            { id: "att_2", filename: "b.docx" },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (init?.method === "POST" && url.endsWith("/api/meetings")) {
+        posted = { body: JSON.parse(String(init.body)) };
+        return new Response(
+          JSON.stringify({
+            id: "m_attach",
+            user_id: "u",
+            title: "with attachments",
+            counterparty_display_name: "C",
+            me_display_name: "M",
+            status: "scheduled",
+            asr_provider: "qwen3",
+            calendar_event_id: null,
+            created_at: "2026-05-15T10:00:00Z",
+            started_at: null,
+            ended_at: null,
+            scheduled_start_at: "2026-06-15T14:00:00Z",
+            scheduled_end_at: null,
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    await renderInRouter("/meetings/new");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("attachment-att_1")).toBeDefined();
+      expect(screen.getByTestId("attachment-att_2")).toBeDefined();
+    });
+
+    await user.click(screen.getByTestId("attachment-att_1"));
+    await user.click(screen.getByTestId("attachment-att_2"));
+
+    await user.type(screen.getByLabelText(/標題/), "with attachments");
+    await user.type(screen.getByLabelText(/對方顯示名稱/), "C");
+    await user.type(screen.getByLabelText(/我方顯示名稱/), "M");
+    fireEvent.change(screen.getByTestId("meeting-date") as HTMLInputElement, {
+      target: { value: "2026-06-15" },
+    });
+    await user.click(screen.getByRole("button", { name: /建立$/ }));
+
+    await waitFor(() => {
+      expect(posted).not.toBeNull();
+    });
+    expect((posted!.body as Record<string, unknown>).attachments).toEqual(["att_1", "att_2"]);
+  });
 });

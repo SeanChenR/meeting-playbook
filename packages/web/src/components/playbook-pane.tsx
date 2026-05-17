@@ -15,6 +15,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { localizedErrorMessage } from "../lib/i18n-errors";
 import { MarkdownPreview } from "../lib/markdown-preview";
 import {
@@ -25,6 +26,7 @@ import {
 } from "../lib/playbook-api";
 import { Pane } from "./pane";
 import { Alert } from "./ui/alert";
+import { AlertDialog } from "./ui/alert-dialog";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
@@ -50,12 +52,20 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
   const [freeformMode, setFreeformMode] = useState<"edit" | "preview">("edit");
   const [draft, setDraft] = useState<string>("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
 
   useEffect(() => {
     if (!query.data) return;
     setDraft(query.data.free_form_markdown);
+    setSavedAt(null);
+    // Re-sync on `updated_at` so regenerate (which keeps the playbook
+    // row id but writes a new `updated_at`) replaces the textarea with
+    // the freshly generated markdown. Watching only `id` left the
+    // draft stuck on the pre-regenerate content even though the query
+    // cache had already updated, making the regenerate button look
+    // like a no-op.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.data?.id]);
+  }, [query.data?.id, query.data?.updated_at]);
 
   async function handleSave() {
     try {
@@ -69,6 +79,7 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
         red_lines: query.data?.red_lines ?? "",
       });
       setSavedAt(Date.now());
+      toast.success(t("playbook.save.saved_toast"));
     } catch {
       // mutation.error surfaced below; nothing else to do here.
     }
@@ -84,7 +95,12 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
       ? localizedErrorMessage(mutation.error.errorCode, t)
       : t("playbook.errors.fallback")
     : null;
-  const error = fetchError ?? saveError;
+  const regenerateError = regenerateMutation.isError
+    ? regenerateMutation.error instanceof PlaybookApiError && regenerateMutation.error.errorCode
+      ? localizedErrorMessage(regenerateMutation.error.errorCode, t)
+      : t("playbook.stale.regenerate_failed")
+    : null;
+  const error = fetchError ?? saveError ?? regenerateError;
 
   const saveLabel = mutation.isPending
     ? t("playbook.save.saving")
@@ -147,9 +163,19 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
               size="sm"
               data-testid="playbook-stale-regenerate-button"
               disabled={regenerateMutation.isPending}
-              onClick={() => regenerateMutation.mutate()}
+              onClick={() => {
+                // Only confirm when there's content to lose; first-ever
+                // generation (empty draft) goes straight through.
+                if (draft.trim().length > 0) {
+                  setShowRegenerateDialog(true);
+                } else {
+                  regenerateMutation.mutate();
+                }
+              }}
             >
-              {t("playbook.stale.regenerate_button")}
+              {regenerateMutation.isPending
+                ? t("playbook.stale.regenerating")
+                : t("playbook.stale.regenerate_button")}
             </Button>
           </Alert>
         )}
@@ -179,6 +205,17 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
           </Button>
         </div>
       </div>
+
+      <AlertDialog
+        open={showRegenerateDialog}
+        onOpenChange={setShowRegenerateDialog}
+        title={t("playbook.stale.confirm_title")}
+        description={t("playbook.stale.confirm_description")}
+        confirmLabel={t("playbook.stale.confirm_confirm")}
+        cancelLabel={t("playbook.stale.confirm_cancel")}
+        destructive
+        onConfirm={() => regenerateMutation.mutate()}
+      />
     </Pane>
   );
 }

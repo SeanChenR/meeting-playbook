@@ -74,6 +74,17 @@ export function AttachmentDropzone({ meetingId, api = _DEFAULT_API }: Attachment
     queryFn: () => api.listAttachments(meetingId),
   });
 
+  // The playbook + summary expose `is_stale` derived from the live
+  // attachment-set hash vs the snapshot at last generation. Whenever the
+  // attachment list changes the server-side flag would flip, but the
+  // client doesn't know until it refetches. Invalidating both queries on
+  // upload / delete keeps the stale banners in sync without a page
+  // refresh.
+  function _refreshGeneratedArtifacts() {
+    queryClient.invalidateQueries({ queryKey: ["playbook", meetingId] });
+    queryClient.invalidateQueries({ queryKey: ["summary", meetingId] });
+  }
+
   const uploadMutation = useMutation({
     mutationFn: (file: File) =>
       api.uploadAttachment(meetingId, file, (percent) => setProgress(percent)),
@@ -81,6 +92,7 @@ export function AttachmentDropzone({ meetingId, api = _DEFAULT_API }: Attachment
       queryClient.setQueryData<Attachment[]>(["meeting-attachments", meetingId], (prev) => {
         return prev ? [newRow, ...prev] : [newRow];
       });
+      _refreshGeneratedArtifacts();
       setProgress(null);
       setErrorMessage(null);
     },
@@ -97,6 +109,7 @@ export function AttachmentDropzone({ meetingId, api = _DEFAULT_API }: Attachment
       queryClient.setQueryData<Attachment[]>(["meeting-attachments", meetingId], (prev) => {
         return prev?.filter((row) => row.id !== attachmentId) ?? [];
       });
+      _refreshGeneratedArtifacts();
     },
     onError: (err) => {
       const code = err instanceof AttachmentApiError ? err.errorCode : undefined;

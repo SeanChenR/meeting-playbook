@@ -444,14 +444,21 @@
     "save": {
       "idle": "儲存",
       "saving": "儲存中…",
-      "saved": "已儲存 ✓"
+      "saved": "已儲存 ✓",
+      "saved_toast": "Playbook 已儲存"
     },
     "errors": {
       "fallback": "儲存失敗，請稍後再試"
     },
     "stale": {
       "attachments_changed": "附件已更新 — 重新生成 Playbook？",
-      "regenerate_button": "重新生成"
+      "regenerate_button": "重新生成",
+      "regenerating": "重新生成中…",
+      "regenerate_failed": "重新生成失敗，請稍後再試",
+      "confirm_title": "確定要重新生成？",
+      "confirm_description": "目前的 Playbook 內容會被新版 AI 草稿覆蓋，未儲存的修改也會一起遺失。",
+      "confirm_confirm": "重新生成",
+      "confirm_cancel": "取消"
     }
   },
   "tags": {

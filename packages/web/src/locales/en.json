@@ -444,14 +444,21 @@
     "save": {
       "idle": "Save",
       "saving": "Saving…",
-      "saved": "Saved ✓"
+      "saved": "Saved ✓",
+      "saved_toast": "Playbook saved"
     },
     "errors": {
       "fallback": "Save failed, please try again"
     },
     "stale": {
       "attachments_changed": "Attachments changed — regenerate playbook?",
-      "regenerate_button": "Regenerate"
+      "regenerate_button": "Regenerate",
+      "regenerating": "Regenerating…",
+      "regenerate_failed": "Regenerate failed, please try again",
+      "confirm_title": "Regenerate playbook?",
+      "confirm_description": "The current playbook content will be overwritten with a fresh AI draft. Any unsaved edits will be lost.",
+      "confirm_confirm": "Regenerate",
+      "confirm_cancel": "Cancel"
     }
   },
   "tags": {

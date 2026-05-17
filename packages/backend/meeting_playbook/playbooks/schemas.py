@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 
 class PlaybookUpsert(BaseModel):
@@ -40,5 +40,20 @@ class PlaybookRead(BaseModel):
     # snapshot captured at generation time. The UI shows a "regenerate"
     # banner when this is true.
     is_stale: bool = False
+    # Slice-23: previous-version snapshot fields. Populated only after a
+    # successful regenerate; user-save upserts MUST NOT touch them. The
+    # frontend reads these to render the line-level diff viewer.
+    previous_free_form_markdown: str | None = None
+    previous_updated_at: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_previous_version(self) -> bool:
+        """Derived per design D7 — single source of truth for the UI toggle.
+
+        True iff a previous version snapshot exists. Mirrors the SQL
+        predicate `previous_free_form_markdown IS NOT NULL`.
+        """
+        return self.previous_free_form_markdown is not None
 
     model_config = {"from_attributes": True}

@@ -36,3 +36,15 @@ class Playbook(Base):
     # time. NULL on legacy rows; the application layer treats NULL as the
     # canonical empty-set hash when computing the `is_stale` flag.
     attachment_hash_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Slice-23: previous-version snapshot. Written ONLY by the regenerate
+    # path (via `PlaybookRepository.snapshot_then_upsert`) and the explicit
+    # `restore_previous` / `discard_previous` endpoints. User-save upserts
+    # MUST NOT touch these columns — that is what guarantees the snapshot
+    # always refers to "the version immediately before the last AI
+    # regenerate", never an arbitrary middle save.
+    previous_free_form_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    previous_updated_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    previous_attachment_hash_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)

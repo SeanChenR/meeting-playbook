@@ -192,3 +192,65 @@ async def test_request_without_x_user_id_is_rejected(api_client: AsyncClient):
     resp = await api_client.get("/api/meetings/m_any/playbook")
     assert resp.status_code == 401
     assert resp.json()["error_code"] == "auth.gateway_bypass"
+
+
+# ─── Slice-23: PlaybookRead exposes previous-version snapshot fields ─────
+
+
+@pytest.mark.asyncio
+async def test_get_without_snapshot_returns_null_previous_fields(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Spec `playbook-management` scenario:
+    GET on row without snapshot returns null previous fields + has_previous_version=false.
+    """
+    await _seed_user_and_meeting(migrated_engine, "u_s23_get_null", "m_s23_get_null")
+    resp = await api_client.get(
+        "/api/meetings/m_s23_get_null/playbook",
+        headers={"X-User-Id": "u_s23_get_null"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["previous_free_form_markdown"] is None
+    assert body["previous_updated_at"] is None
+    assert body["has_previous_version"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_with_snapshot_returns_full_previous_fields(
+    api_client: AsyncClient, migrated_engine: AsyncEngine
+):
+    """Spec `playbook-management` scenario:
+    GET on row WITH snapshot returns the full previous_* triple + has_previous_version=true.
+    """
+    await _seed_user_and_meeting(migrated_engine, "u_s23_get_full", "m_s23_get_full")
+    # Manually set previous_* via UPDATE so we don't depend on regenerate handler
+    # (that's exercised in test_regenerate_*).
+    async with migrated_engine.begin() as conn:
+        # First write through the normal POST → PUT path so the row exists.
+        # Easier: insert via SQL.
+        await conn.execute(
+            text(
+                """
+                INSERT INTO playbook (id, meeting_id, free_form_markdown,
+                  objective, counterparty_profile, anticipated_topics,
+                  anticipated_objections, talking_points, red_lines,
+                  created_at, updated_at,
+                  previous_free_form_markdown, previous_updated_at)
+                VALUES ('pb_s23_get_full', 'm_s23_get_full', 'draft v2',
+                  '', '', '', '', '', '',
+                  now(), now(),
+                  'draft v1', '2026-05-17T10:00:00+00:00')
+                """
+            )
+        )
+
+    resp = await api_client.get(
+        "/api/meetings/m_s23_get_full/playbook",
+        headers={"X-User-Id": "u_s23_get_full"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["previous_free_form_markdown"] == "draft v1"
+    assert body["previous_updated_at"] == "2026-05-17T10:00:00Z"
+    assert body["has_previous_version"] is True

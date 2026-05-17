@@ -168,9 +168,80 @@ async def regenerate_playbook(
         else EMPTY_SET_SNAPSHOT_HASH
     )
     payload: dict[str, object] = {**draft, "attachment_hash_snapshot": snapshot}
-    saved = await PlaybookRepository(session).upsert_for_meeting(
+    # Slice-23: regenerate path goes through snapshot_then_upsert so the
+    # row's prior `free_form_markdown` / `updated_at` /
+    # `attachment_hash_snapshot` land in `previous_*` before the new
+    # draft overwrites them. user-save (`PUT /playbook`) still uses the
+    # plain `upsert_for_meeting`.
+    saved = await PlaybookRepository(session).snapshot_then_upsert(
         meeting_id,
         payload,  # type: ignore[arg-type]
     )
     body = PlaybookRead.model_validate(saved).model_copy(update={"is_stale": False})
     return body
+
+
+def _no_previous_version() -> HTTPException:
+    """Stable envelope for the 404 when previous_* is NULL.
+
+    Both `discard_previous` and `restore_previous` raise this. The
+    frontend looks up `playbook.no_previous_version` via the locale
+    error map (errors.playbook.no_previous_version).
+    """
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={
+            "error_code": "playbook.no_previous_version",
+            "message": "No previous playbook version to act on",
+        },
+    )
+
+
+@router.post(
+    "/{meeting_id}/playbook/discard_previous",
+    response_model=PlaybookRead,
+)
+async def discard_previous_playbook(
+    meeting_id: str,
+    user_id: Annotated[str, Depends(get_user_id_dependency)],
+    session: Annotated[AsyncSession, Depends(get_session_dependency)],
+) -> PlaybookRead:
+    """Slice-23: clear the previous-version snapshot ("accept new draft").
+
+    Per design D3: two POST endpoints (not a PATCH with action verb) so
+    each path has its own OpenAPI / test surface and matches the
+    existing `regenerate` style.
+    """
+    meeting = await MeetingRepository(session).get_for_user(user_id=user_id, meeting_id=meeting_id)
+    if meeting is None:
+        raise _meeting_not_found()
+
+    updated = await PlaybookRepository(session).discard_previous(meeting_id)
+    if updated is None:
+        raise _no_previous_version()
+    return PlaybookRead.model_validate(updated)
+
+
+@router.post(
+    "/{meeting_id}/playbook/restore_previous",
+    response_model=PlaybookRead,
+)
+async def restore_previous_playbook(
+    meeting_id: str,
+    user_id: Annotated[str, Depends(get_user_id_dependency)],
+    session: Annotated[AsyncSession, Depends(get_session_dependency)],
+) -> PlaybookRead:
+    """Slice-23: swap the previous-version snapshot back into the current draft.
+
+    Per design D3 + spec `playbook-versioning`: atomic swap of
+    `previous_free_form_markdown` → `free_form_markdown` and matching
+    `attachment_hash_snapshot`, then clears the snapshot.
+    """
+    meeting = await MeetingRepository(session).get_for_user(user_id=user_id, meeting_id=meeting_id)
+    if meeting is None:
+        raise _meeting_not_found()
+
+    updated = await PlaybookRepository(session).restore_previous(meeting_id)
+    if updated is None:
+        raise _no_previous_version()
+    return PlaybookRead.model_validate(updated)

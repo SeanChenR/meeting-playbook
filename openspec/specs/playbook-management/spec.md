@@ -272,127 +272,79 @@ tests:
 
 The web UI SHALL provide a `PlaybookPane` component that the meeting detail page mounts. The component SHALL render a top-level view-mode toggle with two states: a free-form view that exposes a single editor for `free_form_markdown`, and a structured view that exposes six labeled editors, one per structured field (`objective`, `counterparty_profile`, `anticipated_topics`, `anticipated_objections`, `talking_points`, `red_lines`).
 
-The free-form view's primary editor SHALL be a plain `<textarea>` containing the markdown source. Inside the free-form view, a SECOND smaller toggle SHALL switch between two sub-modes:
+The free-form view's primary editor SHALL be a plain `<textarea>` containing the markdown source. Inside the free-form view, a sub-mode toggle SHALL switch between **two or three** sub-modes:
+
 - **Edit** (default): the `<textarea>` is shown for editing markdown source.
 - **Preview**: a read-only rendered view powered by `react-markdown` + `remark-gfm` + `rehype-sanitize`. Switching to Preview MUST NOT mutate the `<textarea>` value; switching back to Edit MUST restore the user's caret position to the beginning of the textarea (or an acceptable default — caret restoration is not strictly required).
+- **Diff** (slice-23, conditional): a third sub-mode that SHALL render the line-level visual difference between `previous_free_form_markdown` and the current `free_form_markdown`, plus action buttons that map to the discard-previous / restore-previous / cherry-pick endpoints. The Diff toggle button SHALL appear in the sub-mode group only when `query.data?.has_previous_version === true`. When `has_previous_version === false`, the sub-mode toggle SHALL render exactly two buttons (Edit and Preview), matching the slice-7 / slice-20a contract.
 
-The DB storage format for `free_form_markdown` SHALL remain markdown text (no schema change); the textarea writes the value verbatim, and Preview never mutates it. Switching between free-form and structured views MUST NOT discard any unsaved edits in either view. A save action MUST send a single PUT request carrying the current values of all seven fields and MUST refresh the displayed content after the response succeeds.
+Switching out of Diff mode SHALL NOT mutate the textarea value or the snapshot columns; only the explicit action buttons inside Diff mode mutate state.
 
-The free-form view MUST NOT render a TipTap WYSIWYG editor or any toolbar of formatting buttons. Markdown is typed directly in the textarea using standard markdown syntax (`**bold**`, `# Heading`, `- bullet`, etc.).
+#### Scenario: Two sub-mode buttons when no snapshot exists
 
-#### Scenario: Toggle preserves unsaved edits in both views
+- **GIVEN** a playbook detail page mounted for a row where `has_previous_version === false`
+- **WHEN** the pane renders
+- **THEN** the sub-mode toggle SHALL contain exactly two buttons: Edit and Preview
 
-- **GIVEN** the user has typed text into the free-form `<textarea>` and into the structured `objective` field, neither saved
-- **WHEN** the user toggles to the structured view, then back to free-form
-- **THEN** both the free-form text (in the textarea) and the structured `objective` text SHALL still be present
+#### Scenario: Three sub-mode buttons when snapshot exists
 
-#### Scenario: Save dispatches a PUT and refreshes the displayed content
+- **GIVEN** a playbook detail page mounted for a row where `has_previous_version === true`
+- **WHEN** the pane renders
+- **THEN** the sub-mode toggle SHALL contain three buttons: Edit, Preview, and Diff
 
-- **GIVEN** the user has typed values into all seven fields (free-form value typed directly as markdown into the textarea)
-- **WHEN** the user clicks the save button
-- **THEN** the component SHALL issue exactly one `PUT /api/meetings/{id}/playbook` request whose body contains all seven fields with the typed values; the `free_form_markdown` field's value SHALL equal the textarea's current `value` property byte-for-byte; the component SHALL display those values after the response resolves
+#### Scenario: Switching between sub-modes does not mutate state
 
-#### Scenario: Preview sub-toggle renders rendered markdown without mutating the source
-
-- **GIVEN** the meeting's `free_form_markdown` field is stored in the database as `"# Goals\n\n- Discuss Q3 numbers\n- **Confirm deadlines**"`
-- **WHEN** the playbook detail loads, the user opens the free-form view, and clicks the Preview sub-toggle
-- **THEN** the rendered output SHALL contain an H1 reading "Goals", followed by an unordered list with two items, the second of which contains a bold "Confirm deadlines" run; the underlying `<textarea>`'s `value` MUST remain the original markdown source unchanged
-
-#### Scenario: Free-form view exposes Edit/Preview sub-toggle (no formatting toolbar)
-
-- **GIVEN** the free-form view is visible
-- **WHEN** the page renders
-- **THEN** the view SHALL contain a sub-toggle with exactly two options labeled via `playbook.freeform.editTab` and `playbook.freeform.previewTab` i18n keys; the view MUST NOT render any TipTap editor instance, formatting toolbar, or `playbook.toolbar.*` i18n keys
+- **GIVEN** the pane is in Diff mode with cherry-pick decisions made by the user
+- **WHEN** the user clicks the Edit sub-mode toggle
+- **THEN** the textarea value SHALL be the row's current `free_form_markdown` (unchanged from before entering Diff mode)
+- **AND** the row's `previous_*` columns SHALL be unchanged
 
 
 <!-- @trace
-source: slice-07-dualstream-and-ui-bundle
-updated: 2026-05-10
+source: slice-23-playbook-versioning-and-diff
+updated: 2026-05-17
 code:
-  - packages/web/src/routes/meetings/detail.tsx
-  - packages/backend/meeting_playbook/asr/whisper_provider.py
-  - packages/web/src/components/layout-switcher.tsx
-  - packages/backend/meeting_playbook/sessions/service.py
-  - docs/agents/audio.md
-  - packages/backend/alembic/versions/0004_add_meeting_scheduled_times.py
-  - packages/backend/meeting_playbook/asr/base.py
-  - packages/backend/meeting_playbook/meetings/schemas.py
-  - packages/backend/meeting_playbook/sessions/dependencies.py
-  - packages/backend/meeting_playbook/audio/devices.py
+  - packages/backend/meeting_playbook/calendar/token_store.py
   - packages/backend/meeting_playbook/calendar/router.py
-  - packages/web/package.json
-  - .env.example
-  - packages/web/src/components/playbook-pane.tsx
-  - packages/backend/meeting_playbook/meetings/models.py
-  - packages/backend/meeting_playbook/audio/capture.py
-  - docs/BLACKHOLE_SETUP.md
-  - packages/web/src/components/ui/alert.tsx
-  - packages/web/src/components/transcript-pane.tsx
-  - packages/web/src/lib/meetings-api.ts
-  - packages/web/src/index.css
-  - docs/agents/sessions.md
-  - packages/backend/meeting_playbook/calendar/client.py
+  - packages/web/src/components/playbook-diff-viewer.tsx
   - bun.lock
-  - packages/backend/meeting_playbook/meetings/router.py
-  - packages/web/src/components/headphones-hint.tsx
-  - packages/web/src/locales/zh-TW.json
-  - packages/web/src/lib/session-ws.ts
-  - packages/web/src/route-tree.tsx
-  - packages/web/src/routes/meetings/calendar.tsx
-  - packages/backend/meeting_playbook/config.py
-  - packages/web/src/components/protected-shell.tsx
-  - packages/backend/meeting_playbook/meetings/repository.py
-  - packages/web/src/hooks/use-detail-layout.ts
-  - packages/web/src/test-setup.ts
-  - packages/web/src/routes/meetings/new.tsx
-  - packages/backend/meeting_playbook/playbooks/repository.py
-  - packages/web/src/lib/markdown-preview.tsx
-  - packages/web/vite.config.ts
-  - packages/web/src/hooks/use-meeting-session.ts
-  - packages/backend/meeting_playbook/sessions/messages.py
-  - packages/backend/meeting_playbook/sessions/repository.py
-  - packages/web/src/components/capture-indicator.tsx
-  - packages/web/src/lib/meetings-calendar-utils.ts
   - packages/web/src/locales/en.json
-  - packages/backend/meeting_playbook/sessions/router.py
-  - packages/web/src/routes/meetings/list.tsx
-  - packages/backend/meeting_playbook/playbook_generation/generator.py
-  - packages/web/src/routes/calendar/upcoming.tsx
+  - packages/backend/meeting_playbook/playbooks/models.py
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/components/calendar/calendar-integration-panel.tsx
+  - packages/backend/meeting_playbook/playbooks/router.py
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/lib/playbook-api.ts
+  - packages/backend/meeting_playbook/calendar/client.py
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/calendar/schemas.py
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/backend/meeting_playbook/playbooks/schemas.py
+  - packages/web/src/lib/attachments-api.ts
+  - packages/backend/alembic/versions/0018_playbook_previous_snapshot.py
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/lib/calendar-api.ts
+  - docs/adr/0027-calendar-scope-link.md
+  - packages/backend/meeting_playbook/playbooks/repository.py
 tests:
-  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/playbooks/test_router.py
+  - packages/web/src/components/playbook-diff-viewer.test.tsx
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/test_alembic_playbook_previous.py
   - packages/web/src/routes/calendar/upcoming.test.tsx
-  - packages/backend/tests/calendar/test_client.py
-  - packages/backend/tests/audio/test_capture_protocol.py
-  - packages/backend/tests/playbook_generation/test_generator.py
-  - packages/backend/tests/asr/test_whisper_provider.py
-  - packages/backend/tests/asr/fixtures/counterparty_short.wav
-  - packages/backend/tests/calendar/test_pick_counterparty.py
+  - packages/backend/tests/playbooks/test_endpoints.py
+  - packages/backend/tests/playbooks/test_versioning_repository.py
+  - packages/web/src/lib/playbook-api.test.ts
   - packages/backend/tests/calendar/test_endpoints.py
-  - packages/backend/tests/sessions/test_service.py
-  - packages/web/src/components/layout-switcher.test.tsx
-  - packages/backend/tests/audio/test_devices.py
-  - packages/web/src/components/headphones-hint.test.tsx
-  - packages/backend/tests/asr/fixtures/README.md
-  - packages/backend/tests/sessions/test_repository.py
-  - packages/backend/tests/sessions/test_router.py
-  - packages/backend/tests/meetings/test_repository.py
-  - packages/backend/tests/sessions/test_messages.py
   - packages/web/src/components/playbook-pane.test.tsx
-  - packages/web/src/lib/session-ws.test.ts
-  - packages/web/src/components/capture-indicator.test.tsx
-  - packages/web/src/hooks/use-meeting-session.test.tsx
-  - packages/backend/tests/asr/test_base.py
-  - packages/backend/tests/test_alembic_meeting_scheduled.py
-  - packages/backend/tests/test_preflight.py
-  - packages/backend/tests/audio/test_capture_integration.py
-  - packages/web/src/hooks/use-detail-layout.test.tsx
-  - packages/web/src/lib/markdown-preview.test.tsx
-  - packages/backend/tests/test_alembic_meeting.py
-  - packages/web/src/routes/meetings/detail.test.tsx
-  - packages/backend/tests/conftest.py
-  - packages/web/src/lib/meetings-calendar-utils.test.ts
-  - packages/web/src/components/protected-shell.test.tsx
-  - packages/web/src/components/transcript-pane.test.tsx
+  - packages/web/src/lib/calendar-api.mutations.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/test_alembic_playbook.py
+  - packages/web/src/lib/calendar-api.queries.test.ts
+  - packages/backend/tests/calendar/test_get_event_endpoint.py
+  - packages/backend/tests/meetings/test_create_with_calendar_and_attachments.py
 -->
 
 ---
@@ -435,4 +387,154 @@ tests:
   - packages/web/src/lib/playbook-api.queries.test.ts
   - packages/web/src/components/playbook-pane.test.tsx
   - packages/backend/tests/playbooks/test_repository.py
+-->
+
+---
+### Requirement: `PlaybookRead` schema exposes the previous-version snapshot
+
+The `PlaybookRead` Pydantic schema returned by every playbook-bearing
+endpoint (`GET /api/meetings/{meeting_id}/playbook`, regenerate response,
+discard/restore response, and any future read) SHALL include three new
+fields introduced by slice-23:
+
+- `previous_free_form_markdown: str | None`
+- `previous_updated_at: datetime | None`
+- `has_previous_version: bool` (derived: `previous_free_form_markdown is not None`)
+
+The full row shape SHALL be returned on every call so the frontend never
+has to fetch a second time to learn the snapshot state.
+
+#### Scenario: GET on row without snapshot returns null previous fields
+
+- **GIVEN** a freshly-created playbook row (no regenerate has happened)
+- **WHEN** `GET /api/meetings/{meeting_id}/playbook` is called
+- **THEN** the JSON response includes `"previous_free_form_markdown": null`,
+  `"previous_updated_at": null`, and `"has_previous_version": false`
+
+#### Scenario: GET on row with snapshot returns full previous fields
+
+- **GIVEN** a row whose `previous_free_form_markdown = "draft v1"` and
+  `previous_updated_at = "2026-05-17T10:00:00+00:00"`
+- **WHEN** `GET /api/meetings/{meeting_id}/playbook` is called
+- **THEN** the JSON response includes
+  `"previous_free_form_markdown": "draft v1"`,
+  `"previous_updated_at": "2026-05-17T10:00:00+00:00"`, and
+  `"has_previous_version": true`
+
+
+<!-- @trace
+source: slice-23-playbook-versioning-and-diff
+updated: 2026-05-17
+code:
+  - packages/backend/meeting_playbook/calendar/token_store.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - packages/web/src/components/playbook-diff-viewer.tsx
+  - bun.lock
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/playbooks/models.py
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/components/calendar/calendar-integration-panel.tsx
+  - packages/backend/meeting_playbook/playbooks/router.py
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/lib/playbook-api.ts
+  - packages/backend/meeting_playbook/calendar/client.py
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/calendar/schemas.py
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/backend/meeting_playbook/playbooks/schemas.py
+  - packages/web/src/lib/attachments-api.ts
+  - packages/backend/alembic/versions/0018_playbook_previous_snapshot.py
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/lib/calendar-api.ts
+  - docs/adr/0027-calendar-scope-link.md
+  - packages/backend/meeting_playbook/playbooks/repository.py
+tests:
+  - packages/backend/tests/playbooks/test_router.py
+  - packages/web/src/components/playbook-diff-viewer.test.tsx
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/test_alembic_playbook_previous.py
+  - packages/web/src/routes/calendar/upcoming.test.tsx
+  - packages/backend/tests/playbooks/test_endpoints.py
+  - packages/backend/tests/playbooks/test_versioning_repository.py
+  - packages/web/src/lib/playbook-api.test.ts
+  - packages/backend/tests/calendar/test_endpoints.py
+  - packages/web/src/components/playbook-pane.test.tsx
+  - packages/web/src/lib/calendar-api.mutations.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/test_alembic_playbook.py
+  - packages/web/src/lib/calendar-api.queries.test.ts
+  - packages/backend/tests/calendar/test_get_event_endpoint.py
+  - packages/backend/tests/meetings/test_create_with_calendar_and_attachments.py
+-->
+
+---
+### Requirement: User-save upsert preserves the previous-version snapshot
+
+`PlaybookRepository.upsert_for_meeting(meeting_id, payload)` — the
+user-save path invoked by `PUT /api/meetings/{meeting_id}/playbook` —
+SHALL NOT modify the three `previous_*` columns introduced by slice-23.
+Only the regenerate path (`snapshot_then_upsert`) and the explicit
+`discard_previous` / `restore_previous` endpoints SHALL touch them.
+
+This separation guarantees the snapshot always refers to the version
+that existed immediately before the last AI regeneration — never an
+arbitrary middle save.
+
+#### Scenario: Save after regenerate keeps snapshot intact
+
+- **GIVEN** a row where `free_form_markdown = "v2"` and
+  `previous_free_form_markdown = "v1"`
+- **WHEN** the user edits the freeform text and PUTs an upsert with
+  `free_form_markdown = "v2-edited"`
+- **THEN** the row's `free_form_markdown` is `"v2-edited"`
+- **AND** the row's `previous_free_form_markdown` is still `"v1"`
+- **AND** the row's `previous_updated_at` is unchanged
+
+<!-- @trace
+source: slice-23-playbook-versioning-and-diff
+updated: 2026-05-17
+code:
+  - packages/backend/meeting_playbook/calendar/token_store.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - packages/web/src/components/playbook-diff-viewer.tsx
+  - bun.lock
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/playbooks/models.py
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/components/calendar/calendar-integration-panel.tsx
+  - packages/backend/meeting_playbook/playbooks/router.py
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/lib/playbook-api.ts
+  - packages/backend/meeting_playbook/calendar/client.py
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/calendar/schemas.py
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/backend/meeting_playbook/playbooks/schemas.py
+  - packages/web/src/lib/attachments-api.ts
+  - packages/backend/alembic/versions/0018_playbook_previous_snapshot.py
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/lib/calendar-api.ts
+  - docs/adr/0027-calendar-scope-link.md
+  - packages/backend/meeting_playbook/playbooks/repository.py
+tests:
+  - packages/backend/tests/playbooks/test_router.py
+  - packages/web/src/components/playbook-diff-viewer.test.tsx
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/test_alembic_playbook_previous.py
+  - packages/web/src/routes/calendar/upcoming.test.tsx
+  - packages/backend/tests/playbooks/test_endpoints.py
+  - packages/backend/tests/playbooks/test_versioning_repository.py
+  - packages/web/src/lib/playbook-api.test.ts
+  - packages/backend/tests/calendar/test_endpoints.py
+  - packages/web/src/components/playbook-pane.test.tsx
+  - packages/web/src/lib/calendar-api.mutations.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/test_alembic_playbook.py
+  - packages/web/src/lib/calendar-api.queries.test.ts
+  - packages/backend/tests/calendar/test_get_event_endpoint.py
+  - packages/backend/tests/meetings/test_create_with_calendar_and_attachments.py
 -->

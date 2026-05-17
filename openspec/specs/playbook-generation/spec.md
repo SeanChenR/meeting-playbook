@@ -1308,3 +1308,106 @@ tests:
   - packages/web/src/routes/meetings/detail.test.tsx
   - packages/backend/tests/calendar/test_get_event_endpoint.py
 -->
+
+---
+### Requirement: Regenerate endpoint persists via snapshot-then-upsert
+
+`POST /api/meetings/{meeting_id}/playbook/regenerate` SHALL call
+`PlaybookRepository.snapshot_then_upsert` instead of
+`upsert_for_meeting`. The snapshot step SHALL atomically copy the
+current `free_form_markdown`, `updated_at`, and
+`attachment_hash_snapshot` values into the corresponding `previous_*`
+columns before writing the freshly generated payload.
+
+The generator itself (`PlaybookGenerator.generate`) SHALL NOT change —
+the slice-20c multimodal contract is preserved. Only the persistence
+step that follows the LLM call switches paths.
+
+The response SHALL be HTTP 200 with a `PlaybookRead` payload that
+includes the new `previous_*` fields populated from the just-snapshotted
+state.
+
+If the playbook row does not exist yet (first-ever generation for a
+meeting), the snapshot step SHALL be a no-op (nothing to snapshot) and
+the regenerate SHALL fall through to a plain insert. In that case the
+response's `previous_*` fields SHALL be NULL and `has_previous_version`
+SHALL be `false`.
+
+#### Scenario: Regenerate against existing playbook snapshots the prior version
+
+- **GIVEN** a row with `free_form_markdown = "draft v1"`,
+  `attachment_hash_snapshot = "hash-A"`, all `previous_*` NULL
+- **WHEN** `POST /api/meetings/{meeting_id}/playbook/regenerate` is
+  called and the generator returns a new draft `"draft v2"` against
+  attachments hashed to `"hash-B"`
+- **THEN** the response is HTTP 200 with body
+  `{"free_form_markdown": "draft v2", "attachment_hash_snapshot": "hash-B",
+  "previous_free_form_markdown": "draft v1",
+  "previous_attachment_hash_snapshot": "hash-A",
+  "has_previous_version": true, ...}`
+
+#### Scenario: First-ever regenerate has no snapshot to capture
+
+- **GIVEN** no `playbook` row exists for the meeting yet
+- **WHEN** `POST /api/meetings/{meeting_id}/playbook/regenerate` is
+  called and the generator produces a draft
+- **THEN** the response is HTTP 200 with body where
+  `previous_free_form_markdown` is `null` and `has_previous_version` is
+  `false`
+
+#### Scenario: Generator failure does not advance the snapshot
+
+- **GIVEN** a row with `free_form_markdown = "v1"`,
+  `previous_free_form_markdown = "v0"`
+- **WHEN** the generator raises `PlaybookGenerationFailed` and the
+  endpoint returns HTTP 502
+- **THEN** the row is unchanged: `free_form_markdown` is still `"v1"`
+  and `previous_free_form_markdown` is still `"v0"` (no snapshot
+  rotation happens before a successful LLM round-trip)
+
+<!-- @trace
+source: slice-23-playbook-versioning-and-diff
+updated: 2026-05-17
+code:
+  - packages/backend/meeting_playbook/calendar/token_store.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - packages/web/src/components/playbook-diff-viewer.tsx
+  - bun.lock
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/playbooks/models.py
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/components/calendar/calendar-integration-panel.tsx
+  - packages/backend/meeting_playbook/playbooks/router.py
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/lib/playbook-api.ts
+  - packages/backend/meeting_playbook/calendar/client.py
+  - packages/web/package.json
+  - packages/backend/meeting_playbook/calendar/schemas.py
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/backend/meeting_playbook/playbooks/schemas.py
+  - packages/web/src/lib/attachments-api.ts
+  - packages/backend/alembic/versions/0018_playbook_previous_snapshot.py
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/lib/calendar-api.ts
+  - docs/adr/0027-calendar-scope-link.md
+  - packages/backend/meeting_playbook/playbooks/repository.py
+tests:
+  - packages/backend/tests/playbooks/test_router.py
+  - packages/web/src/components/playbook-diff-viewer.test.tsx
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/test_alembic_playbook_previous.py
+  - packages/web/src/routes/calendar/upcoming.test.tsx
+  - packages/backend/tests/playbooks/test_endpoints.py
+  - packages/backend/tests/playbooks/test_versioning_repository.py
+  - packages/web/src/lib/playbook-api.test.ts
+  - packages/backend/tests/calendar/test_endpoints.py
+  - packages/web/src/components/playbook-pane.test.tsx
+  - packages/web/src/lib/calendar-api.mutations.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/test_alembic_playbook.py
+  - packages/web/src/lib/calendar-api.queries.test.ts
+  - packages/backend/tests/calendar/test_get_event_endpoint.py
+  - packages/backend/tests/meetings/test_create_with_calendar_and_attachments.py
+-->

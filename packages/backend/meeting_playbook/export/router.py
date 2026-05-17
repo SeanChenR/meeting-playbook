@@ -19,7 +19,7 @@ which is itself an async generator. We pass it to FastAPI's
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -74,7 +74,7 @@ def _build_content_disposition(title: str, scheduled_at: datetime | None) -> str
     Format: `attachment; filename="{ascii_slug}__{date}.zip";
              filename*=UTF-8''{percent_encoded_unicode}__{date}.zip`
     """
-    date_part = (scheduled_at or datetime.utcnow()).date().isoformat()
+    date_part = (scheduled_at or datetime.now(UTC)).date().isoformat()
     ascii_part = f"{ascii_slug(title)}__{date_part}.zip"
     unicode_basename = f"{title or _FALLBACK_SLUG}__{date_part}.zip"
     # Percent-encode the unicode form per RFC 5987.

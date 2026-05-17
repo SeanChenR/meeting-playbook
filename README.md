@@ -22,9 +22,9 @@ Inspired by [yu-wenhao.com/zh-TW/blog/ai-meeting-notes](https://yu-wenhao.com/zh
 
 ### Status
 
-Active personal project — 11 vertical slices shipped (auth, i18n, meeting CRUD, playbook editor, calendar + LLM playbook generation, mic transcript session, dual-stream capture, tactical advisor, advisor chatbox, post-meeting summary, ASR + retention) plus a UI overhaul (claude-design dual-theme), animate-ui icon swap, and meetings UX revamp.
+Active personal project — **26 vertical slices shipped** (slice-01 auth → slice-24 staged attachments) plus 4 follow-up / refactor changes (TanStack migration, claude-design UI overhaul, animate-ui icon swap, meetings UX revamp). Recent additions: speaker attribution, voice enrollment, offline ingest, meeting + transcript edit, tag system, IA dashboard, settings sub-nav, per-meeting attachments + calendar import preview + multimodal playbook input, meeting linking, per-meeting ZIP export bundle, playbook versioning + diff, and staged attachments with batch upload + quota counter.
 
-See `openspec/specs/` for live capability specs, `openspec/changes/archive/` for completed change history, and `docs/adr/` for architectural decisions.
+See `openspec/specs/` for live capability specs (currently 26 capabilities), `openspec/changes/archive/` for completed change history, and `docs/adr/` for architectural decisions.
 
 ### Stack
 
@@ -189,9 +189,9 @@ Private. Not for redistribution.
 
 ### 目前狀態
 
-個人持續開發中 — 已完成 11 個 vertical slice（auth、i18n、會議 CRUD、playbook 編輯器、Google Calendar 整合 + LLM playbook 生成、麥克風逐字稿、雙聲道擷取、tactical advisor、advisor 聊天框、會後摘要、ASR + 30 天 retention），加上 UI 全面改版（claude-design 雙主題）、animate-ui icon 換裝、會議列表 UX 重整。
+個人持續開發中 — **已完成 26 個 vertical slice**（slice-01 auth → slice-24 staged attachments），加上 4 個 follow-up / refactor change（TanStack 遷移、claude-design UI 全面改版、animate-ui icon 換裝、會議列表 UX 重整）。近期重點：聲紋歸屬、語音註冊、離線轉錄、會議 + 逐字稿編輯、標籤系統、IA 儀表板、設定子導覽、會議附件 + Calendar 預覽匯入 + 多模態 playbook 輸入、會議連結、ZIP 匯出、playbook 版本管理 + diff，以及暫存附件支援批次上傳 + quota counter。
 
-`openspec/specs/` 是當前能力規格、`openspec/changes/archive/` 是已完成的 change 歷史、`docs/adr/` 是架構決策。
+`openspec/specs/` 是當前能力規格（目前 26 個 capability）、`openspec/changes/archive/` 是已完成的 change 歷史、`docs/adr/` 是架構決策。
 
 ### 技術棧
 

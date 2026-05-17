@@ -110,8 +110,9 @@ Minimum example — adding a new "save" button to the auth flow:
 - Pre-commit hooks via `lefthook`
 
 ## Current state (read before assuming something is missing)
-- 11 vertical slices + follow-up changes archived in `openspec/changes/archive/` — auth, i18n, meeting CRUD, playbook editor, calendar + LLM playbook, mic + transcript session, dual-stream + UI bundle, tactical advisor, advisor chatbox, post-meeting summary, ASR + retention, UI overhaul (claude-design), animate-ui swap, meetings UX revamp
-- Live capability specs are in `openspec/specs/` — check there first to see what's already promoted
+- **26 vertical slices** (slice-01 auth → slice-24 staged attachments, incl. slice-20a/b/c sub-slices) **+ 4 follow-up / refactor changes** (TanStack migration, claude-design UI overhaul, animate-ui icon swap, meetings UX revamp) archived in `openspec/changes/archive/`
+- Recent additions worth knowing: speaker attribution (S12), voice enrollment (S13), offline ingest (S14), meeting edit (S15), transcript edit + playback (S16), tag system (S17), IA dashboard (S18), settings sub-nav (S19), per-meeting attachments (S20a) + calendar import preview (S20b) + multimodal playbook input (S20c), meeting linking (S21), per-meeting ZIP export (S22), playbook versioning + diff (S23), staged attachments + dropzone batch upload + counter + per-meeting quota aligned to 10 / 60 MiB (S24)
+- Live capability specs are in `openspec/specs/` (currently 26 capabilities) — check there first to see what's already promoted
 - New work is Spectra-managed: discuss → propose → apply → archive (see top of this file)
 
 ## When in doubt

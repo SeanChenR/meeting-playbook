@@ -229,7 +229,12 @@
       "saveDraft": "儲存草稿",
       "submitting": "建立中…",
       "cancel": "取消",
-      "errorFallback": "建立失敗"
+      "errorFallback": "建立失敗",
+      "preFillBanner": "正在從 Calendar 預填欄位…",
+      "preFillMultiAttendeeHint": "事件有多位非自己的與會者，請手動填入「對方」欄位",
+      "attachmentsLabel": "附件",
+      "attachmentsHint": "勾選要附加到這場會議的檔案；新檔案請先到附件頁上傳。",
+      "attachmentsEmpty": "目前沒有可附加的待上傳檔案"
     },
     "edit": {
       "title": "標題",
@@ -678,7 +683,12 @@
     "calendar": {
       "not_connected": "尚未連結 Google Calendar — 請先連結",
       "token_expired": "Calendar 授權已過期 — 請重新連結",
-      "network_error": "無法連線到 Google Calendar — 請稍後再試"
+      "network_error": "無法連線到 Google Calendar — 請稍後再試",
+      "event_not_found": "找不到這個 Calendar 事件 — 可能已被刪除",
+      "import_endpoint_removed": "Calendar 匯入流程已更新，請重新整理頁面後再試"
+    },
+    "attachment": {
+      "not_attachable": "選取的附件目前無法附加到這場會議（可能已被別場會議使用或不屬於你）"
     },
     "playbook": {
       "generation_timeout": "Playbook 生成逾時（>60 秒）— 請稍後再試",

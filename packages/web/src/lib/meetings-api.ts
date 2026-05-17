@@ -85,6 +85,15 @@ export interface MeetingCreatePayload {
   // Slice-7: optional ISO 8601 timestamps for the planned meeting time.
   scheduled_start_at?: string | null;
   scheduled_end_at?: string | null;
+  // Slice-20b: when set, the backend fetches the calendar event, runs the
+  // Playbook generator synchronously, and writes the resulting draft into
+  // the playbook row (replacing the slice-04 auto-create empty draft).
+  calendar_event_id?: string;
+  // Slice-20b: ids of pre-uploaded attachments (slice-20a) that should be
+  // associated with the new meeting. Each id MUST be owned by the current
+  // user and have `meeting_id IS NULL` — otherwise the backend returns
+  // HTTP 422 with `error_code: attachment.not_attachable`.
+  attachments?: string[];
 }
 
 export class MeetingApiError extends Error {

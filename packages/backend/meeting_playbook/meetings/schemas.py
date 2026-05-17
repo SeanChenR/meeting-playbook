@@ -28,6 +28,19 @@ class MeetingCreate(BaseModel):
     # `scheduled_start_at` (enforced in `_validate_time_range` below).
     scheduled_start_at: datetime
     scheduled_end_at: datetime | None = None
+    # Slice-20b: `calendar_event_id` flips the request from "manual create"
+    # to "calendar import create + Playbook generation". When non-null, the
+    # router fetches the event detail and synchronously runs the generator
+    # (matches the deprecated `POST /api/meetings/from-calendar` contract,
+    # now collapsed into this single create entry point per design doc
+    # `Endpoint 拆分`).
+    calendar_event_id: str | None = None
+    # Slice-20b: `attachments[]` carries the attachment ids the user
+    # selected on the preview form. Empty list = create no attachment
+    # links. Non-empty list = the router rewrites each attachment row's
+    # `meeting_id` to the new meeting id within the same transaction
+    # (per spec `POST /api/meetings accepts an attachments list`).
+    attachments: list[str] = Field(default_factory=list)
 
     @field_validator("title", "counterparty_display_name", "me_display_name", mode="before")
     @classmethod

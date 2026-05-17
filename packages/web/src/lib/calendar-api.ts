@@ -1,15 +1,20 @@
 /**
- * Calendar REST client.
+ * Calendar REST client — slice-20b shape.
  *
- * Wraps `fetch` against `/api/calendar/upcoming` and
- * `/api/meetings/from-calendar`. Errors are normalized to `CalendarApiError`
- * so UI code can resolve `errorCode` through `localizedErrorMessage(t)`.
+ * Wraps `fetch` against:
+ *   GET  /api/calendar/upcoming               — list of upcoming events
+ *   GET  /api/calendar/events/{event_id}      — single-event detail used by
+ *                                                the meeting preview form
  *
- * Mutation hook invalidates `["meetings"]` on success so the meetings list
- * refetches and shows the just-imported meeting.
+ * Slice-20b: `importFromCalendar` mutation REMOVED. The calendar import
+ * flow now navigates to `/meetings/new?from_calendar=<event_id>`; the
+ * preview form fetches event detail via `getCalendarEvent` and creates the
+ * meeting through `POST /api/meetings` (with `calendar_event_id` +
+ * `attachments[]`).
+ *
+ * Errors are normalized to `CalendarApiError` so UI code can resolve
+ * `errorCode` through `localizedErrorMessage(t)`.
  */
-
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export interface UpcomingEvent {
   id: string;
@@ -21,8 +26,27 @@ export interface UpcomingEvent {
   organizer: string;
 }
 
-export interface ImportResult {
-  meeting_id: string;
+/** Slice-20b: structured organizer reference returned alongside event detail. */
+export interface OrganizerDetail {
+  display_name: string;
+  email: string;
+}
+
+/**
+ * Slice-20b: single-event detail returned by
+ * `GET /api/calendar/events/{event_id}`. Nullable fields mirror the
+ * backend `CalendarEventDetail` Pydantic schema — Google Calendar payloads
+ * may omit `start.dateTime` (all-day events), `description`, or the
+ * `organizer` block entirely.
+ */
+export interface CalendarEventDetail {
+  id: string;
+  title: string;
+  start: string | null;
+  end: string | null;
+  description: string | null;
+  attendees: string[];
+  organizer: OrganizerDetail | null;
 }
 
 export class CalendarApiError extends Error {
@@ -52,14 +76,16 @@ export async function getUpcomingEvents(hours = 24): Promise<UpcomingEvent[]> {
   return (await resp.json()) as UpcomingEvent[];
 }
 
-export async function importFromCalendar(eventId: string): Promise<ImportResult> {
-  const resp = await fetch("/api/meetings/from-calendar", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ event_id: eventId }),
-  });
+/**
+ * Slice-20b: fetch a single calendar event's detail for the meeting
+ * preview form. Same calendar-domain error codes as
+ * `getUpcomingEvents`, plus `calendar.event_not_found` (404) when the
+ * event id is unknown under the authenticated user's calendar.
+ */
+export async function getCalendarEvent(eventId: string): Promise<CalendarEventDetail> {
+  const resp = await fetch(`/api/calendar/events/${encodeURIComponent(eventId)}`);
   if (!resp.ok) throw await _envelopeError(resp);
-  return (await resp.json()) as ImportResult;
+  return (await resp.json()) as CalendarEventDetail;
 }
 
 export function upcomingEventsQueryOptions(hours = 24) {
@@ -69,12 +95,13 @@ export function upcomingEventsQueryOptions(hours = 24) {
   };
 }
 
-export function useImportFromCalendarMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (eventId: string) => importFromCalendar(eventId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["meetings"] });
-    },
-  });
+export function calendarEventQueryOptions(eventId: string) {
+  return {
+    queryKey: ["calendar", "event", eventId] as const,
+    queryFn: () => getCalendarEvent(eventId),
+    // The detail is fetched on form mount; do not retry on a calendar-domain
+    // failure since the form needs to surface the error immediately so the
+    // user can fall back to manual create.
+    retry: false,
+  };
 }

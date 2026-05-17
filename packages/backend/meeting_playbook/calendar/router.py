@@ -1,9 +1,13 @@
-"""Calendar REST router — upcoming events + import-from-calendar.
+"""Calendar REST router — upcoming events list + single-event detail.
 
-Per slice-05 design (calendar-integration spec):
+Slice-20b updates (per design.md `Endpoint 拆分` + spec deltas):
 - GET /api/calendar/upcoming gates on X-User-Id; surfaces calendar.* error codes
-- POST /api/meetings/from-calendar fetches event, creates meeting + playbook
-- Generator failure does NOT roll back the meeting (recoverable through editor)
+- GET /api/calendar/events/{event_id} returns the single-event detail used
+  by the meeting preview form (slice-20b ADDED requirement)
+- POST /api/meetings/from-calendar is REMOVED — the route now returns
+  HTTP 410 Gone with `calendar.import_endpoint_removed`. The replacement
+  flow lives in `meeting-management` (`POST /api/meetings` with
+  `calendar_event_id` + `attachments[]`).
 """
 
 from __future__ import annotations
@@ -11,37 +15,21 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_playbook.calendar.client import (
     CalendarClient,
+    CalendarEventNotFound,
     CalendarNetworkError,
     CalendarNotConnected,
     CalendarTokenExpired,
 )
-from meeting_playbook.calendar.dependencies import (
-    get_calendar_client_dependency,
-    get_playbook_generator_dependency,
-)
-from meeting_playbook.calendar.identity import pick_counterparty
+from meeting_playbook.calendar.dependencies import get_calendar_client_dependency
 from meeting_playbook.calendar.schemas import (
-    FromCalendarBody,
-    FromCalendarResponse,
+    CalendarEventDetail,
+    OrganizerDetail,
     UpcomingEventRead,
 )
-from meeting_playbook.meetings.dependencies import (
-    get_session_dependency,
-    get_user_email_dependency,
-    get_user_id_dependency,
-    get_user_name_dependency,
-)
-from meeting_playbook.meetings.repository import MeetingRepository
-from meeting_playbook.playbook_generation.generator import (
-    PlaybookGenerationFailed,
-    PlaybookGenerationTimeout,
-    PlaybookGenerator,
-)
-from meeting_playbook.playbooks.repository import PlaybookRepository
+from meeting_playbook.meetings.dependencies import get_user_id_dependency
 
 router = APIRouter(tags=["calendar"])
 
@@ -63,6 +51,17 @@ def _calendar_error_to_http(exc: Exception) -> HTTPException:
                 "message": "Stored Calendar token is no longer valid.",
             },
         )
+    if isinstance(exc, CalendarEventNotFound):
+        # Slice-20b: typed 404 for the preview-form GET. Per spec the body
+        # MUST NOT distinguish missing-vs-other-user, so the message stays
+        # generic.
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error_code": "calendar.event_not_found",
+                "message": "Calendar event not found.",
+            },
+        )
     if isinstance(exc, CalendarNetworkError):
         return HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -76,32 +75,6 @@ def _calendar_error_to_http(exc: Exception) -> HTTPException:
         detail={
             "error_code": "common.internal_error",
             "message": "Unexpected calendar-domain error.",
-        },
-    )
-
-
-def _generator_error_to_http(exc: Exception) -> HTTPException:
-    if isinstance(exc, PlaybookGenerationTimeout):
-        return HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail={
-                "error_code": "playbook.generation_timeout",
-                "message": "Playbook generation exceeded the deadline.",
-            },
-        )
-    if isinstance(exc, PlaybookGenerationFailed):
-        return HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "error_code": "playbook.generation_failed",
-                "message": "Playbook generation produced an invalid response.",
-            },
-        )
-    return HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail={
-            "error_code": "common.internal_error",
-            "message": "Unexpected generator error.",
         },
     )
 
@@ -139,84 +112,82 @@ async def get_upcoming(
     ]
 
 
-@router.post(
-    "/api/meetings/from-calendar",
-    status_code=status.HTTP_201_CREATED,
-    response_model=FromCalendarResponse,
+@router.get(
+    "/api/calendar/events/{event_id}",
+    response_model=CalendarEventDetail,
 )
-async def import_from_calendar(
-    body: FromCalendarBody,
+async def get_calendar_event(
+    event_id: str,
     user_id: Annotated[str, Depends(get_user_id_dependency)],
-    user_name: Annotated[str, Depends(get_user_name_dependency)],
-    user_email: Annotated[str, Depends(get_user_email_dependency)],
     calendar: Annotated[CalendarClient, Depends(get_calendar_client_dependency)],
-    generator: Annotated[PlaybookGenerator, Depends(get_playbook_generator_dependency)],
-    session: Annotated[AsyncSession, Depends(get_session_dependency)],
-) -> FromCalendarResponse:
+) -> CalendarEventDetail:
+    """Slice-20b ADDED requirement: single-event detail for the preview form.
+
+    Reuses `CalendarClient.get_event` (slice-05) so the resource-attendee
+    filter and OAuth refresh-once-on-401 dance flow through unchanged. The
+    only contract delta vs the legacy `POST /api/meetings/from-calendar`
+    path is the 404 mapping: this endpoint surfaces `calendar.event_not_found`
+    instead of the conflated `calendar.not_connected` used by the legacy
+    path (which is being removed in task 3.1).
+    """
     try:
-        event = await calendar.get_event(user_id, body.event_id)
-    except (CalendarNotConnected, CalendarTokenExpired, CalendarNetworkError) as exc:
+        event = await calendar.get_event(user_id, event_id)
+    except (
+        CalendarNotConnected,
+        CalendarTokenExpired,
+        CalendarEventNotFound,
+        CalendarNetworkError,
+    ) as exc:
         raise _calendar_error_to_http(exc) from exc
 
-    # Slice 5 ingest: derive both display names from session identity instead
-    # of hardcoded fallbacks (see calendar-integration spec, scenario rows).
-    counterparty = pick_counterparty(event, user_email)
-    me_display = user_name or (user_email.split("@", 1)[0] if "@" in user_email else "") or "Me"
-
-    # Slice-15: meeting.scheduled_start_at became NOT NULL. Carry the
-    # Calendar event's start / end ISO 8601 strings into the meeting row so
-    # the kanban / list / calendar views can sort by scheduled time without
-    # falling back to created_at.
-    from datetime import datetime as _dt
-
-    def _parse_iso(value: str) -> _dt | None:
-        try:
-            return _dt.fromisoformat(value.replace("Z", "+00:00"))
-        except (ValueError, TypeError):
-            return None
-
-    meeting = await MeetingRepository(session).create(
-        user_id=user_id,
-        title=event.title or "(untitled)",
-        counterparty_display_name=counterparty,
-        me_display_name=me_display,
-        scheduled_start_at=_parse_iso(event.start),
-        scheduled_end_at=_parse_iso(event.end),
-    )
-
-    # Set calendar_event_id directly — MeetingRepository.create does not yet
-    # accept it as a kwarg (slice-03 deferred that). UPDATE is safe within the
-    # same session.
-    from sqlalchemy import text
-
-    await session.execute(
-        text("UPDATE meeting SET calendar_event_id = :ceid WHERE id = :mid"),
-        {"ceid": event.id, "mid": meeting.id},
-    )
-    await session.commit()
-
-    try:
-        draft = await generator.generate(
-            event,
-            viewer_email=user_email,
-            viewer_name=user_name,
+    organizer: OrganizerDetail | None = None
+    if event.organizer or event.organizer_email:
+        organizer = OrganizerDetail(
+            display_name=event.organizer or "",
+            email=event.organizer_email or "",
         )
-    except (PlaybookGenerationTimeout, PlaybookGenerationFailed) as exc:
-        # Spec: meeting persists; surface generator error code.
-        raise _generator_error_to_http(exc) from exc
 
-    # Slice-20c: stamp the empty-set canonical snapshot at the initial
-    # generation — calendar import lands no attachments. Later attachment
-    # adds/removes flip `is_stale` until the user clicks "Regenerate".
-    from meeting_playbook.attachments.multimodal_context import EMPTY_SET_SNAPSHOT_HASH
-
-    upsert_payload: dict[str, object] = {
-        **draft,
-        "attachment_hash_snapshot": EMPTY_SET_SNAPSHOT_HASH,
-    }
-    await PlaybookRepository(session).upsert_for_meeting(
-        meeting.id,
-        upsert_payload,  # type: ignore[arg-type]
+    return CalendarEventDetail(
+        id=event.id,
+        title=event.title,
+        # The existing CalendarEvent dataclass uses "" sentinel for missing
+        # dateTime fields; the preview form needs a real nullable so the
+        # frontend can decide whether to pre-fill the schedule inputs.
+        start=event.start or None,
+        end=event.end or None,
+        description=event.description or None,
+        attendees=list(event.attendees),
+        organizer=organizer,
     )
 
-    return FromCalendarResponse(meeting_id=meeting.id)
+
+@router.post("/api/meetings/from-calendar")
+async def import_from_calendar() -> None:
+    """Slice-20b REMOVED Requirement: `POST /api/meetings/from-calendar`.
+
+    The fire-and-forget contract (slice-05 + slice-07) is replaced by the
+    preview-and-confirm flow: callers navigate to
+    `/meetings/new?from_calendar=<event_id>` and submit through
+    `POST /api/meetings` carrying `calendar_event_id` + `attachments[]`.
+
+    The route is retained only to surface a deterministic 410 + typed
+    error_code so old clients (and old service-worker caches) get a
+    clear signal to upgrade. Every request — regardless of body or auth
+    state — returns the same envelope; no body is read, no DB row is
+    written, and no Playbook generator is invoked. The route also
+    declares NO request dependencies (no body model, no session) so the
+    handler runs before any auth gating, matching the spec scenario
+    "any client sends `POST /api/meetings/from-calendar` for any event
+    id" → 410 with zero side effects.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "error_code": "calendar.import_endpoint_removed",
+            "message": (
+                "Calendar import now uses the preview flow: navigate to "
+                "/meetings/new?from_calendar=<event_id> and confirm to create "
+                "the meeting + generate the playbook."
+            ),
+        },
+    )

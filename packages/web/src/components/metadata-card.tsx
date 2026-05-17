@@ -29,6 +29,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw } from "./animate-ui/icons/refresh-cw";
 import { Trash } from "./animate-ui/icons/trash";
+import { MeetingLinksSection } from "./meeting-links-section";
 import { MeetingPrevNextNav } from "./meeting-prev-next-nav";
 import type { MeetingDetail } from "../lib/meetings-api";
 import { Avatar } from "./ui/avatar";
@@ -105,6 +106,9 @@ export function MetadataCard({
             the MetadataCard header so the standalone BackLink row above
             the card can be dropped. */}
         <MeetingPrevNextNav currentId={meeting.id} />
+        {/* Slice-21: related-meeting links sit between the prev/next
+            navigation group and the two metadata columns. */}
+        <MeetingLinksSection meetingId={meeting.id} />
         <div className="flex flex-wrap gap-5">
           <div className="min-w-0 flex-[1_1_320px] space-y-3">
             <div className="flex flex-wrap items-center gap-2.5">

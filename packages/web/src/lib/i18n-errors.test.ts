@@ -43,4 +43,19 @@ describe("localizedErrorMessage", () => {
       "An unknown error occurred",
     );
   });
+
+  test("meeting_link.* error codes resolve to the locale-specific message", async () => {
+    expect(localizedErrorMessage("meeting_link.duplicate", i18n.t.bind(i18n))).toBe(
+      "這兩個會議已經連結了",
+    );
+    expect(localizedErrorMessage("meeting_link.self_reference", i18n.t.bind(i18n))).toBe(
+      "不能連結自己",
+    );
+    expect(localizedErrorMessage("meeting_link.not_found", i18n.t.bind(i18n))).toBe("找不到此關聯");
+
+    await i18n.changeLanguage("en");
+    expect(localizedErrorMessage("meeting_link.duplicate", i18n.t.bind(i18n))).toBe(
+      "These meetings are already linked",
+    );
+  });
 });

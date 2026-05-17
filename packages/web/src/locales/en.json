@@ -234,7 +234,13 @@
       "preFillMultiAttendeeHint": "Multiple non-viewer attendees found — please fill in the Counterparty field manually",
       "attachmentsLabel": "Attachments",
       "attachmentsHint": "Pick the files to attach to this meeting; upload new files from the Attachments page first.",
-      "attachmentsEmpty": "No pending attachments available"
+      "attachmentsEmpty": "No pending attachments available",
+      "linksLabel": "Related meetings",
+      "linksHint": "Pre-attach related meetings now; you can also link from the detail page later.",
+      "linksEmpty": "No other meetings yet to link to",
+      "linksSearchPlaceholder": "Search meeting titles…",
+      "linksNoMatch": "No matching meetings",
+      "linksCount": "{{count}} selected"
     },
     "edit": {
       "title": "Title",
@@ -309,6 +315,21 @@
       "speaker": {
         "cluster": "Speaker {{n}}",
         "cluster_unknown": "Speaker (unidentified)"
+      }
+    },
+    "links": {
+      "heading": "Related meetings",
+      "count_one": "{{count}} related",
+      "count_other": "{{count}} related",
+      "empty": "No related meetings yet",
+      "addButton": "+ Link",
+      "showMore": "Show more",
+      "showFewer": "Show fewer",
+      "picker": {
+        "placeholder": "Search meeting titles…",
+        "cacheMiss": "Visit the meetings list first to populate the picker",
+        "confirmButton": "Link",
+        "cancelButton": "Cancel"
       }
     },
     "list": {
@@ -795,6 +816,11 @@
       "not_found": "Attachment not found",
       "uploadFailed": "Upload failed; please try again",
       "network_error": "Network error during upload; please retry"
+    },
+    "meeting_link": {
+      "duplicate": "These meetings are already linked",
+      "self_reference": "Cannot link a meeting to itself",
+      "not_found": "Meeting link not found"
     }
   },
   "attachments": {

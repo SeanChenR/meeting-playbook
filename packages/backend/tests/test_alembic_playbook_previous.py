@@ -126,13 +126,21 @@ async def test_playbook_model_accepts_previous_fields(migrated_engine: AsyncEngi
 async def test_downgrade_drops_previous_columns_and_upgrade_restores_them(
     _migrated_db_url: str,
 ) -> None:
-    """`alembic downgrade -1` drops the columns; `upgrade head` restores them."""
+    """Downgrading past 0018 drops the columns; `upgrade head` restores them.
+
+    Pins the target revision to 0017 instead of using relative `-1` so the
+    assertion stays valid when later migrations (slice-21 0019_meeting_link,
+    etc.) land on top of 0018.
+    """
     sync_url = _migrated_db_url
     async_url = _async_url(sync_url)
 
     try:
-        # Downgrade by one revision to undo 0018.
-        _run_alembic("downgrade", "-1", sync_url)
+        # Downgrade past 0018 (i.e. land on 0017) to undo the columns 0018
+        # introduces. Earlier this used relative `-1`, but with 0019
+        # (slice-21 meeting_link) sitting on top of 0018, `-1` now undoes
+        # the wrong revision.
+        _run_alembic("downgrade", "0017_attachment_hash_snapshot", sync_url)
 
         engine = create_async_engine(async_url, future=True)
         try:

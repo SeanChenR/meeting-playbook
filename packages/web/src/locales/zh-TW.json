@@ -234,7 +234,13 @@
       "preFillMultiAttendeeHint": "事件有多位非自己的與會者，請手動填入「對方」欄位",
       "attachmentsLabel": "附件",
       "attachmentsHint": "勾選要附加到這場會議的檔案；新檔案請先到附件頁上傳。",
-      "attachmentsEmpty": "目前沒有可附加的待上傳檔案"
+      "attachmentsEmpty": "目前沒有可附加的待上傳檔案",
+      "linksLabel": "關聯會議",
+      "linksHint": "建立時就選擇要關聯的會議；之後也可從詳細頁加。",
+      "linksEmpty": "目前沒有其他會議可關聯",
+      "linksSearchPlaceholder": "搜尋會議標題…",
+      "linksNoMatch": "查無符合的會議",
+      "linksCount": "已選 {{count}} 場"
     },
     "edit": {
       "title": "標題",
@@ -309,6 +315,21 @@
       "speaker": {
         "cluster": "與會者 {{n}}",
         "cluster_unknown": "與會者（未辨識）"
+      }
+    },
+    "links": {
+      "heading": "關聯會議",
+      "count_one": "{{count}} 場關聯",
+      "count_other": "{{count}} 場關聯",
+      "empty": "尚無關聯會議",
+      "addButton": "+ 關聯",
+      "showMore": "展開更多",
+      "showFewer": "收合",
+      "picker": {
+        "placeholder": "搜尋會議標題…",
+        "cacheMiss": "請先到會議列表載入會議清單",
+        "confirmButton": "建立關聯",
+        "cancelButton": "取消"
       }
     },
     "list": {
@@ -795,6 +816,11 @@
       "not_found": "找不到此附件",
       "uploadFailed": "上傳失敗，請稍後再試",
       "network_error": "上傳過程網路錯誤，請重試"
+    },
+    "meeting_link": {
+      "duplicate": "這兩個會議已經連結了",
+      "self_reference": "不能連結自己",
+      "not_found": "找不到此關聯"
     }
   },
   "attachments": {

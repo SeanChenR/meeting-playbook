@@ -94,6 +94,11 @@ export interface MeetingCreatePayload {
   // user and have `meeting_id IS NULL` — otherwise the backend returns
   // HTTP 422 with `error_code: attachment.not_attachable`.
   attachments?: string[];
+  // Slice-21: ids of existing meetings to attach as `related` links at
+  // create time. Each id MUST reference a meeting owned by the current
+  // user. Bidirectional semantics apply: linking A→B from the create
+  // form makes B's detail page also show A under "Related meetings".
+  links?: string[];
 }
 
 export class MeetingApiError extends Error {

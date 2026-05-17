@@ -44,7 +44,12 @@ import {
   calendarEventQueryOptions,
 } from "../../lib/calendar-api";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
-import { MeetingApiError, useCreateMeetingMutation } from "../../lib/meetings-api";
+import {
+  MeetingApiError,
+  meetingsListQueryOptions,
+  useCreateMeetingMutation,
+  type Meeting,
+} from "../../lib/meetings-api";
 import { pendingAttachmentsQueryOptions, type PendingAttachment } from "../../lib/attachments-api";
 
 /**
@@ -134,6 +139,8 @@ export function NewMeeting() {
   const [goal, setGoal] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
+  const [selectedLinks, setSelectedLinks] = useState<string[]>([]);
+  const [linkQuery, setLinkQuery] = useState("");
   const [multiAttendeeHint, setMultiAttendeeHint] = useState(false);
   const mutation = useCreateMeetingMutation();
   const submitting = mutation.isPending;
@@ -219,6 +226,7 @@ export function NewMeeting() {
         scheduled_end_at?: string;
         calendar_event_id?: string;
         attachments?: string[];
+        links?: string[];
       } = {
         title,
         counterparty_display_name: counterparty,
@@ -237,6 +245,13 @@ export function NewMeeting() {
       }
       if (selectedAttachments.length > 0) {
         payload.attachments = selectedAttachments;
+      }
+      // Slice-21: pre-attach related meetings from the create form. The
+      // backend validates each id is owned by the current user; a bad id
+      // raises `meeting.not_found` BEFORE the meeting row is created so
+      // we don't leave an orphan.
+      if (selectedLinks.length > 0) {
+        payload.links = selectedLinks;
       }
       const meeting = await mutation.mutateAsync(payload);
       if (cameFromCalendar) {
@@ -409,6 +424,23 @@ export function NewMeeting() {
                 t={t}
               />
 
+              {/* Slice-21: multi-select link picker. Skipped when there are
+                  no other meetings to link to (cold-start case). The picker
+                  uses the same cached meetings list as
+                  `<MeetingLinkPicker>` so search results render
+                  instantly after the user has visited /meetings once. */}
+              <LinkPicker
+                query={linkQuery}
+                onQueryChange={setLinkQuery}
+                selectedIds={selectedLinks}
+                onToggle={(id) =>
+                  setSelectedLinks((prev) =>
+                    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                  )
+                }
+                t={t}
+              />
+
               {error && <Alert variant="destructive">{error}</Alert>}
 
               <Separator />
@@ -445,6 +477,86 @@ export function NewMeeting() {
         </Card>
       </div>
     </ProtectedShell>
+  );
+}
+
+function LinkPicker({
+  query,
+  onQueryChange,
+  selectedIds,
+  onToggle,
+  t,
+}: {
+  query: string;
+  onQueryChange: (v: string) => void;
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  t: (k: string) => string;
+}) {
+  // Read straight from the meetings-list cache. If the cache hasn't been
+  // populated (user landed on /meetings/new directly without visiting
+  // /meetings first), `<MeetingLinkPicker>` chooses to render a
+  // cache-miss hint — we do the same here for visual consistency.
+  const listQuery = useQuery(meetingsListQueryOptions());
+  const meetings: Meeting[] = listQuery.data ?? [];
+
+  const trimmed = query.trim().toLowerCase();
+  const candidates =
+    trimmed.length === 0
+      ? meetings
+      : meetings.filter((m) => m.title.toLowerCase().includes(trimmed));
+
+  // Always rendered — empty state explains what the picker is for so the
+  // affordance stays discoverable even when the user has no other
+  // meetings yet.
+  return (
+    <div className="space-y-2" data-testid="links-section">
+      <div className="space-y-1">
+        <Label>{t("meetings.new.linksLabel")}</Label>
+        <p className="text-xs text-(--color-muted-foreground)">{t("meetings.new.linksHint")}</p>
+      </div>
+      {meetings.length === 0 ? (
+        <p className="text-xs text-(--color-muted-foreground)" data-testid="links-empty">
+          {t("meetings.new.linksEmpty")}
+        </p>
+      ) : (
+        <>
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder={t("meetings.new.linksSearchPlaceholder")}
+            data-testid="links-search"
+          />
+          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-(--color-border) p-2">
+            {candidates.length === 0 ? (
+              <li className="px-2 py-1 text-xs text-(--color-muted-foreground)">
+                {t("meetings.new.linksNoMatch")}
+              </li>
+            ) : (
+              candidates.slice(0, 20).map((m) => (
+                <li key={m.id}>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      data-testid={`link-candidate-${m.id}`}
+                      checked={selectedIds.includes(m.id)}
+                      onChange={() => onToggle(m.id)}
+                    />
+                    <span className="truncate">{m.title}</span>
+                  </label>
+                </li>
+              ))
+            )}
+          </ul>
+          {selectedIds.length > 0 && (
+            <p className="text-xs text-(--color-muted-foreground)" data-testid="links-count">
+              {t("meetings.new.linksCount").replace("{{count}}", String(selectedIds.length))}
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

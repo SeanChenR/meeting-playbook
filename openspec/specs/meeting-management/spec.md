@@ -426,7 +426,7 @@ tests:
 ---
 ### Requirement: Meeting list is sorted newest-first by creation time
 
-The `GET /api/meetings` endpoint SHALL return meetings owned by the authenticated user in descending order of `created_at`. When the user owns no meetings, the response SHALL be HTTP 200 with an empty array body, never HTTP 404.
+The `GET /api/meetings` endpoint SHALL return meetings owned by the authenticated user in descending order of `created_at`. When the user owns no meetings, the response SHALL be HTTP 200 with an empty array body, never HTTP 404. Each item in the response SHALL include a `tags: [{id, name, color}]` array populated via a single batched query (the `MeetingRepository.list_for_user(...)` SHALL use `selectinload(Meeting.tags)` so listing N meetings does NOT issue N+1 queries against `tag` / `meeting_tag`). The endpoint SHALL accept an optional `tag_ids` query parameter formatted as a comma-separated list of tag ids; when supplied, the response SHALL include ONLY meetings that have ALL listed tags attached (AND semantics), preserving the descending-`created_at` sort within the filtered subset. When `tag_ids` is empty (param omitted or set to ""), the filter SHALL be a no-op. When any value inside `tag_ids` is not a tag owned by the authenticated user, the response SHALL be HTTP 422 with `error_code = "tag.unknown_id"`; the response MUST NOT silently drop the unknown id and return partial results.
 
 #### Scenario: Multiple meetings sort newest first
 
@@ -440,68 +440,282 @@ The `GET /api/meetings` endpoint SHALL return meetings owned by the authenticate
 - **WHEN** user A sends `GET /api/meetings`
 - **THEN** the response status SHALL be HTTP 200 and the body SHALL be an empty JSON array
 
+#### Scenario: Each meeting item includes a tags array
+
+- **GIVEN** user A owns meeting `m_1` with tags `[{id: t_a, name: 客戶X, color: #A3E635}]` attached, and meeting `m_2` with no tags
+- **WHEN** user A sends `GET /api/meetings`
+- **THEN** the response item for `m_1` SHALL contain `tags: [{id: "t_a", name: "客戶X", color: "#A3E635"}]`, AND the response item for `m_2` SHALL contain `tags: []`
+
+#### Scenario: tag_ids query filters with AND semantics
+
+- **GIVEN** user A owns three meetings: `m_1` tagged `[t_a, t_b]`, `m_2` tagged `[t_a]`, `m_3` tagged `[t_b, t_c]`
+- **WHEN** user A sends `GET /api/meetings?tag_ids=t_a,t_b`
+- **THEN** the response SHALL contain only `m_1` (the only meeting with BOTH `t_a` AND `t_b`), AND SHALL NOT contain `m_2` or `m_3`
+
+#### Scenario: tag_ids referencing another user's tag returns 422
+
+- **GIVEN** tag `t_x` is owned by user B (not user A)
+- **WHEN** user A sends `GET /api/meetings?tag_ids=t_x`
+- **THEN** the response SHALL be HTTP 422 with `error_code = "tag.unknown_id"`, AND the response body MUST NOT include any meeting payload
+
+#### Scenario: Empty tag_ids parameter is a no-op
+
+- **GIVEN** user A owns three meetings (none required to be tagged)
+- **WHEN** user A sends `GET /api/meetings?tag_ids=`
+- **THEN** the response SHALL be identical to `GET /api/meetings` (all owned meetings returned, descending-`created_at`)
+
+#### Scenario: Listing many meetings does not trigger N+1 tag queries
+
+- **GIVEN** user A owns 50 meetings, each with 0–10 tags attached
+- **WHEN** user A sends `GET /api/meetings` and the SQL query log is observed
+- **THEN** the count of SQL `SELECT` statements issued against `tag` and `meeting_tag` combined SHALL be at most 2 (one for the meetings query, one for the batched selectinload), NOT 50 or more
+
+
 <!-- @trace
-source: slice-03-meeting-crud
-updated: 2026-05-07
+source: slice-17-tag-system
+updated: 2026-05-17
 code:
-  - packages/web/src/components/locale-toggle.tsx
-  - packages/web/src/components/auth-shell.tsx
-  - packages/backend/meeting_playbook/meetings/repository.py
-  - packages/backend/meeting_playbook/meetings/models.py
-  - packages/web/src/test-setup.ts
-  - packages/backend/meeting_playbook/meetings/router.py
-  - packages/web/src/lib/i18n.ts
-  - CLAUDE.md
-  - packages/web/src/App.tsx
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/backend/uv.lock
+  - packages/web/src/components/tags/tag-filter.tsx
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/backend/meeting_playbook/attachments/processor.py
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/web/public/icons/qwen.png
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/components/metadata-card.tsx
+  - packages/web/src/routes/home.tsx
+  - packages/web/src/lib/transcript-color-schemes.ts
+  - packages/web/src/components/ui/button.tsx
+  - packages/web/src/components/ui/dialog.tsx
+  - packages/backend/meeting_playbook/summarization/vertex_summarizer.py
+  - packages/web/package.json
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/backend/meeting_playbook/playbooks/router.py
+  - packages/backend/meeting_playbook/playbooks/models.py
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/web/src/components/transcript-chunk-row.tsx
+  - packages/backend/meeting_playbook/attachments/multimodal_context.py
+  - packages/web/src/routes/settings/security.tsx
+  - packages/backend/alembic/versions/0016_meeting_attachment.py
+  - packages/web/src/lib/transcript-edit-api.ts
+  - packages/backend/meeting_playbook/playbooks/repository.py
+  - packages/web/src/routes/DashboardPage.tsx
+  - packages/web/src/components/dashboard/calendar-heatmap.tsx
   - packages/web/src/routes/meetings/list.tsx
+  - packages/web/src/components/tags/tag-picker.tsx
+  - packages/web/src/components/user-menu.tsx
+  - packages/backend/meeting_playbook/attachments/router.py
+  - packages/web/src/routes/settings/data.tsx
+  - packages/auth/src/server.ts
+  - packages/web/public/icons/whisper.png
+  - packages/backend/meeting_playbook/audio_playback/wav_header.py
+  - packages/web/src/components/dashboard/hour-distribution-chart.tsx
+  - packages/backend/alembic/versions/0017_attachment_hash_snapshot.py
+  - packages/web/src/components/magicui/spotlight-card.tsx
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/components/dashboard/period-switcher.tsx
+  - packages/web/src/lib/tag-palette.ts
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/web/src/routes/settings/profile.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/router.py
+  - packages/backend/meeting_playbook/sessions/repository.py
+  - packages/web/src/lib/tags-api.ts
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/routes/settings/voice.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/queries.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/backend/alembic/versions/0015_chunk_text_edited_at.py
+  - packages/backend/meeting_playbook/tags/repository.py
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/backend/meeting_playbook/summarization/router.py
+  - packages/web/src/hooks/use-mini-player.ts
+  - packages/web/src/hooks/use-transcript-color-pref.ts
+  - packages/backend/meeting_playbook/transcript_edit/__init__.py
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/config.py
+  - packages/web/src/components/meetings-view-tabs.tsx
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - packages/web/src/hooks/use-cluster-speaker-labels.ts
+  - packages/backend/pyproject.toml
+  - packages/web/public/icons/google-calendar.png
+  - packages/backend/meeting_playbook/tags/colors.py
+  - packages/web/src/routes/settings/preferences.tsx
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/web/src/components/calendar/calendar-integration-panel.tsx
+  - README.md
+  - packages/backend/meeting_playbook/dashboard_stats/clock.py
+  - packages/backend/meeting_playbook/tags/router.py
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/web/src/components/protected-shell.tsx
+  - packages/web/src/components/dashboard/monthly-trend-chart.tsx
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/src/lib/stats-api.ts
+  - packages/web/public/icons/google-authenticator.png
+  - packages/web/src/lib/transcripts-api.ts
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/attachments/exceptions.py
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/alembic/versions/0014_recording_started_at.py
+  - packages/web/src/components/settings/all-sections.tsx
+  - packages/backend/meeting_playbook/retention/runtime.py
+  - packages/backend/meeting_playbook/summarization/repository.py
+  - packages/web/src/components/summary-pane.tsx
+  - packages/web/src/components/settings/sub-nav.tsx
+  - packages/backend/meeting_playbook/server.py
+  - CONTEXT.md
+  - packages/web/src/components/settings/layout.tsx
+  - packages/backend/meeting_playbook/summarization/runtime.py
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/meeting_playbook/tags/models.py
+  - packages/web/src/lib/playbook-api.ts
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - bun.lock
+  - packages/backend/meeting_playbook/retention/job.py
+  - packages/web/src/components/dashboard/daily-trend-chart.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/__init__.py
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/web/src/routes/settings/integrations.tsx
+  - packages/backend/meeting_playbook/tags/__init__.py
+  - packages/web/src/components/magicui/gradient-card-frame.tsx
   - packages/web/src/locales/en.json
   - packages/web/src/locales/zh-TW.json
-  - packages/web/src/lib/i18n-errors.ts
-  - packages/web/src/lib/meetings-api.ts
-  - packages/web/src/routes/login.tsx
-  - packages/web/package.json
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/lib/session-ws.ts
+  - packages/backend/meeting_playbook/attachments/repository.py
+  - packages/backend/alembic/versions/0012_meeting_start_not_null.py
+  - packages/backend/meeting_playbook/playbooks/schemas.py
+  - packages/web/src/components/ui/alert.tsx
+  - packages/backend/meeting_playbook/attachments/models.py
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/web/src/components/tags/tag-chip.tsx
+  - packages/web/src/routes/calendar/upcoming.tsx
+  - packages/web/src/routes/settings/tags.tsx
   - packages/backend/meeting_playbook/meetings/schemas.py
-  - bun.lock
-  - packages/web/src/routes/totp/verify.tsx
-  - packages/backend/meeting_playbook/server.py
-  - packages/web/src/components/ui/button.tsx
-  - packages/web/src/components/protected-shell.tsx
-  - packages/web/src/main.tsx
-  - packages/web/src/routes/home.tsx
-  - docs/agents/meetings.md
-  - packages/backend/meeting_playbook/meetings/dependencies.py
-  - packages/web/src/routes/meetings/detail.tsx
-  - packages/web/src/components/ui/alert-dialog.tsx
-  - packages/backend/meeting_playbook/meetings/__init__.py
-  - packages/web/src/routes/signup.tsx
-  - packages/auth/src/server.ts
-  - packages/backend/alembic/versions/0001_create_meeting.py
-  - packages/web/src/routes/meetings/new.tsx
-  - packages/web/src/routes/totp/enroll.tsx
+  - packages/backend/meeting_playbook/audio_playback/__init__.py
+  - packages/backend/meeting_playbook/summarization/models.py
+  - packages/web/src/route-tree.tsx
+  - packages/backend/meeting_playbook/attachments/__init__.py
+  - packages/web/src/components/speaker-color-popover.tsx
+  - packages/web/src/components/dashboard/top-counterparties-chart.tsx
+  - packages/web/src/components/magicui/border-beam.tsx
+  - packages/backend/meeting_playbook/attachments/validation.py
+  - packages/web/src/components/attachment-dropzone.tsx
+  - packages/web/src/components/dashboard/dashboard-body.tsx
+  - .env.example
+  - packages/backend/meeting_playbook/transcript_edit/router.py
+  - packages/web/src/index.css
+  - packages/web/src/components/dashboard/tag-distribution-chart.tsx
+  - packages/web/src/lib/attachments-api.ts
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/backend/meeting_playbook/playbook_generation/generator.py
+  - packages/web/src/components/chunk-action-menu.tsx
+  - packages/web/src/lib/meetings-bucket.ts
+  - packages/web/src/components/meeting-edit-form.tsx
+  - packages/backend/alembic/versions/0013_tag_system.py
+  - packages/backend/meeting_playbook/audio_playback/range_server.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - packages/web/src/components/dashboard/stat-cards.tsx
 tests:
-  - packages/backend/tests/test_alembic_meeting.py
-  - packages/web/src/routes/login.test.tsx
-  - packages/web/src/lib/i18n-render.test.tsx
-  - packages/backend/tests/meetings/test_integration_round_trip.py
-  - packages/web/src/lib/i18n.test.ts
-  - packages/web/src/routes/login-i18n.test.tsx
-  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/web/src/lib/tag-palette.test.ts
+  - packages/web/src/routes/settings/tags.test.tsx
+  - packages/backend/tests/audio_playback/test_wav_header.py
+  - packages/backend/tests/test_alembic_playbook.py
+  - packages/web/src/hooks/use-mini-player.test.tsx
   - packages/backend/tests/meetings/test_validation.py
-  - packages/web/src/routes/meetings/detail.test.tsx
-  - packages/web/src/lib/i18n-missing-key.test.ts
-  - packages/web/src/components/locale-toggle-integration.test.tsx
-  - packages/web/src/lib/i18n-errors.test.ts
-  - packages/backend/tests/test_error_envelope.py
-  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/web/src/lib/transcript-color-schemes.test.ts
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
   - packages/backend/tests/meetings/test_repository.py
-  - packages/web/src/routes/routes-i18n.test.tsx
-  - packages/backend/tests/conftest.py
+  - packages/web/src/lib/stats-api.test.ts
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/backend/tests/transcript_edit/test_router.py
+  - packages/backend/tests/test_config.py
+  - packages/web/src/components/tags/tag-picker.test.tsx
+  - packages/backend/tests/test_alembic_transcript_chunk_text_edited_at.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/test_alembic_meeting_scheduled_not_null.py
+  - packages/web/src/lib/i18n-plural.test.ts
+  - packages/backend/tests/meetings/test_tags_integration.py
+  - packages/web/src/components/meeting-card.test.tsx
   - packages/web/src/routes/meetings/list.test.tsx
-  - packages/web/src/locales/locales.test.ts
-  - packages/web/src/components/locale-toggle.test.tsx
-  - packages/web/src/lib/i18n-bootstrap.test.ts
-  - packages/auth/src/__tests__/error-envelope.test.ts
-  - packages/backend/tests/meetings/__init__.py
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/web/src/routes/meetings/calendar.test.tsx
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/backend/tests/meetings/test_list_filters.py
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/backend/tests/integration/test_summary_with_attachments.py
+  - packages/backend/tests/playbook_generation/test_generator_multimodal.py
+  - packages/backend/tests/audio_playback/test_router.py
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/web/src/components/protected-shell.test.tsx
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/tags/test_palette_parity.py
+  - packages/backend/tests/attachments/test_processor.py
+  - packages/backend/tests/attachments/test_repository.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/backend/tests/tags/__init__.py
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/backend/tests/retention/test_job.py
+  - packages/web/src/components/attachment-dropzone.test.tsx
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/backend/tests/integration/test_single_channel_e2e.py
+  - packages/backend/tests/summarization/test_summarizer_multimodal.py
+  - packages/web/src/routes/routes-i18n.test.tsx
+  - packages/backend/tests/integration/test_playbook_with_attachments.py
+  - packages/web/src/components/meeting-edit-form.test.tsx
+  - packages/backend/tests/test_alembic_recording_started_at.py
+  - packages/web/src/components/tags/tag-filter.test.tsx
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/web/src/components/transcript-chunk-row.test.tsx
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/web/src/routes/meetings/tag-filter-roundtrip.test.tsx
+  - packages/backend/tests/test_alembic_tag_system.py
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/web/src/routes/home.test.tsx
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/web/src/components/speaker-color-popover.test.tsx
+  - packages/backend/tests/test_alembic_summary.py
+  - packages/backend/tests/attachments/test_endpoints.py
+  - packages/backend/tests/attachments/test_validation.py
+  - packages/backend/tests/attachments/test_multimodal_context.py
+  - packages/web/src/lib/tags-api.test.ts
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/web/src/lib/attachments-api.test.ts
+  - packages/backend/tests/dashboard_stats/test_dashboard_stats.py
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/backend/tests/integration/test_audio_playback_e2e.py
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/backend/tests/transcript_edit/__init__.py
+  - packages/backend/tests/attachments/__init__.py
+  - packages/backend/tests/audio_playback/test_range_server.py
+  - packages/backend/tests/tags/test_repository.py
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/backend/tests/dashboard_stats/__init__.py
+  - packages/backend/tests/conftest.py
+  - packages/backend/tests/audio_playback/__init__.py
+  - packages/web/src/components/tags/tag-chip.test.tsx
+  - packages/backend/tests/tags/test_models.py
+  - packages/web/src/components/chunk-action-menu.test.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.test.tsx
+  - packages/backend/tests/test_alembic_meeting_attachment.py
+  - packages/web/src/hooks/use-transcript-color-pref.test.tsx
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/backend/tests/tags/test_router.py
+  - packages/web/src/App.test.tsx
 -->
 
 ---
@@ -809,91 +1023,301 @@ tests:
 ---
 ### Requirement: GET /api/meetings/{id} returns recordings_available and rerun_asr_pending derived fields
 
-The GET single-meeting response payload SHALL gain two derived boolean fields, computed server-side and never persisted to the meeting row:
+The `GET /api/meetings/{meeting_id}` endpoint SHALL return the meeting record with two derived boolean fields computed from the related `recording` rows:
 
-- **`recordings_available: bool`** — `true` when at least one row in `recording` for this `meeting_id` has `deleted_at IS NULL`; `false` otherwise (including when no recording rows exist at all, e.g. for `scheduled` meetings that never ran). The `source` value (`live` or `offline`) SHALL NOT affect this computation — offline-ingested recordings are counted identically to live-captured ones for the purpose of `recordings_available`.
-- **`rerun_asr_pending: bool`** — `true` when the in-flight re-run registry (`packages/backend/meeting_playbook/asr/rerun_runtime.py`) reports `is_pending(meeting_id)`; `false` otherwise.
+- `recordings_available: bool` — `true` when at least one `recording` row exists for the meeting whose `wav_path` file is still on disk AND whose `expired_at` is NULL or in the future. `false` otherwise (no recordings, all expired by retention, or files missing from disk).
+- `rerun_asr_pending: bool` — `true` when `recordings_available` is true AND the meeting has at least one `transcript_chunk` already (i.e., re-ASR is a meaningful operation, not a first ASR run). `false` otherwise.
 
-Both fields SHALL be present on every GET response (no conditional omission); the OpenAPI / Pydantic response model SHALL declare them as required boolean fields.
+In addition to these derived fields and the existing meeting columns, the response SHALL include `tags: [{id, name, color}]` containing every tag currently attached to the meeting. The response SHALL be HTTP 200 with these fields populated for a meeting owned by the user, OR HTTP 404 when the meeting does not exist or is owned by another user.
 
-#### Scenario: Completed meeting with non-deleted recordings reports recordings_available true
+#### Scenario: Recordings exist and at least one file still on disk
 
-- **GIVEN** a `completed` meeting with 2 recording rows (one for me-stream, one for counterparty), both with `deleted_at IS NULL`
-- **WHEN** GET `/api/meetings/{id}` is called
-- **THEN** the response body SHALL contain `"recordings_available": true` AND `"rerun_asr_pending": false`
+- **GIVEN** meeting `m_a` has two `recording` rows, both with `wav_path` files present on disk and `expired_at` NULL
+- **WHEN** user A sends `GET /api/meetings/m_a`
+- **THEN** the response body SHALL contain `recordings_available: true`
 
-#### Scenario: Meeting with all recordings cleaned up reports recordings_available false
+#### Scenario: Recordings exist but files cleaned up by retention
 
-- **GIVEN** a `completed` meeting with 2 recording rows, both with `deleted_at = some past timestamp`
-- **WHEN** GET `/api/meetings/{id}` is called
-- **THEN** the response body SHALL contain `"recordings_available": false`
+- **GIVEN** meeting `m_a` has two `recording` rows whose `expired_at` is in the past AND whose `wav_path` files are absent from disk
+- **WHEN** user A sends `GET /api/meetings/m_a`
+- **THEN** the response body SHALL contain `recordings_available: false`
 
-#### Scenario: Scheduled meeting with no recording rows yet reports recordings_available false
+#### Scenario: No recordings at all
 
-- **GIVEN** a `scheduled` meeting that has never started (zero rows in `recording`)
-- **WHEN** GET `/api/meetings/{id}` is called
-- **THEN** `"recordings_available"` SHALL be `false` AND `"rerun_asr_pending"` SHALL be `false`
+- **GIVEN** meeting `m_a` has zero `recording` rows
+- **WHEN** user A sends `GET /api/meetings/m_a`
+- **THEN** the response body SHALL contain `recordings_available: false` and `rerun_asr_pending: false`
 
-#### Scenario: Active re-run flips rerun_asr_pending true; clears after completion
+#### Scenario: Recordings available and transcript exists makes rerun pending true
 
-- **GIVEN** a completed meeting whose re-run task was just spawned (registry contains the meeting ID)
-- **WHEN** GET `/api/meetings/{id}` is called while the task is still running
-- **THEN** the response body SHALL contain `"rerun_asr_pending": true`
-- **AND WHEN** the task completes and pops the registry entry; a subsequent GET fires
-- **THEN** the response body SHALL contain `"rerun_asr_pending": false`
+- **GIVEN** meeting `m_a` has recordings available AND at least one `transcript_chunk` row exists for `m_a`
+- **WHEN** user A sends `GET /api/meetings/m_a`
+- **THEN** the response body SHALL contain `rerun_asr_pending: true`
 
-#### Scenario: Offline-ingested recording counts toward recordings_available
+#### Scenario: Recordings available but no transcript yet
 
-- **GIVEN** a `completed` meeting whose only recording row has `source = "offline"`, `stream = "me"`, and `deleted_at IS NULL`
-- **WHEN** GET `/api/meetings/{id}` is called
-- **THEN** the response body SHALL contain `"recordings_available": true` AND `"rerun_asr_pending": false`
+- **GIVEN** meeting `m_a` has recordings available AND zero `transcript_chunk` rows
+- **WHEN** user A sends `GET /api/meetings/m_a`
+- **THEN** the response body SHALL contain `rerun_asr_pending: false`
+
+#### Scenario: Detail payload includes attached tags
+
+- **GIVEN** meeting `m_a` (owned by user A) has tags `[{id: t_a, name: 客戶X, color: #A3E635}, {id: t_b, name: 面試, color: #F472B6}]` attached
+- **WHEN** user A sends `GET /api/meetings/m_a`
+- **THEN** the response body SHALL contain `tags: [{id: "t_a", name: "客戶X", color: "#A3E635"}, {id: "t_b", name: "面試", color: "#F472B6"}]` and the order SHALL follow `attached_at` ascending
+
+#### Scenario: Detail payload contains empty tags array when no tags attached
+
+- **GIVEN** meeting `m_a` (owned by user A) has zero tags attached
+- **WHEN** user A sends `GET /api/meetings/m_a`
+- **THEN** the response body SHALL contain `tags: []`
 
 
 <!-- @trace
-source: slice-14-offline-ingest
-updated: 2026-05-15
+source: slice-17-tag-system
+updated: 2026-05-17
 code:
-  - packages/backend/meeting_playbook/offline_ingest/runtime.py
-  - packages/web/src/components/offline-ingest/UploadDialog.tsx
-  - packages/backend/pyproject.toml
-  - CONTEXT.md
-  - packages/web/package.json
-  - packages/backend/meeting_playbook/offline_ingest/transcode.py
-  - bun.lock
-  - packages/backend/meeting_playbook/offline_ingest/router.py
-  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
-  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/backend/uv.lock
+  - packages/web/src/components/tags/tag-filter.tsx
   - packages/web/src/components/transcript-pane.tsx
-  - packages/web/src/lib/offline-ingest-api.ts
-  - packages/web/src/routes/meetings/detail.tsx
-  - packages/backend/meeting_playbook/speaker/finalize.py
-  - .env.example
-  - packages/web/src/components/offline-ingest/UploadBanner.tsx
-  - packages/backend/meeting_playbook/config.py
-  - packages/web/src/lib/tus-uploader.ts
-  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/backend/meeting_playbook/attachments/processor.py
   - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/web/public/icons/qwen.png
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/components/metadata-card.tsx
+  - packages/web/src/routes/home.tsx
+  - packages/web/src/lib/transcript-color-schemes.ts
+  - packages/web/src/components/ui/button.tsx
+  - packages/web/src/components/ui/dialog.tsx
+  - packages/backend/meeting_playbook/summarization/vertex_summarizer.py
+  - packages/web/package.json
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/backend/meeting_playbook/playbooks/router.py
+  - packages/backend/meeting_playbook/playbooks/models.py
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/web/src/components/transcript-chunk-row.tsx
+  - packages/backend/meeting_playbook/attachments/multimodal_context.py
+  - packages/web/src/routes/settings/security.tsx
+  - packages/backend/alembic/versions/0016_meeting_attachment.py
+  - packages/web/src/lib/transcript-edit-api.ts
+  - packages/backend/meeting_playbook/playbooks/repository.py
+  - packages/web/src/routes/DashboardPage.tsx
+  - packages/web/src/components/dashboard/calendar-heatmap.tsx
+  - packages/web/src/routes/meetings/list.tsx
+  - packages/web/src/components/tags/tag-picker.tsx
+  - packages/web/src/components/user-menu.tsx
+  - packages/backend/meeting_playbook/attachments/router.py
+  - packages/web/src/routes/settings/data.tsx
+  - packages/auth/src/server.ts
+  - packages/web/public/icons/whisper.png
+  - packages/backend/meeting_playbook/audio_playback/wav_header.py
+  - packages/web/src/components/dashboard/hour-distribution-chart.tsx
+  - packages/backend/alembic/versions/0017_attachment_hash_snapshot.py
+  - packages/web/src/components/magicui/spotlight-card.tsx
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/components/dashboard/period-switcher.tsx
+  - packages/web/src/lib/tag-palette.ts
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/web/src/routes/settings/profile.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/router.py
+  - packages/backend/meeting_playbook/sessions/repository.py
+  - packages/web/src/lib/tags-api.ts
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/routes/settings/voice.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/queries.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/backend/alembic/versions/0015_chunk_text_edited_at.py
+  - packages/backend/meeting_playbook/tags/repository.py
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/backend/meeting_playbook/summarization/router.py
+  - packages/web/src/hooks/use-mini-player.ts
+  - packages/web/src/hooks/use-transcript-color-pref.ts
+  - packages/backend/meeting_playbook/transcript_edit/__init__.py
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/backend/meeting_playbook/config.py
+  - packages/web/src/components/meetings-view-tabs.tsx
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - packages/web/src/hooks/use-cluster-speaker-labels.ts
+  - packages/backend/pyproject.toml
+  - packages/web/public/icons/google-calendar.png
+  - packages/backend/meeting_playbook/tags/colors.py
+  - packages/web/src/routes/settings/preferences.tsx
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/web/src/components/calendar/calendar-integration-panel.tsx
+  - README.md
+  - packages/backend/meeting_playbook/dashboard_stats/clock.py
+  - packages/backend/meeting_playbook/tags/router.py
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/web/src/components/protected-shell.tsx
+  - packages/web/src/components/dashboard/monthly-trend-chart.tsx
   - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/src/lib/stats-api.ts
+  - packages/web/public/icons/google-authenticator.png
+  - packages/web/src/lib/transcripts-api.ts
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/attachments/exceptions.py
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/alembic/versions/0014_recording_started_at.py
+  - packages/web/src/components/settings/all-sections.tsx
+  - packages/backend/meeting_playbook/retention/runtime.py
+  - packages/backend/meeting_playbook/summarization/repository.py
+  - packages/web/src/components/summary-pane.tsx
+  - packages/web/src/components/settings/sub-nav.tsx
+  - packages/backend/meeting_playbook/server.py
+  - CONTEXT.md
+  - packages/web/src/components/settings/layout.tsx
+  - packages/backend/meeting_playbook/summarization/runtime.py
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/meeting_playbook/tags/models.py
+  - packages/web/src/lib/playbook-api.ts
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - bun.lock
+  - packages/backend/meeting_playbook/retention/job.py
+  - packages/web/src/components/dashboard/daily-trend-chart.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/__init__.py
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/web/src/routes/settings/integrations.tsx
+  - packages/backend/meeting_playbook/tags/__init__.py
+  - packages/web/src/components/magicui/gradient-card-frame.tsx
   - packages/web/src/locales/en.json
   - packages/web/src/locales/zh-TW.json
-  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/lib/session-ws.ts
+  - packages/backend/meeting_playbook/attachments/repository.py
+  - packages/backend/alembic/versions/0012_meeting_start_not_null.py
+  - packages/backend/meeting_playbook/playbooks/schemas.py
+  - packages/web/src/components/ui/alert.tsx
+  - packages/backend/meeting_playbook/attachments/models.py
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/web/src/components/tags/tag-chip.tsx
+  - packages/web/src/routes/calendar/upcoming.tsx
+  - packages/web/src/routes/settings/tags.tsx
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/backend/meeting_playbook/audio_playback/__init__.py
+  - packages/backend/meeting_playbook/summarization/models.py
+  - packages/web/src/route-tree.tsx
+  - packages/backend/meeting_playbook/attachments/__init__.py
+  - packages/web/src/components/speaker-color-popover.tsx
+  - packages/web/src/components/dashboard/top-counterparties-chart.tsx
+  - packages/web/src/components/magicui/border-beam.tsx
+  - packages/backend/meeting_playbook/attachments/validation.py
+  - packages/web/src/components/attachment-dropzone.tsx
+  - packages/web/src/components/dashboard/dashboard-body.tsx
+  - .env.example
+  - packages/backend/meeting_playbook/transcript_edit/router.py
+  - packages/web/src/index.css
+  - packages/web/src/components/dashboard/tag-distribution-chart.tsx
+  - packages/web/src/lib/attachments-api.ts
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/backend/meeting_playbook/playbook_generation/generator.py
+  - packages/web/src/components/chunk-action-menu.tsx
+  - packages/web/src/lib/meetings-bucket.ts
+  - packages/web/src/components/meeting-edit-form.tsx
+  - packages/backend/alembic/versions/0013_tag_system.py
+  - packages/backend/meeting_playbook/audio_playback/range_server.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - packages/web/src/components/dashboard/stat-cards.tsx
 tests:
-  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
-  - packages/backend/tests/offline_ingest/test_transcode.py
-  - packages/backend/tests/offline_ingest/test_runtime.py
-  - packages/backend/tests/retention/test_job.py
+  - packages/web/src/lib/tag-palette.test.ts
+  - packages/web/src/routes/settings/tags.test.tsx
+  - packages/backend/tests/audio_playback/test_wav_header.py
+  - packages/backend/tests/test_alembic_playbook.py
+  - packages/web/src/hooks/use-mini-player.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/web/src/lib/transcript-color-schemes.test.ts
   - packages/backend/tests/integration/test_offline_ingest_e2e.py
-  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
-  - packages/web/src/lib/tus-uploader.test.ts
-  - packages/backend/tests/speaker/fixtures/compare_diarization.md
-  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
-  - packages/backend/tests/meetings/test_get_runtime_flags.py
-  - packages/backend/tests/offline_ingest/__init__.py
-  - packages/backend/tests/offline_ingest/test_pipeline.py
-  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/web/src/lib/stats-api.test.ts
+  - packages/backend/tests/meetings/test_endpoints.py
   - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/backend/tests/transcript_edit/test_router.py
+  - packages/backend/tests/test_config.py
+  - packages/web/src/components/tags/tag-picker.test.tsx
+  - packages/backend/tests/test_alembic_transcript_chunk_text_edited_at.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/test_alembic_meeting_scheduled_not_null.py
+  - packages/web/src/lib/i18n-plural.test.ts
+  - packages/backend/tests/meetings/test_tags_integration.py
+  - packages/web/src/components/meeting-card.test.tsx
+  - packages/web/src/routes/meetings/list.test.tsx
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/web/src/routes/meetings/calendar.test.tsx
   - packages/backend/tests/offline_ingest/test_tus_protocol.py
-  - packages/web/src/components/offline-ingest/UploadBanner.test.tsx
+  - packages/backend/tests/meetings/test_list_filters.py
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/backend/tests/integration/test_summary_with_attachments.py
+  - packages/backend/tests/playbook_generation/test_generator_multimodal.py
+  - packages/backend/tests/audio_playback/test_router.py
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/web/src/components/protected-shell.test.tsx
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/backend/tests/tags/test_palette_parity.py
+  - packages/backend/tests/attachments/test_processor.py
+  - packages/backend/tests/attachments/test_repository.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/backend/tests/tags/__init__.py
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/backend/tests/retention/test_job.py
+  - packages/web/src/components/attachment-dropzone.test.tsx
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/backend/tests/integration/test_single_channel_e2e.py
+  - packages/backend/tests/summarization/test_summarizer_multimodal.py
+  - packages/web/src/routes/routes-i18n.test.tsx
+  - packages/backend/tests/integration/test_playbook_with_attachments.py
+  - packages/web/src/components/meeting-edit-form.test.tsx
+  - packages/backend/tests/test_alembic_recording_started_at.py
+  - packages/web/src/components/tags/tag-filter.test.tsx
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/web/src/components/transcript-chunk-row.test.tsx
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/web/src/routes/meetings/tag-filter-roundtrip.test.tsx
+  - packages/backend/tests/test_alembic_tag_system.py
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/web/src/routes/home.test.tsx
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/web/src/components/speaker-color-popover.test.tsx
+  - packages/backend/tests/test_alembic_summary.py
+  - packages/backend/tests/attachments/test_endpoints.py
+  - packages/backend/tests/attachments/test_validation.py
+  - packages/backend/tests/attachments/test_multimodal_context.py
+  - packages/web/src/lib/tags-api.test.ts
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/web/src/lib/attachments-api.test.ts
+  - packages/backend/tests/dashboard_stats/test_dashboard_stats.py
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/backend/tests/integration/test_audio_playback_e2e.py
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/backend/tests/transcript_edit/__init__.py
+  - packages/backend/tests/attachments/__init__.py
+  - packages/backend/tests/audio_playback/test_range_server.py
+  - packages/backend/tests/tags/test_repository.py
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/backend/tests/dashboard_stats/__init__.py
+  - packages/backend/tests/conftest.py
+  - packages/backend/tests/audio_playback/__init__.py
+  - packages/web/src/components/tags/tag-chip.test.tsx
+  - packages/backend/tests/tags/test_models.py
+  - packages/web/src/components/chunk-action-menu.test.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.test.tsx
+  - packages/backend/tests/test_alembic_meeting_attachment.py
+  - packages/web/src/hooks/use-transcript-color-pref.test.tsx
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/backend/tests/tags/test_router.py
+  - packages/web/src/App.test.tsx
 -->
 
 ---
@@ -1799,4 +2223,547 @@ tests:
   - packages/backend/tests/speaker/fixtures/compare_diarization.md
   - packages/web/src/lib/meetings-calendar-utils.test.ts
   - packages/web/src/components/meeting-edit-form.test.tsx
+-->
+
+---
+### Requirement: Meeting list endpoint SHALL support filters and ordering required by the home page regions
+
+`GET /api/meetings` MUST accept the following query parameters in addition to existing ones: `scheduled_date=YYYY-MM-DD` (filter by Asia/Taipei calendar date of `scheduled_start_at`), `status=in_progress` (filter by meeting status), `pending=true` (filter to meetings that have an uploaded recording awaiting ingest OR are completed but lack a summary), `order=scheduled_start_at:asc` and `order=updated_at:desc` (sort by the corresponding field), and `limit=<integer>` (cap the result set size). All filters MUST scope to the authenticated user.
+
+#### Scenario: scheduled_date filter returns today's meetings sorted ascending
+
+- **WHEN** the user calls `GET /api/meetings?scheduled_date=2026-05-15&order=scheduled_start_at:asc`
+- **THEN** the response contains only meetings whose `scheduled_start_at` falls on 2026-05-15 in Asia/Taipei, sorted by `scheduled_start_at` ascending
+
+#### Scenario: status=in_progress filter returns active recordings
+
+- **WHEN** the user calls `GET /api/meetings?status=in_progress`
+- **THEN** the response contains only meetings with `status == "in_progress"` scoped to the authenticated user
+
+#### Scenario: pending=true filter combines ingest-pending and summary-pending
+
+- **WHEN** the user calls `GET /api/meetings?pending=true`
+- **THEN** the response contains meetings that either have an uploaded recording in ingest-pending state OR have `status == "completed"` with no associated summary
+
+#### Scenario: limit caps the result set
+
+- **WHEN** the user calls `GET /api/meetings?order=updated_at:desc&limit=3`
+- **THEN** the response contains at most 3 meetings ordered by `updated_at` descending
+
+
+<!-- @trace
+source: slice-18-ia-dashboard
+updated: 2026-05-17
+code:
+  - packages/backend/meeting_playbook/sessions/repository.py
+  - packages/backend/meeting_playbook/transcript_edit/router.py
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/backend/meeting_playbook/attachments/exceptions.py
+  - packages/backend/meeting_playbook/transcript_edit/__init__.py
+  - README.md
+  - packages/web/src/routes/DashboardPage.tsx
+  - packages/web/public/icons/qwen.png
+  - packages/web/src/routes/settings/integrations.tsx
+  - packages/backend/uv.lock
+  - packages/web/src/components/dashboard/hour-distribution-chart.tsx
+  - packages/backend/meeting_playbook/summarization/runtime.py
+  - packages/web/src/components/calendar/calendar-integration-panel.tsx
+  - bun.lock
+  - packages/backend/meeting_playbook/playbooks/repository.py
+  - packages/web/src/lib/transcripts-api.ts
+  - packages/backend/meeting_playbook/tags/router.py
+  - packages/backend/meeting_playbook/attachments/models.py
+  - packages/web/src/components/settings/layout.tsx
+  - packages/web/src/components/magicui/border-beam.tsx
+  - packages/backend/meeting_playbook/attachments/validation.py
+  - packages/web/package.json
+  - packages/web/src/components/dashboard/calendar-heatmap.tsx
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/meeting_playbook/retention/job.py
+  - packages/web/src/components/settings/sub-nav.tsx
+  - packages/web/src/components/magicui/gradient-card-frame.tsx
+  - packages/web/src/components/tags/tag-picker.tsx
+  - packages/web/src/components/meetings-view-tabs.tsx
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - packages/web/src/routes/meetings/list.tsx
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/web/src/routes/home.tsx
+  - packages/web/src/lib/tag-palette.ts
+  - packages/backend/alembic/versions/0013_tag_system.py
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/web/src/route-tree.tsx
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/index.css
+  - packages/web/src/components/ui/button.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/clock.py
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/tags/__init__.py
+  - packages/web/src/routes/settings/tags.tsx
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - packages/backend/meeting_playbook/attachments/processor.py
+  - packages/web/src/components/user-menu.tsx
+  - packages/web/src/lib/transcript-color-schemes.ts
+  - packages/backend/alembic/versions/0017_attachment_hash_snapshot.py
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/web/src/lib/stats-api.ts
+  - packages/backend/meeting_playbook/summarization/vertex_summarizer.py
+  - CONTEXT.md
+  - packages/web/src/lib/session-ws.ts
+  - packages/backend/meeting_playbook/attachments/__init__.py
+  - packages/web/src/routes/settings/voice.tsx
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/web/src/components/magicui/spotlight-card.tsx
+  - packages/web/src/components/dashboard/top-counterparties-chart.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.ts
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/web/src/lib/tags-api.ts
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/web/src/routes/calendar/upcoming.tsx
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/backend/meeting_playbook/tags/models.py
+  - packages/backend/meeting_playbook/dashboard_stats/__init__.py
+  - packages/web/src/lib/meetings-bucket.ts
+  - packages/web/src/routes/settings/profile.tsx
+  - packages/web/src/components/summary-pane.tsx
+  - packages/web/src/components/attachment-dropzone.tsx
+  - packages/backend/meeting_playbook/summarization/router.py
+  - packages/web/src/components/settings/all-sections.tsx
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/locales/en.json
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
+  - packages/auth/src/server.ts
+  - packages/backend/meeting_playbook/config.py
+  - packages/backend/alembic/versions/0016_meeting_attachment.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/dashboard/daily-trend-chart.tsx
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/backend/meeting_playbook/playbooks/router.py
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/web/src/components/transcript-chunk-row.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/router.py
+  - packages/web/src/components/ui/dialog.tsx
+  - packages/web/src/routes/settings/preferences.tsx
+  - packages/backend/meeting_playbook/retention/runtime.py
+  - packages/backend/meeting_playbook/playbooks/schemas.py
+  - .env.example
+  - packages/backend/meeting_playbook/playbooks/models.py
+  - packages/backend/alembic/versions/0014_recording_started_at.py
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/public/icons/whisper.png
+  - packages/backend/meeting_playbook/attachments/multimodal_context.py
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/components/speaker-color-popover.tsx
+  - packages/web/src/components/chunk-action-menu.tsx
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/web/src/components/meeting-edit-form.tsx
+  - packages/backend/meeting_playbook/audio_playback/range_server.py
+  - packages/web/src/routes/settings/security.tsx
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/backend/meeting_playbook/summarization/models.py
+  - packages/web/src/components/metadata-card.tsx
+  - packages/web/public/icons/google-calendar.png
+  - packages/web/src/components/dashboard/dashboard-body.tsx
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/web/src/locales/zh-TW.json
+  - packages/backend/meeting_playbook/audio_playback/wav_header.py
+  - packages/web/src/hooks/use-mini-player.ts
+  - packages/web/src/components/dashboard/stat-cards.tsx
+  - packages/backend/alembic/versions/0012_meeting_start_not_null.py
+  - packages/web/src/components/tags/tag-filter.tsx
+  - packages/web/src/lib/attachments-api.ts
+  - packages/web/src/lib/playbook-api.ts
+  - packages/backend/meeting_playbook/attachments/repository.py
+  - packages/backend/meeting_playbook/playbook_generation/generator.py
+  - packages/backend/meeting_playbook/summarization/repository.py
+  - packages/backend/pyproject.toml
+  - packages/web/src/components/dashboard/monthly-trend-chart.tsx
+  - packages/backend/meeting_playbook/attachments/router.py
+  - packages/web/src/components/protected-shell.tsx
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/queries.py
+  - packages/web/public/icons/google-authenticator.png
+  - packages/web/src/components/ui/alert.tsx
+  - packages/web/src/hooks/use-transcript-color-pref.ts
+  - packages/web/src/lib/transcript-edit-api.ts
+  - packages/backend/meeting_playbook/audio_playback/__init__.py
+  - packages/web/src/components/dashboard/tag-distribution-chart.tsx
+  - packages/backend/meeting_playbook/tags/repository.py
+  - packages/backend/alembic/versions/0015_chunk_text_edited_at.py
+  - packages/web/src/routes/settings/data.tsx
+  - packages/web/src/components/dashboard/period-switcher.tsx
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/components/tags/tag-chip.tsx
+  - packages/backend/meeting_playbook/tags/colors.py
+tests:
+  - packages/backend/tests/attachments/test_processor.py
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/backend/tests/integration/test_audio_playback_e2e.py
+  - packages/web/src/components/transcript-chunk-row.test.tsx
+  - packages/backend/tests/tags/test_repository.py
+  - packages/web/src/routes/meetings/calendar.test.tsx
+  - packages/web/src/hooks/use-transcript-color-pref.test.tsx
+  - packages/backend/tests/attachments/test_repository.py
+  - packages/backend/tests/audio_playback/test_range_server.py
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/backend/tests/test_alembic_summary.py
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/backend/tests/attachments/test_endpoints.py
+  - packages/web/src/lib/tag-palette.test.ts
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/web/src/hooks/use-mini-player.test.tsx
+  - packages/backend/tests/attachments/test_validation.py
+  - packages/web/src/components/speaker-color-popover.test.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.test.tsx
+  - packages/web/src/routes/meetings/tag-filter-roundtrip.test.tsx
+  - packages/web/src/components/protected-shell.test.tsx
+  - packages/backend/tests/integration/test_summary_with_attachments.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/audio_playback/__init__.py
+  - packages/backend/tests/playbook_generation/test_generator_multimodal.py
+  - packages/backend/tests/test_config.py
+  - packages/backend/tests/audio_playback/test_router.py
+  - packages/backend/tests/retention/test_job.py
+  - packages/backend/tests/test_alembic_recording_started_at.py
+  - packages/backend/tests/test_alembic_transcript_chunk_text_edited_at.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/web/src/components/tags/tag-filter.test.tsx
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/web/src/routes/settings/tags.test.tsx
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/attachments/test_multimodal_context.py
+  - packages/backend/tests/test_alembic_meeting_attachment.py
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/dashboard_stats/__init__.py
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/backend/tests/tags/test_models.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/backend/tests/conftest.py
+  - packages/backend/tests/test_alembic_meeting_scheduled_not_null.py
+  - packages/backend/tests/integration/test_single_channel_e2e.py
+  - packages/web/src/components/attachment-dropzone.test.tsx
+  - packages/web/src/lib/stats-api.test.ts
+  - packages/backend/tests/transcript_edit/__init__.py
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/web/src/components/tags/tag-chip.test.tsx
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/web/src/lib/attachments-api.test.ts
+  - packages/web/src/lib/tags-api.test.ts
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/web/src/lib/i18n-plural.test.ts
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/integration/test_playbook_with_attachments.py
+  - packages/backend/tests/summarization/test_summarizer_multimodal.py
+  - packages/web/src/components/meeting-card.test.tsx
+  - packages/web/src/App.test.tsx
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/web/src/routes/meetings/list.test.tsx
+  - packages/web/src/routes/routes-i18n.test.tsx
+  - packages/backend/tests/audio_playback/test_wav_header.py
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/backend/tests/test_alembic_tag_system.py
+  - packages/backend/tests/tags/__init__.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/dashboard_stats/test_dashboard_stats.py
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/backend/tests/tags/test_palette_parity.py
+  - packages/backend/tests/transcript_edit/test_router.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/backend/tests/meetings/test_list_filters.py
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/tags/test_router.py
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/backend/tests/test_alembic_playbook.py
+  - packages/web/src/lib/transcript-color-schemes.test.ts
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/backend/tests/meetings/test_tags_integration.py
+  - packages/web/src/components/tags/tag-picker.test.tsx
+  - packages/backend/tests/attachments/__init__.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/web/src/routes/home.test.tsx
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
+  - packages/web/src/components/meeting-edit-form.test.tsx
+  - packages/web/src/components/chunk-action-menu.test.tsx
+-->
+
+---
+### Requirement: DashboardStatsQuery deep module SHALL provide read-only aggregates over user's meetings
+
+The backend MUST expose a `DashboardStatsQuery` class in `packages/backend/app/queries/dashboard_stats.py` that depends on an injected `AsyncSession` and `Clock`. The query MUST compute `meeting_count`, `avg_duration_seconds`, `in_progress_count`, `top_counterparty`, `top_counterparties`, `tag_distribution`, and `monthly_trend` for a given user and range. The query MUST NOT mutate any persistent state. The query MUST handle the empty-result case without raising, returning zero counts, `null` averages, `null` top counterparty, and empty arrays for distributions; for `last_6_months` the `monthly_trend` array MUST still contain 6 zero-count entries.
+
+#### Scenario: empty meeting set returns zeroed stats
+
+- **WHEN** `DashboardStatsQuery.execute(user_id, "this_month")` is called for a user with no meetings
+- **THEN** the result is `DashboardStats(range="this_month", meeting_count=0, avg_duration_seconds=None, in_progress_count=0, top_counterparty=None, top_counterparties=[], tag_distribution=[], monthly_trend=[{month: "<current YYYY-MM>", count: 0}])`
+
+#### Scenario: tag distribution only includes tags with positive count
+
+- **WHEN** the user has meetings tagged `sales` (3 occurrences), `discovery` (1 occurrence), and no other tag occurrences in the period
+- **THEN** `tag_distribution` is `[{"tag": "sales", "count": 3}, {"tag": "discovery", "count": 1}]` in `count DESC, tag ASC` order, with no zero-count entries
+
+##### Example: monthly_trend bucket completeness
+
+| Range            | Buckets returned                                           | Zero-fill behavior                       |
+| ---------------- | ---------------------------------------------------------- | ---------------------------------------- |
+| `this_week`      | 1 bucket keyed to current Asia/Taipei month (`YYYY-MM`)    | `count: 0` when no meetings              |
+| `this_month`     | 1 bucket keyed to current Asia/Taipei month                | `count: 0` when no meetings              |
+| `last_6_months`  | 6 buckets, ascending, current month and 5 prior months     | every missing month emitted with `count: 0` |
+
+<!-- @trace
+source: slice-18-ia-dashboard
+updated: 2026-05-17
+code:
+  - packages/backend/meeting_playbook/sessions/repository.py
+  - packages/backend/meeting_playbook/transcript_edit/router.py
+  - packages/web/src/lib/tus-uploader.ts
+  - packages/backend/meeting_playbook/attachments/exceptions.py
+  - packages/backend/meeting_playbook/transcript_edit/__init__.py
+  - README.md
+  - packages/web/src/routes/DashboardPage.tsx
+  - packages/web/public/icons/qwen.png
+  - packages/web/src/routes/settings/integrations.tsx
+  - packages/backend/uv.lock
+  - packages/web/src/components/dashboard/hour-distribution-chart.tsx
+  - packages/backend/meeting_playbook/summarization/runtime.py
+  - packages/web/src/components/calendar/calendar-integration-panel.tsx
+  - bun.lock
+  - packages/backend/meeting_playbook/playbooks/repository.py
+  - packages/web/src/lib/transcripts-api.ts
+  - packages/backend/meeting_playbook/tags/router.py
+  - packages/backend/meeting_playbook/attachments/models.py
+  - packages/web/src/components/settings/layout.tsx
+  - packages/web/src/components/magicui/border-beam.tsx
+  - packages/backend/meeting_playbook/attachments/validation.py
+  - packages/web/package.json
+  - packages/web/src/components/dashboard/calendar-heatmap.tsx
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/meeting_playbook/retention/job.py
+  - packages/web/src/components/settings/sub-nav.tsx
+  - packages/web/src/components/magicui/gradient-card-frame.tsx
+  - packages/web/src/components/tags/tag-picker.tsx
+  - packages/web/src/components/meetings-view-tabs.tsx
+  - packages/backend/meeting_playbook/offline_ingest/transcode.py
+  - packages/web/src/routes/meetings/list.tsx
+  - packages/web/src/lib/meetings-calendar-utils.ts
+  - packages/web/src/routes/home.tsx
+  - packages/web/src/lib/tag-palette.ts
+  - packages/backend/alembic/versions/0013_tag_system.py
+  - packages/backend/meeting_playbook/offline_ingest/__init__.py
+  - packages/web/src/route-tree.tsx
+  - packages/backend/meeting_playbook/offline_ingest/runtime.py
+  - packages/web/src/index.css
+  - packages/web/src/components/ui/button.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/clock.py
+  - packages/backend/meeting_playbook/meetings/models.py
+  - packages/backend/meeting_playbook/tags/__init__.py
+  - packages/web/src/routes/settings/tags.tsx
+  - packages/backend/meeting_playbook/speaker/finalize.py
+  - packages/backend/meeting_playbook/attachments/processor.py
+  - packages/web/src/components/user-menu.tsx
+  - packages/web/src/lib/transcript-color-schemes.ts
+  - packages/backend/alembic/versions/0017_attachment_hash_snapshot.py
+  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/web/src/lib/stats-api.ts
+  - packages/backend/meeting_playbook/summarization/vertex_summarizer.py
+  - CONTEXT.md
+  - packages/web/src/lib/session-ws.ts
+  - packages/backend/meeting_playbook/attachments/__init__.py
+  - packages/web/src/routes/settings/voice.tsx
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - packages/web/src/components/magicui/spotlight-card.tsx
+  - packages/web/src/components/dashboard/top-counterparties-chart.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.ts
+  - packages/backend/meeting_playbook/meetings/router.py
+  - packages/web/src/components/meetings-kanban.tsx
+  - packages/web/src/lib/tags-api.ts
+  - packages/web/src/routes/meetings/detail.tsx
+  - packages/web/src/routes/calendar/upcoming.tsx
+  - packages/web/src/routes/meetings/new.tsx
+  - packages/backend/meeting_playbook/tags/models.py
+  - packages/backend/meeting_playbook/dashboard_stats/__init__.py
+  - packages/web/src/lib/meetings-bucket.ts
+  - packages/web/src/routes/settings/profile.tsx
+  - packages/web/src/components/summary-pane.tsx
+  - packages/web/src/components/attachment-dropzone.tsx
+  - packages/backend/meeting_playbook/summarization/router.py
+  - packages/web/src/components/settings/all-sections.tsx
+  - packages/web/src/lib/meetings-api.ts
+  - packages/web/src/locales/en.json
+  - packages/web/src/components/offline-ingest/UploadDialog.tsx
+  - packages/auth/src/server.ts
+  - packages/backend/meeting_playbook/config.py
+  - packages/backend/alembic/versions/0016_meeting_attachment.py
+  - packages/backend/meeting_playbook/server.py
+  - packages/web/src/components/dashboard/daily-trend-chart.tsx
+  - packages/backend/meeting_playbook/offline_ingest/router.py
+  - packages/backend/meeting_playbook/playbooks/router.py
+  - packages/web/src/components/playbook-pane.tsx
+  - packages/web/src/components/transcript-chunk-row.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/router.py
+  - packages/web/src/components/ui/dialog.tsx
+  - packages/web/src/routes/settings/preferences.tsx
+  - packages/backend/meeting_playbook/retention/runtime.py
+  - packages/backend/meeting_playbook/playbooks/schemas.py
+  - .env.example
+  - packages/backend/meeting_playbook/playbooks/models.py
+  - packages/backend/alembic/versions/0014_recording_started_at.py
+  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
+  - packages/web/public/icons/whisper.png
+  - packages/backend/meeting_playbook/attachments/multimodal_context.py
+  - packages/web/src/components/meeting-card.tsx
+  - packages/web/src/components/speaker-color-popover.tsx
+  - packages/web/src/components/chunk-action-menu.tsx
+  - packages/backend/meeting_playbook/audio/capture.py
+  - packages/backend/meeting_playbook/calendar/router.py
+  - packages/backend/alembic/versions/0011_recording_source_started.py
+  - packages/web/src/components/meeting-edit-form.tsx
+  - packages/backend/meeting_playbook/audio_playback/range_server.py
+  - packages/web/src/routes/settings/security.tsx
+  - packages/web/src/lib/offline-ingest-api.ts
+  - packages/backend/meeting_playbook/summarization/models.py
+  - packages/web/src/components/metadata-card.tsx
+  - packages/web/public/icons/google-calendar.png
+  - packages/web/src/components/dashboard/dashboard-body.tsx
+  - packages/backend/meeting_playbook/sessions/router.py
+  - packages/web/src/locales/zh-TW.json
+  - packages/backend/meeting_playbook/audio_playback/wav_header.py
+  - packages/web/src/hooks/use-mini-player.ts
+  - packages/web/src/components/dashboard/stat-cards.tsx
+  - packages/backend/alembic/versions/0012_meeting_start_not_null.py
+  - packages/web/src/components/tags/tag-filter.tsx
+  - packages/web/src/lib/attachments-api.ts
+  - packages/web/src/lib/playbook-api.ts
+  - packages/backend/meeting_playbook/attachments/repository.py
+  - packages/backend/meeting_playbook/playbook_generation/generator.py
+  - packages/backend/meeting_playbook/summarization/repository.py
+  - packages/backend/pyproject.toml
+  - packages/web/src/components/dashboard/monthly-trend-chart.tsx
+  - packages/backend/meeting_playbook/attachments/router.py
+  - packages/web/src/components/protected-shell.tsx
+  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/backend/meeting_playbook/meetings/repository.py
+  - packages/web/src/components/transcript-pane.tsx
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/backend/meeting_playbook/dashboard_stats/queries.py
+  - packages/web/public/icons/google-authenticator.png
+  - packages/web/src/components/ui/alert.tsx
+  - packages/web/src/hooks/use-transcript-color-pref.ts
+  - packages/web/src/lib/transcript-edit-api.ts
+  - packages/backend/meeting_playbook/audio_playback/__init__.py
+  - packages/web/src/components/dashboard/tag-distribution-chart.tsx
+  - packages/backend/meeting_playbook/tags/repository.py
+  - packages/backend/alembic/versions/0015_chunk_text_edited_at.py
+  - packages/web/src/routes/settings/data.tsx
+  - packages/web/src/components/dashboard/period-switcher.tsx
+  - packages/backend/meeting_playbook/meetings/schemas.py
+  - packages/web/src/components/tags/tag-chip.tsx
+  - packages/backend/meeting_playbook/tags/colors.py
+tests:
+  - packages/backend/tests/attachments/test_processor.py
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/backend/tests/integration/test_audio_playback_e2e.py
+  - packages/web/src/components/transcript-chunk-row.test.tsx
+  - packages/backend/tests/tags/test_repository.py
+  - packages/web/src/routes/meetings/calendar.test.tsx
+  - packages/web/src/hooks/use-transcript-color-pref.test.tsx
+  - packages/backend/tests/attachments/test_repository.py
+  - packages/backend/tests/audio_playback/test_range_server.py
+  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
+  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
+  - packages/backend/tests/test_alembic_summary.py
+  - packages/web/src/lib/meetings-calendar-utils.test.ts
+  - packages/backend/tests/integration/test_voice_enrollment_e2e.py
+  - packages/web/src/lib/tus-uploader.test.ts
+  - packages/backend/tests/attachments/test_endpoints.py
+  - packages/web/src/lib/tag-palette.test.ts
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/web/src/hooks/use-mini-player.test.tsx
+  - packages/backend/tests/attachments/test_validation.py
+  - packages/web/src/components/speaker-color-popover.test.tsx
+  - packages/web/src/hooks/use-cluster-speaker-labels.test.tsx
+  - packages/web/src/routes/meetings/tag-filter-roundtrip.test.tsx
+  - packages/web/src/components/protected-shell.test.tsx
+  - packages/backend/tests/integration/test_summary_with_attachments.py
+  - packages/backend/tests/offline_ingest/__init__.py
+  - packages/backend/tests/audio_playback/__init__.py
+  - packages/backend/tests/playbook_generation/test_generator_multimodal.py
+  - packages/backend/tests/test_config.py
+  - packages/backend/tests/audio_playback/test_router.py
+  - packages/backend/tests/retention/test_job.py
+  - packages/backend/tests/test_alembic_recording_started_at.py
+  - packages/backend/tests/test_alembic_transcript_chunk_text_edited_at.py
+  - packages/backend/tests/rerun/test_runtime.py
+  - packages/web/src/components/tags/tag-filter.test.tsx
+  - packages/backend/tests/meetings/test_get_runtime_flags.py
+  - packages/web/src/routes/settings/tags.test.tsx
+  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/attachments/test_multimodal_context.py
+  - packages/backend/tests/test_alembic_meeting_attachment.py
+  - packages/backend/tests/meetings/test_repository.py
+  - packages/backend/tests/dashboard_stats/__init__.py
+  - packages/backend/tests/offline_ingest/test_duration.py
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/backend/tests/tags/test_models.py
+  - packages/web/src/lib/offline-ingest-api.test.ts
+  - packages/backend/tests/conftest.py
+  - packages/backend/tests/test_alembic_meeting_scheduled_not_null.py
+  - packages/backend/tests/integration/test_single_channel_e2e.py
+  - packages/web/src/components/attachment-dropzone.test.tsx
+  - packages/web/src/lib/stats-api.test.ts
+  - packages/backend/tests/transcript_edit/__init__.py
+  - packages/web/src/lib/meetings-bucket.test.ts
+  - packages/web/src/components/tags/tag-chip.test.tsx
+  - packages/web/src/routes/meetings/new.test.tsx
+  - packages/web/src/lib/attachments-api.test.ts
+  - packages/web/src/lib/tags-api.test.ts
+  - packages/backend/tests/speaker/fixtures/compare_diarization.md
+  - packages/web/src/lib/i18n-plural.test.ts
+  - packages/backend/tests/meetings/test_endpoints.py
+  - packages/backend/tests/rerun/test_endpoints.py
+  - packages/backend/tests/integration/test_playbook_with_attachments.py
+  - packages/backend/tests/summarization/test_summarizer_multimodal.py
+  - packages/web/src/components/meeting-card.test.tsx
+  - packages/web/src/App.test.tsx
+  - packages/backend/tests/test_alembic_meeting_scheduled.py
+  - packages/web/src/routes/meetings/list.test.tsx
+  - packages/web/src/routes/routes-i18n.test.tsx
+  - packages/backend/tests/audio_playback/test_wav_header.py
+  - packages/backend/tests/offline_ingest/test_tus_protocol.py
+  - packages/backend/tests/test_alembic_tag_system.py
+  - packages/backend/tests/tags/__init__.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/backend/tests/dashboard_stats/test_dashboard_stats.py
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/backend/tests/meetings/test_integration_round_trip.py
+  - packages/backend/tests/tags/test_palette_parity.py
+  - packages/backend/tests/transcript_edit/test_router.py
+  - packages/backend/tests/test_alembic_meeting.py
+  - packages/backend/tests/meetings/test_list_filters.py
+  - packages/web/src/components/meeting-prev-next-nav.test.tsx
+  - packages/backend/tests/meetings/test_validation.py
+  - packages/backend/tests/tags/test_router.py
+  - packages/web/src/components/meetings-kanban.test.tsx
+  - packages/backend/tests/test_alembic_playbook.py
+  - packages/web/src/lib/transcript-color-schemes.test.ts
+  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
+  - packages/backend/tests/meetings/test_tags_integration.py
+  - packages/web/src/components/tags/tag-picker.test.tsx
+  - packages/backend/tests/attachments/__init__.py
+  - packages/backend/tests/offline_ingest/test_pipeline.py
+  - packages/web/src/routes/home.test.tsx
+  - packages/backend/tests/integration/test_offline_ingest_e2e.py
+  - packages/web/src/components/meeting-edit-form.test.tsx
+  - packages/web/src/components/chunk-action-menu.test.tsx
 -->

@@ -88,6 +88,47 @@ async def _seed_user_meeting(db_url_async: str, *, user_id: str, meeting_id: str
         await engine.dispose()
 
 
+async def _insert_attachment(
+    db_url_async: str,
+    *,
+    attachment_id: str,
+    meeting_id: str,
+    original_name: str,
+    file_path: str,
+) -> None:
+    """Insert a meeting_attachment row directly so tests can control the
+    `original_name` exactly (multipart upload escapes quotes in the
+    filename field, which would mask the Content-Disposition bug).
+    """
+    engine = create_async_engine(db_url_async, future=True)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with Session() as s:
+            await s.execute(
+                text(
+                    """
+                    INSERT INTO meeting_attachment (
+                        id, meeting_id, file_path, kind, original_name,
+                        bytes, uploaded_at, deleted_at
+                    )
+                    VALUES (
+                        :aid, :mid, :path, 'pdf', :name,
+                        2048, now(), NULL
+                    )
+                    """
+                ),
+                {
+                    "aid": attachment_id,
+                    "mid": meeting_id,
+                    "path": file_path,
+                    "name": original_name,
+                },
+            )
+            await s.commit()
+    finally:
+        await engine.dispose()
+
+
 async def _truncate(db_url_async: str) -> None:
     engine = create_async_engine(db_url_async, future=True)
     try:
@@ -170,7 +211,9 @@ def test_upload_pdf_1mb_returns_200(_migrated_db_url, tmp_path, monkeypatch):
     assert resp.json()["kind"] == "pdf"
 
 
-def test_upload_zip_renamed_as_pdf_is_accepted_no_magic_byte_sniff(_migrated_db_url, tmp_path, monkeypatch):
+def test_upload_zip_renamed_as_pdf_is_accepted_no_magic_byte_sniff(
+    _migrated_db_url, tmp_path, monkeypatch
+):
     """S20a deliberately does NOT sniff magic bytes — if mime says PDF, it's PDF."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_seed_user_meeting(_async_url(_migrated_db_url), user_id="u_z", meeting_id="m_z"))
@@ -396,6 +439,59 @@ def test_download_returns_200_with_content_disposition(_migrated_db_url, tmp_pat
     assert resp.status_code == 200
     cd = resp.headers.get("content-disposition", "")
     assert 'filename="quote.pdf"' in cd
+    assert resp.content == body
+
+
+def test_download_content_disposition_escapes_quoted_string(
+    _migrated_db_url, tmp_path, monkeypatch
+):
+    """Filenames containing `"` or `\\` must be backslash-escaped inside
+    the legacy `filename="..."` parameter (RFC 6266 / RFC 2616
+    quoted-string), otherwise the header is malformed and the browser
+    falls back to either the URL or nothing. Non-ASCII characters are
+    preserved by the `filename*=UTF-8''` form and replaced with `_` in
+    the legacy fallback so it stays parseable.
+    """
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_seed_user_meeting(_async_url(_migrated_db_url), user_id="u_q", meeting_id="m_q"))
+
+    # Insert the row + on-disk file directly so we control `original_name`
+    # exactly — multipart upload itself escapes quotes in the filename
+    # field, which would mask the header-side bug.
+    body = _pdf_bytes(2048)
+    attach_dir = tmp_path / "attachments" / "m_q"
+    attach_dir.mkdir(parents=True, exist_ok=True)
+    on_disk = attach_dir / "att_quoted.pdf"
+    on_disk.write_bytes(body)
+    monkeypatch.setenv("ATTACHMENT_DIR", str(tmp_path / "attachments"))
+
+    tricky_name = 'foo "bar" \\ 報價.pdf'
+    async_url = _async_url(_migrated_db_url)
+    asyncio.run(
+        _insert_attachment(
+            async_url,
+            attachment_id="att_quoted",
+            meeting_id="m_q",
+            original_name=tricky_name,
+            file_path=str(on_disk),
+        )
+    )
+
+    client = _build_client(_migrated_db_url, tmp_path, monkeypatch)
+    resp = client.get(
+        "/api/meetings/m_q/attachments/att_quoted/download",
+        headers={"X-User-Id": "u_q"},
+    )
+    assert resp.status_code == 200
+    cd = resp.headers.get("content-disposition", "")
+    # Legacy parameter: `"` escaped to `\"`, `\` escaped to `\\`, non-ASCII
+    # replaced with `_` (one per source character — "報價" → "__"). Match
+    # exactly so a regression breaks this assertion.
+    assert 'filename="foo \\"bar\\" \\\\ __.pdf"' in cd
+    # Modern parameter preserves the real name via percent-encoding.
+    assert "filename*=UTF-8''" in cd
+    assert "%22" in cd  # `"` percent-encoded
+    assert "%E5%A0%B1" in cd  # 「報」 in UTF-8 percent-encoded
     assert resp.content == body
 
 

@@ -184,6 +184,7 @@ async def upload_attachment(
 
     try:
         att = await repo.create(
+            attachment_id=attachment_id,
             meeting_id=meeting_id,
             kind=kind,
             original_name=filename or "attachment",
@@ -194,17 +195,6 @@ async def upload_attachment(
         with contextlib.suppress(OSError):
             target_path.unlink()
         raise
-
-    # The auto-generated id from `repo.create` overrides our pre-staged
-    # attachment_id; rename the file to match so the on-disk filename is
-    # the canonical `{row.id}{ext}`.
-    final_path = target_dir / f"{att.id}{ext}"
-    if final_path != target_path:
-        with contextlib.suppress(OSError):
-            target_path.rename(final_path)
-        att.file_path = str(final_path)
-        await session.commit()
-        await session.refresh(att)
 
     return _serialize(att)
 
@@ -274,19 +264,50 @@ async def download_attachment(
         )
 
     media_type = _content_type_for(att.kind, att.file_path)
-    # Quote the original filename so non-ASCII characters survive HTTP
-    # header encoding (RFC 5987 filename*=UTF-8'' form).
+    # Content-Disposition: send both forms.
+    # - `filename*=UTF-8''<pct>` (RFC 5987) is what modern browsers read; it
+    #   survives non-ASCII characters via percent-encoding.
+    # - `filename="<ascii-safe>"` is the legacy fallback. Per RFC 6266 /
+    #   RFC 2616 it MUST be a quoted-string: `"` and `\` must be
+    #   backslash-escaped, control chars (0x00-0x1F, 0x7F) and bare
+    #   non-ASCII are not allowed. Non-ASCII gets replaced with `_` so the
+    #   fallback stays parseable; the `filename*` form preserves the real
+    #   name.
     safe_name = urllib.parse.quote(att.original_name)
+    legacy_name = _ascii_safe_quoted_filename(att.original_name)
     return FileResponse(
         path=str(path),
         media_type=media_type,
         filename=att.original_name,
         headers={
             "Content-Disposition": (
-                f"attachment; filename=\"{att.original_name}\"; filename*=UTF-8''{safe_name}"
+                f"attachment; filename=\"{legacy_name}\"; filename*=UTF-8''{safe_name}"
             ),
         },
     )
+
+
+def _ascii_safe_quoted_filename(name: str) -> str:
+    """Return `name` sanitized for use inside a Content-Disposition
+    `filename="..."` quoted-string per RFC 6266 / RFC 2616.
+
+    Steps:
+    1. Replace any non-ASCII or control character with `_` — the legacy
+       parameter only allows printable ASCII; the `filename*` parameter
+       preserves the real name for modern clients.
+    2. Backslash-escape the two characters that have special meaning
+       inside a quoted-string: `"` (closes the string) and `\\` (escape).
+    """
+    cleaned_chars: list[str] = []
+    for ch in name:
+        codepoint = ord(ch)
+        if codepoint < 0x20 or codepoint == 0x7F or codepoint > 0x7E:
+            cleaned_chars.append("_")
+        elif ch == "\\" or ch == '"':
+            cleaned_chars.append("\\" + ch)
+        else:
+            cleaned_chars.append(ch)
+    return "".join(cleaned_chars)
 
 
 __all__ = ["router"]

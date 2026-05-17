@@ -83,15 +83,21 @@ class AttachmentRepository:
         original_name: str,
         file_path: str,
         bytes_: int,
+        attachment_id: str | None = None,
     ) -> MeetingAttachment:
         """Insert a new row and return it.
 
         The caller MUST have already validated ownership + quota + whitelist.
         Repository stays validation-free so unit tests can wire it directly
         without re-running the router's checks.
+
+        `attachment_id` is optional — when None we mint one here so existing
+        unit tests don't need to pre-allocate. The upload path passes the
+        pre-staged id so the on-disk filename matches the row id without a
+        post-insert rename (see attachments/router.py upload handler).
         """
         att = MeetingAttachment(
-            id=f"att_{secrets.token_urlsafe(16)}",
+            id=attachment_id or f"att_{secrets.token_urlsafe(16)}",
             meeting_id=meeting_id,
             file_path=file_path,
             kind=kind,

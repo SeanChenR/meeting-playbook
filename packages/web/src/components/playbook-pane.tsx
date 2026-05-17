@@ -27,7 +27,7 @@ import {
   useUpsertPlaybookMutation,
 } from "../lib/playbook-api";
 import { Pane } from "./pane";
-import { PlaybookDiffViewer } from "./playbook-diff-viewer";
+import { PlaybookDiffViewer, type HunkDecisions } from "./playbook-diff-viewer";
 import { Alert } from "./ui/alert";
 import { AlertDialog } from "./ui/alert-dialog";
 import { Badge } from "./ui/badge";
@@ -62,11 +62,18 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
   const [draft, setDraft] = useState<string>("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
+  // Slice-23 / Gemini PR #36 review #4: lift the per-hunk decision map
+  // out of <PlaybookDiffViewer> so switching to "edit" or "preview"
+  // (which unmounts the viewer) doesn't discard cherry-pick progress.
+  // Reset together with the textarea when the playbook row's
+  // updated_at moves (new regenerate → new snapshot → stale decisions).
+  const [diffDecisions, setDiffDecisions] = useState<HunkDecisions>({});
 
   useEffect(() => {
     if (!query.data) return;
     setDraft(query.data.free_form_markdown);
     setSavedAt(null);
+    setDiffDecisions({});
     // Re-sync on `updated_at` so regenerate (which keeps the playbook
     // row id but writes a new `updated_at`) replaces the textarea with
     // the freshly generated markdown. Watching only `id` left the
@@ -287,6 +294,8 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
             <PlaybookDiffViewer
               previous={query.data.previous_free_form_markdown ?? ""}
               current={query.data.free_form_markdown}
+              decisions={diffDecisions}
+              onDecisionsChange={setDiffDecisions}
               onAcceptAllNew={handleAcceptAllNew}
               onRestoreAllPrevious={handleRestoreAllPrevious}
               onApplyMerged={handleApplyMerged}

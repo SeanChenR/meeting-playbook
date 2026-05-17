@@ -16,7 +16,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { PlaybookDiffViewer } from "./playbook-diff-viewer";
+import { useState } from "react";
+import { PlaybookDiffViewer, type HunkDecisions } from "./playbook-diff-viewer";
 
 const previousMarkdown = ["# Title", "", "line a", "line b", "line c"].join("\n");
 const currentMarkdown = ["# Title", "", "line a", "line b NEW", "line c"].join("\n");
@@ -29,10 +30,22 @@ afterEach(() => {
   cleanup();
 });
 
+// Gemini PR #36 review #4: the viewer is now controlled — `decisions`
+// and `onDecisionsChange` are owned by the parent (PlaybookPane) so
+// cherry-pick progress survives sub-mode switches. Tests that don't
+// care about state mutation pass empty + noop; tests that exercise
+// hunk clicks use this stateful wrapper.
+function StatefulDiffViewer(
+  props: Omit<React.ComponentProps<typeof PlaybookDiffViewer>, "decisions" | "onDecisionsChange">,
+) {
+  const [decisions, setDecisions] = useState<HunkDecisions>({});
+  return <PlaybookDiffViewer {...props} decisions={decisions} onDecisionsChange={setDecisions} />;
+}
+
 describe("PlaybookDiffViewer", () => {
   test("renders a replace hunk pairing the previous + new sides into one logical block", () => {
     render(
-      <PlaybookDiffViewer
+      <StatefulDiffViewer
         previous={previousMarkdown}
         current={currentMarkdown}
         onAcceptAllNew={() => undefined}
@@ -57,7 +70,7 @@ describe("PlaybookDiffViewer", () => {
     const user = userEvent.setup();
 
     render(
-      <PlaybookDiffViewer
+      <StatefulDiffViewer
         previous={previousMarkdown}
         current={currentMarkdown}
         onAcceptAllNew={onAcceptAllNew}
@@ -75,7 +88,7 @@ describe("PlaybookDiffViewer", () => {
     const user = userEvent.setup();
 
     render(
-      <PlaybookDiffViewer
+      <StatefulDiffViewer
         previous={previousMarkdown}
         current={currentMarkdown}
         onAcceptAllNew={() => undefined}
@@ -90,7 +103,7 @@ describe("PlaybookDiffViewer", () => {
 
   test("'apply merged' is disabled until every change hunk has an explicit decision", () => {
     render(
-      <PlaybookDiffViewer
+      <StatefulDiffViewer
         previous={previousMarkdown}
         current={currentMarkdown}
         onAcceptAllNew={() => undefined}
@@ -113,7 +126,7 @@ describe("PlaybookDiffViewer", () => {
     const user = userEvent.setup();
 
     render(
-      <PlaybookDiffViewer
+      <StatefulDiffViewer
         previous={previousMarkdown}
         current={currentMarkdown}
         onAcceptAllNew={() => undefined}

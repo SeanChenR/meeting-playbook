@@ -461,7 +461,7 @@
       "regenerating": "Regenerating…",
       "regenerate_failed": "Regenerate failed, please try again",
       "confirm_title": "Regenerate playbook?",
-      "confirm_description": "Your current playbook will be saved as the previous version. You can compare and restore content in Diff mode.",
+      "confirm_description": "Your **saved** Playbook will become the previous version — you can compare and restore it in Diff mode. **Unsaved edits in the textarea will be lost.**",
       "confirm_confirm": "Regenerate",
       "confirm_cancel": "Cancel"
     },

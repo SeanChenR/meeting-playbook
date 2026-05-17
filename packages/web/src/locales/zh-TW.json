@@ -461,7 +461,7 @@
       "regenerating": "重新生成中…",
       "regenerate_failed": "重新生成失敗，請稍後再試",
       "confirm_title": "確定要重新生成？",
-      "confirm_description": "目前的 Playbook 會存為「上一版」，您可以在 Diff 模式對照、選擇保留或還原內容。",
+      "confirm_description": "目前**已儲存**的 Playbook 會存為「上一版」，您可以在 Diff 模式對照、選擇保留或還原。**尚未儲存的編輯不會保留**。",
       "confirm_confirm": "重新生成",
       "confirm_cancel": "取消"
     },

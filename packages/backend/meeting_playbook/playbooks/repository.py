@@ -155,32 +155,25 @@ class PlaybookRepository:
         no-op and the row is inserted with `previous_* = NULL`. This is
         the "first-ever regenerate" case from the spec.
         """
-        # SELECT the current row first to capture pre-update values. We do
-        # the snapshot + upsert in two statements but they share the same
-        # session — `await self._session.commit()` only fires once at the
-        # end of `upsert_for_meeting`, so an exception in between would
-        # roll both back together.
-        existing = (
-            await self._session.execute(select(Playbook).where(Playbook.meeting_id == meeting_id))
-        ).scalar_one_or_none()
-
-        if existing is not None:
-            # Snapshot step: copy current → previous_* in-place via an
-            # UPDATE, without bumping `updated_at`. The UPDATE has to land
-            # before the upsert so the upsert's SET clause overwrites
-            # the *non-previous_* columns while leaving previous_* alone.
-            await self._session.execute(
-                update(Playbook)
-                .where(Playbook.meeting_id == meeting_id)
-                .values(
-                    previous_free_form_markdown=existing.free_form_markdown,
-                    previous_updated_at=existing.updated_at,
-                    previous_attachment_hash_snapshot=existing.attachment_hash_snapshot,
-                )
+        # Per Gemini PR #36 review #2: snapshot via column-expression
+        # UPDATE — `previous_x = playbook.x` — so we skip the SELECT
+        # roundtrip. `UPDATE ... WHERE meeting_id = :id` is a clean
+        # no-op when no row exists, which correctly handles the
+        # "first-ever regenerate" case (row gets inserted by the
+        # downstream upsert with previous_* = NULL by default).
+        await self._session.execute(
+            update(Playbook)
+            .where(Playbook.meeting_id == meeting_id)
+            .values(
+                previous_free_form_markdown=Playbook.free_form_markdown,
+                previous_updated_at=Playbook.updated_at,
+                previous_attachment_hash_snapshot=Playbook.attachment_hash_snapshot,
             )
-            # Don't commit yet — let upsert_for_meeting commit both steps
-            # together (it ends in a commit).
-
+        )
+        # Don't commit yet — let upsert_for_meeting commit both steps
+        # together (it ends in a commit). The UPDATE above leaves the
+        # non-previous_* columns alone; the upsert then overwrites them
+        # with the new payload.
         return await self.upsert_for_meeting(meeting_id, payload)
 
     async def discard_previous(self, meeting_id: str) -> Playbook | None:

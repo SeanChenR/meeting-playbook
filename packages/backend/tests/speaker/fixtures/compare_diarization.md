@@ -65,3 +65,11 @@ Appended by `tests/speaker/test_pyannote_real_audio.py`. ADR-0029 cites the most
 - p95 latency: 59.23s
 - p95 realtime ratio: 0.70x (diarize_seconds / audio_seconds; < 1.0 = faster than realtime)
 - cluster counts per run: [2, 2, 2]
+
+## 2026-05-17T10:08:47+00:00 — multi_speakers_zh.wav (84.4s)
+
+- runs: 3
+- p50 latency: 37.08s
+- p95 latency: 41.34s
+- p95 realtime ratio: 0.49x (diarize_seconds / audio_seconds; < 1.0 = faster than realtime)
+- cluster counts per run: [2, 2, 2]

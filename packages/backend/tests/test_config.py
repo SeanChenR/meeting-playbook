@@ -136,3 +136,24 @@ def test_attachment_dir_env_override(monkeypatch):
 
     settings = Settings(_env_file=None)
     assert settings.attachment_dir == "/tmp/test-attachments"
+
+
+# ─── Slice 24: staged attachment retention TTL ───────────────────────
+
+
+def test_staged_attachment_ttl_default_24(monkeypatch):
+    """Without an env override, staged attachment TTL defaults to 24 hours."""
+    _set_required(monkeypatch)
+    monkeypatch.delenv("STAGED_ATTACHMENT_TTL_HOURS", raising=False)
+
+    settings = Settings(_env_file=None)
+    assert settings.staged_attachment_ttl_hours == 24
+
+
+def test_staged_attachment_ttl_env_override(monkeypatch):
+    """Env var STAGED_ATTACHMENT_TTL_HOURS overrides the default."""
+    _set_required(monkeypatch)
+    monkeypatch.setenv("STAGED_ATTACHMENT_TTL_HOURS", "72")
+
+    settings = Settings(_env_file=None)
+    assert settings.staged_attachment_ttl_hours == 72

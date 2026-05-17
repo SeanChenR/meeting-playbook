@@ -12,11 +12,17 @@
 
 import type { TFunction } from "i18next";
 
-export function localizedErrorMessage(errorCode: string, t: TFunction): string {
+export function localizedErrorMessage(
+  errorCode: string,
+  t: TFunction,
+  params?: Record<string, unknown>,
+): string {
   const key = `errors.${errorCode}`;
   // i18next returns the key string when missing; we override with the
   // locale's `errors.common.unknown` so the user sees something sensible.
   const fallback = t("errors.common.unknown");
-  const resolved = t(key, { defaultValue: fallback });
+  // `params` keys are spread as i18next interpolation vars (e.g. {{dropped}});
+  // callers MUST NOT pass `defaultValue` here — we set it ourselves.
+  const resolved = t(key, { defaultValue: fallback, ...params });
   return typeof resolved === "string" && resolved !== key ? resolved : fallback;
 }

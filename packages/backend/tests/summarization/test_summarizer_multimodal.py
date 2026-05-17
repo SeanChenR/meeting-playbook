@@ -49,9 +49,9 @@ async def _seed_attachment(db_session, *, mid: str, file_path: str) -> None:
         text(
             """
             INSERT INTO meeting_attachment
-              (id, meeting_id, file_path, kind, original_name, bytes, uploaded_at)
+              (id, meeting_id, user_id, file_path, kind, original_name, bytes, uploaded_at)
             VALUES
-              (:aid, :mid, :path, 'markdown', 'agenda.md', 32, now())
+              (:aid, :mid, 'u_mm', :path, 'markdown', 'agenda.md', 32, now())
             """
         ),
         {"aid": "att_mm", "mid": mid, "path": file_path},

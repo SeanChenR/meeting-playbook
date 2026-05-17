@@ -59,28 +59,30 @@ async def _insert_attachment(
     engine: AsyncEngine,
     *,
     att_id: str,
-    meeting_id: str,
+    meeting_id: str | None,
     file_path: Path,
     age_days: float,
     kind: str = "pdf",
     original_name: str = "x.pdf",
     bytes_: int = 100,
+    user_id: str = "u_ret",
 ) -> None:
     async with engine.begin() as conn:
         await conn.execute(
             text(
                 """
                 INSERT INTO meeting_attachment (
-                    id, meeting_id, file_path, kind, original_name, bytes,
+                    id, meeting_id, user_id, file_path, kind, original_name, bytes,
                     uploaded_at
                 )
-                VALUES (:aid, :mid, :fp, :kind, :name, :bytes,
+                VALUES (:aid, :mid, :uid, :fp, :kind, :name, :bytes,
                     now() - (:age || ' days')::interval)
                 """
             ),
             {
                 "aid": att_id,
                 "mid": meeting_id,
+                "uid": user_id,
                 "fp": str(file_path),
                 "kind": kind,
                 "name": original_name,
@@ -357,6 +359,7 @@ async def test_cleanup_deletes_old_attachment_and_leaves_fresh(
         migrated_engine,
         att_id="a_31d",
         meeting_id="m_att",
+        user_id="u_att",
         file_path=old,
         age_days=31,
     )
@@ -364,6 +367,7 @@ async def test_cleanup_deletes_old_attachment_and_leaves_fresh(
         migrated_engine,
         att_id="a_5d",
         meeting_id="m_att",
+        user_id="u_att",
         file_path=fresh,
         age_days=5,
     )
@@ -371,6 +375,7 @@ async def test_cleanup_deletes_old_attachment_and_leaves_fresh(
         migrated_engine,
         att_id="a_45d",
         meeting_id="m_att",
+        user_id="u_att",
         file_path=missing,
         age_days=45,
     )
@@ -441,6 +446,7 @@ async def test_cleanup_processes_recordings_and_attachments_together(
         migrated_engine,
         att_id="a_mix_a",
         meeting_id="m_mix_a",
+        user_id="u_mix",
         file_path=att_a,
         age_days=35,
     )
@@ -448,6 +454,7 @@ async def test_cleanup_processes_recordings_and_attachments_together(
         migrated_engine,
         att_id="a_mix_b",
         meeting_id="m_mix_b",
+        user_id="u_mix",
         file_path=att_b,
         age_days=35,
     )
@@ -481,6 +488,7 @@ async def test_cleanup_attachment_idempotent_second_call_returns_zero(
         migrated_engine,
         att_id="a_idem",
         meeting_id="m_idem_a",
+        user_id="u_idem_a",
         file_path=att,
         age_days=45,
     )
@@ -523,6 +531,7 @@ async def test_cleanup_unlink_failure_does_not_abort_transaction(
         migrated_engine,
         att_id="a_bad",
         meeting_id="m_perm",
+        user_id="u_perm",
         file_path=bad,
         age_days=45,
     )
@@ -530,6 +539,7 @@ async def test_cleanup_unlink_failure_does_not_abort_transaction(
         migrated_engine,
         att_id="a_good",
         meeting_id="m_perm",
+        user_id="u_perm",
         file_path=good,
         age_days=45,
     )
@@ -567,3 +577,161 @@ async def test_cleanup_unlink_failure_does_not_abort_transaction(
     by_id = {r.id: r.deleted_at for r in rows}
     assert by_id["a_bad"] is None, "bad row deleted_at must remain NULL"
     assert by_id["a_good"] is not None, "good row deleted_at must be stamped"
+
+
+# ─── Slice 24: staged attachment sweep ──────────────────────────────
+
+
+async def _insert_staged_attachment(
+    engine: AsyncEngine,
+    *,
+    att_id: str,
+    user_id: str,
+    file_path: Path,
+    age_hours: float,
+    bytes_: int = 100,
+) -> None:
+    """Insert a staged (orphan, meeting_id NULL) attachment row.
+
+    Slice-24 retention sweep targets these specifically — they have no
+    parent meeting row, so the legacy 30-day attached sweep would never
+    touch them.
+    """
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                INSERT INTO meeting_attachment (
+                    id, meeting_id, user_id, file_path, kind, original_name, bytes,
+                    uploaded_at
+                )
+                VALUES (:aid, NULL, :uid, :fp, 'pdf', 'x.pdf', :bytes,
+                    now() - (:age || ' hours')::interval)
+                """
+            ),
+            {
+                "aid": att_id,
+                "uid": user_id,
+                "fp": str(file_path),
+                "bytes": bytes_,
+                "age": str(age_hours),
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_cleanup_removes_staged_older_than_ttl(
+    migrated_engine: AsyncEngine, tmp_path: Path
+) -> None:
+    """Slice-24 D7: staged row older than STAGED_ATTACHMENT_TTL_HOURS is hard-deleted."""
+    Session = async_sessionmaker(migrated_engine, expire_on_commit=False)
+
+    await _seed(migrated_engine, user_id="u_stg", meeting_id="m_stg_ignored")
+
+    old = tmp_path / "stg_old.pdf"
+    old.write_bytes(b"\x00" * 100)
+    await _insert_staged_attachment(
+        migrated_engine,
+        att_id="a_stg_old",
+        user_id="u_stg",
+        file_path=old,
+        age_hours=25,  # > 24h default
+    )
+
+    now = datetime.now(UTC)
+    count = await cleanup(
+        now=now,
+        retention_days=30,
+        recordings_dir=tmp_path,
+        attachments_dir=tmp_path,
+        session_factory=Session,
+        staged_ttl_hours=24,
+    )
+    assert count == 1, f"expected 1 staged sweep; got {count}"
+    assert not old.exists(), "Old staged file MUST be unlinked"
+
+    async with migrated_engine.connect() as conn:
+        row = (
+            await conn.execute(text("SELECT id FROM meeting_attachment WHERE id = 'a_stg_old'"))
+        ).first()
+    assert row is None, "Old staged row MUST be hard-deleted (not soft-deleted)"
+
+
+@pytest.mark.asyncio
+async def test_cleanup_keeps_staged_younger_than_ttl(
+    migrated_engine: AsyncEngine, tmp_path: Path
+) -> None:
+    """A staged row younger than the TTL stays untouched."""
+    Session = async_sessionmaker(migrated_engine, expire_on_commit=False)
+
+    await _seed(migrated_engine, user_id="u_stg_y", meeting_id="m_stg_y_ignored")
+
+    fresh = tmp_path / "stg_fresh.pdf"
+    fresh.write_bytes(b"\x00" * 100)
+    await _insert_staged_attachment(
+        migrated_engine,
+        att_id="a_stg_fresh",
+        user_id="u_stg_y",
+        file_path=fresh,
+        age_hours=1,
+    )
+
+    now = datetime.now(UTC)
+    count = await cleanup(
+        now=now,
+        retention_days=30,
+        recordings_dir=tmp_path,
+        attachments_dir=tmp_path,
+        session_factory=Session,
+        staged_ttl_hours=24,
+    )
+    assert count == 0, f"fresh staged row MUST not be swept; got {count}"
+    assert fresh.exists()
+
+    async with migrated_engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    "SELECT id, meeting_id, deleted_at "
+                    "FROM meeting_attachment WHERE id = 'a_stg_fresh'"
+                )
+            )
+        ).first()
+    assert row is not None
+    assert row.meeting_id is None
+    assert row.deleted_at is None
+
+
+@pytest.mark.asyncio
+async def test_cleanup_staged_sweep_unlink_failure_logs_and_continues(
+    migrated_engine: AsyncEngine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Best-effort unlink: a missing file does NOT prevent the row from being deleted."""
+    Session = async_sessionmaker(migrated_engine, expire_on_commit=False)
+
+    await _seed(migrated_engine, user_id="u_stg_m", meeting_id="m_stg_m_ignored")
+
+    missing = tmp_path / "stg_missing.pdf"  # never written to disk
+    await _insert_staged_attachment(
+        migrated_engine,
+        att_id="a_stg_missing",
+        user_id="u_stg_m",
+        file_path=missing,
+        age_hours=48,
+    )
+
+    now = datetime.now(UTC)
+    count = await cleanup(
+        now=now,
+        retention_days=30,
+        recordings_dir=tmp_path,
+        attachments_dir=tmp_path,
+        session_factory=Session,
+        staged_ttl_hours=24,
+    )
+    assert count == 1
+    async with migrated_engine.connect() as conn:
+        row = (
+            await conn.execute(text("SELECT id FROM meeting_attachment WHERE id = 'a_stg_missing'"))
+        ).first()
+    assert row is None

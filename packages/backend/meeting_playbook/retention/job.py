@@ -27,7 +27,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from meeting_playbook.attachments.models import MeetingAttachment
@@ -43,6 +43,7 @@ async def cleanup(
     recordings_dir: Path,
     session_factory: async_sessionmaker,
     attachments_dir: Path | None = None,
+    staged_ttl_hours: int | None = None,
 ) -> int:
     """Sweep `recording` + `meeting_attachment` tables; unlink expired files
     and stamp `deleted_at`.
@@ -64,6 +65,12 @@ async def cleanup(
     cross-checking that the file_path lives under the configured root)
     but is not strictly required for the sweep — file_path columns carry
     absolute paths.
+
+    Slice-24: `staged_ttl_hours` triggers an additional sweep over rows
+    with `meeting_id IS NULL` whose `uploaded_at` is older than the TTL
+    (default off — caller passes the value from
+    `Settings.staged_attachment_ttl_hours`). Staged rows are hard-
+    deleted (not soft-deleted) since they were never user-facing data.
     """
     _ = attachments_dir  # reserved for future containment check
     threshold = now - timedelta(days=retention_days)
@@ -141,6 +148,52 @@ async def cleanup(
 
             att.deleted_at = now
             stamped += 1
+
+        # ── Slice-24: staged attachment sweep (orphan rows) ───────────
+        if staged_ttl_hours is not None:
+            staged_threshold = now - timedelta(hours=staged_ttl_hours)
+            staged_rows = (
+                (
+                    await session.execute(
+                        select(MeetingAttachment).where(
+                            MeetingAttachment.meeting_id.is_(None),
+                            MeetingAttachment.deleted_at.is_(None),
+                            MeetingAttachment.uploaded_at < staged_threshold,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            staged_ids: list[str] = []
+            for att in staged_rows:
+                file_path = Path(att.file_path)
+                try:
+                    file_path.unlink()
+                except FileNotFoundError:
+                    logger.info(
+                        "staged sweep self-heal: %s already missing for attachment %s",
+                        file_path,
+                        att.id,
+                    )
+                except OSError as exc:
+                    logger.warning(
+                        "staged sweep skip-unlink %s for attachment %s: %s",
+                        file_path,
+                        att.id,
+                        exc,
+                    )
+                    # Even if unlink fails, we still hard-delete the row
+                    # so the DB doesn't accumulate dead staging rows. The
+                    # file becomes orphaned but disk-space loss is bounded
+                    # by the staging quota.
+                staged_ids.append(att.id)
+                stamped += 1
+
+            if staged_ids:
+                await session.execute(
+                    delete(MeetingAttachment).where(MeetingAttachment.id.in_(staged_ids))
+                )
 
         await session.commit()
 

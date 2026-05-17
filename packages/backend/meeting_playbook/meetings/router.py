@@ -15,6 +15,10 @@ override it to point at the test DB.
 
 from __future__ import annotations
 
+import contextlib
+import logging
+import os
+import shutil
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -23,6 +27,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from meeting_playbook.asr.factory import get_asr_providers_for_meeting
+from meeting_playbook.attachments.models import MeetingAttachment
 from meeting_playbook.calendar.client import (
     CalendarClient,
     CalendarEventNotFound,
@@ -34,6 +39,7 @@ from meeting_playbook.calendar.dependencies import (
     get_calendar_client_dependency,
     get_playbook_generator_dependency,
 )
+from meeting_playbook.config import get_settings
 from meeting_playbook.meetings.dependencies import (
     get_session_dependency,
     get_session_factory_dependency,
@@ -57,6 +63,8 @@ from meeting_playbook.playbook_generation.generator import (
 from meeting_playbook.playbooks.repository import PlaybookRepository
 from meeting_playbook.rerun import runtime as rerun_runtime
 from meeting_playbook.sessions.models import Recording
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -141,37 +149,38 @@ def _generator_error_to_http(exc: Exception) -> HTTPException:
 
 async def _validate_attachments_attachable(
     session: AsyncSession, *, user_id: str, attachment_ids: list[str]
-) -> None:
-    """Slice-20b: enforce ownership + meeting_id IS NULL before meeting create.
+) -> list[MeetingAttachment]:
+    """Slice-24: enforce ownership + meeting_id IS NULL before meeting create.
 
     Per spec `POST /api/meetings accepts an attachments list...`: every id
-    MUST reference an attachment owned by the authenticated user AND with
-    `meeting_id IS NULL`. Any failure aborts BEFORE the meeting row is
+    MUST reference a staged attachment row owned by the authenticated
+    user (`meeting_id IS NULL` AND `user_id = current` AND
+    `deleted_at IS NULL`). Any failure aborts BEFORE the meeting row is
     written so the user does not end up with a half-attached meeting.
 
-    The attachment table is owned by slice-20a; this helper does a raw SQL
-    lookup so the meetings router does not need an attachment ORM model
-    to land. If S20a has not deployed the table yet, the query raises
-    `sqlalchemy.exc.ProgrammingError` — the caller surfaces that as a 500,
-    which is the correct signal that the slice dependency is missing in
-    deployment.
+    Returns the list of validated `MeetingAttachment` rows in the order
+    matching `attachment_ids` — the caller uses these to drive the
+    file-move + meeting_id write-back step. Returning the rows here
+    avoids a second round-trip from `create_meeting`.
     """
     if not attachment_ids:
-        return
-    rows = await session.execute(
-        text(
-            """
-            SELECT id, user_id, meeting_id
-              FROM attachment
-             WHERE id = ANY(:ids)
-            """
-        ),
-        {"ids": attachment_ids},
+        return []
+    result = await session.execute(
+        select(MeetingAttachment).where(
+            MeetingAttachment.id.in_(attachment_ids),
+        )
     )
-    found = {r.id: r for r in rows}
+    rows = list(result.scalars().all())
+    by_id = {r.id: r for r in rows}
+    ordered: list[MeetingAttachment] = []
     for aid in attachment_ids:
-        rec = found.get(aid)
-        if rec is None or rec.user_id != user_id or rec.meeting_id is not None:
+        rec = by_id.get(aid)
+        if (
+            rec is None
+            or rec.user_id != user_id
+            or rec.meeting_id is not None
+            or rec.deleted_at is not None
+        ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
@@ -182,6 +191,39 @@ async def _validate_attachments_attachable(
                     ),
                 },
             )
+        ordered.append(rec)
+    return ordered
+
+
+def _attachment_dir() -> Path:
+    """ATTACHMENT_DIR resolved + `~` expanded — matches attachments router."""
+    return Path(get_settings().attachment_dir).expanduser().resolve()
+
+
+def _move_staged_to_meeting(att: MeetingAttachment, meeting_id: str) -> tuple[Path, Path]:
+    """Move a staged attachment file into the meeting directory.
+
+    Uses `os.rename` first (POSIX atomic on the same filesystem); falls
+    back to `shutil.move` when `os.rename` raises `OSError` with errno
+    EXDEV (cross-filesystem). Returns `(old_path, new_path)` so the
+    caller can record the move for rollback.
+
+    Side-effects: creates `ATTACHMENT_DIR/<meeting_id>/` if needed.
+    Does NOT mutate `att`; the caller is responsible for updating the
+    row's `file_path` + `meeting_id` inside the DB transaction.
+    """
+    old_path = Path(att.file_path)
+    target_dir = _attachment_dir() / meeting_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    new_path = target_dir / old_path.name
+    try:
+        os.rename(old_path, new_path)
+    except OSError as exc:
+        if getattr(exc, "errno", None) == 18:  # EXDEV → different fs
+            shutil.move(str(old_path), str(new_path))
+        else:
+            raise
+    return old_path, new_path
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=MeetingRead)
@@ -194,26 +236,36 @@ async def create_meeting(
     calendar: Annotated[CalendarClient, Depends(get_calendar_client_dependency)],
     generator: Annotated[PlaybookGenerator, Depends(get_playbook_generator_dependency)],
 ) -> MeetingRead:
-    """Slice-20b: single create entry point for manual + calendar import paths.
+    """Slice-24: single create entry point with staged-attachment move + rollback.
 
-    Order of operations per spec:
-    (1) Pydantic validates request body.
-    (2) If `attachments[]` non-empty → ownership + `meeting_id IS NULL`
-        validation BEFORE meeting create (per spec
-        `POST /api/meetings accepts an attachments list...`). Failure
-        surfaces `attachment.not_attachable` 422 and no meeting is written.
-    (3) If `calendar_event_id` non-null → fetch event detail. Calendar
-        fetch failure surfaces the calendar error code and no meeting is
-        written (matches design `Playbook 生成觸發點下移`).
-    (4) Create meeting row (carries calendar_event_id when set).
-    (5) Write back attachment.meeting_id for each id.
-    (6) If `calendar_event_id` non-null → run generator + upsert playbook.
-        Generator failure surfaces `playbook.generation_timeout` /
-        `playbook.generation_failed` AFTER the meeting + attachment rows
-        are committed (matches slice-05 semantics — meeting is recoverable).
+    Order of operations per spec `POST /api/meetings accepts an attachments
+    list that associates pre-uploaded attachments with the new meeting`:
+
+    (1) Pydantic validates the request body.
+    (2) `_validate_attachments_attachable` confirms every id is a staged
+        row (`meeting_id IS NULL` + owned by caller + `deleted_at IS NULL`).
+        Any miss aborts with 422 `attachment.not_attachable` before any
+        DB write or file move.
+    (3) Calendar fetch (when `calendar_event_id` is set) runs BEFORE the
+        meeting row exists so calendar errors do not leave an orphan
+        meeting on disk.
+    (4) Create the meeting row.
+    (5) For each validated attachment, physically move the file from
+        `_staging/<user>/` to `<meeting_id>/` and update the row's
+        `file_path` + `meeting_id`. Each `(old_path, new_path)` pair is
+        recorded so a downstream failure can reverse it.
+    (6) When `calendar_event_id` is set, run the Playbook generator +
+        upsert the playbook.
+
+    On any failure in steps (5) or (6), execute the rollback (D5):
+      - move files back to staging,
+      - reset each row's `meeting_id` to NULL + `file_path` to the
+        original staging path,
+      - delete the meeting row,
+      - re-raise as the relevant HTTP error.
     """
     # (2) Attachment validation BEFORE any DB write (per spec).
-    await _validate_attachments_attachable(
+    staged_atts = await _validate_attachments_attachable(
         session,
         user_id=user_id,
         attachment_ids=body.attachments,
@@ -273,60 +325,101 @@ async def create_meeting(
         calendar_event_id=body.calendar_event_id,
     )
 
-    # (5) Write back attachment.meeting_id. Already validated above so this
-    # is a straight UPDATE — re-running the IS NULL filter as a defence in
-    # depth against a concurrent attach that snuck in between (2) and here.
-    if body.attachments:
-        await session.execute(
-            text(
-                """
-                UPDATE attachment
-                   SET meeting_id = :mid
-                 WHERE id = ANY(:ids)
-                   AND user_id = :uid
-                   AND meeting_id IS NULL
-                """
-            ),
-            {"mid": meeting.id, "ids": body.attachments, "uid": user_id},
-        )
-        await session.commit()
+    # (5) + (6) Attach + Playbook generation, wrapped in a rollback guard.
+    # `moved` tracks (att_row, original_staging_path, current_path) for
+    # rollback. Order matters — we iterate it in reverse on failure.
+    moved: list[tuple[MeetingAttachment, Path, Path]] = []
+    try:
+        for att in staged_atts:
+            old_path, new_path = _move_staged_to_meeting(att, meeting.id)
+            att.file_path = str(new_path)
+            att.meeting_id = meeting.id
+            moved.append((att, old_path, new_path))
+        if staged_atts:
+            await session.commit()
 
-    # (5b) Slice-21: insert link rows. The DB unique-on-pair index would
-    # collapse duplicates anyway, but the pre-validation already de-duped
-    # so this is a straight batch INSERT. We don't use
-    # `MeetingLinkRepository.create` here because that method commits per
-    # call; bulk-inserting in one execute keeps the round-trip count flat.
-    if link_targets:
-        # Explicit `text[]` cast — asyncpg can't infer the array element
-        # type from a bare parameter and would otherwise complain about an
-        # ambiguous `unnest(unknown)` overload.
-        await session.execute(
-            text(
-                """
-                INSERT INTO meeting_link (from_meeting_id, to_meeting_id, link_type)
-                SELECT :mid, unnest(CAST(:ids AS text[])), 'related'
-                """
-            ),
-            {"mid": meeting.id, "ids": link_targets},
-        )
-        await session.commit()
+        # (5b) Slice-21: insert link rows BEFORE the generator runs so
+        # generator failure rolls back the whole tuple (attachments
+        # already moved back to staging in the except block; the links
+        # rollback piggybacks on the meeting DELETE CASCADE in
+        # `_rollback_meeting_create`). The DB unique-on-pair index
+        # would collapse duplicates anyway but the pre-validation
+        # de-duped already. Explicit `text[]` cast — asyncpg can't
+        # infer the array element type from a bare parameter.
+        if link_targets:
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO meeting_link (from_meeting_id, to_meeting_id, link_type)
+                    SELECT :mid, unnest(CAST(:ids AS text[])), 'related'
+                    """
+                ),
+                {"mid": meeting.id, "ids": link_targets},
+            )
+            await session.commit()
 
-    # (6) Generator + playbook upsert (only when calendar_event_id is set).
-    if calendar_event is not None:
-        try:
+        # (6) Generator + playbook upsert (only when calendar_event_id is set).
+        if calendar_event is not None:
             draft = await generator.generate(
                 calendar_event,
                 viewer_email=user_email,
                 viewer_name=user_name,
             )
-        except (PlaybookGenerationTimeout, PlaybookGenerationFailed) as exc:
-            # Meeting + attachments already committed — per spec the failure
-            # MUST leave both persisted so the user can recover through the
-            # manual playbook editor.
-            raise _generator_error_to_http(exc) from exc
-        await PlaybookRepository(session).upsert_for_meeting(meeting.id, draft)
+            await PlaybookRepository(session).upsert_for_meeting(meeting.id, draft)
+    except (PlaybookGenerationTimeout, PlaybookGenerationFailed) as exc:
+        await _rollback_meeting_create(session, meeting=meeting, moved=moved)
+        raise _generator_error_to_http(exc) from exc
+    except Exception as exc:
+        # File-move OSError, DB commit error, anything else — same
+        # rollback discipline so the user does not see a half-built
+        # meeting in their list.
+        logger.exception("create_meeting: rolling back after unexpected failure")
+        await _rollback_meeting_create(session, meeting=meeting, moved=moved)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error_code": "common.internal_error",
+                "message": "Failed to create meeting; staged attachments were restored.",
+            },
+        ) from exc
 
     return MeetingRead.model_validate(meeting)
+
+
+async def _rollback_meeting_create(
+    session: AsyncSession,
+    *,
+    meeting: Any,
+    moved: list[tuple[MeetingAttachment, Path, Path]],
+) -> None:
+    """Reverse a partial `create_meeting` (slice-24 D5).
+
+    Moves every already-moved file back to its original staging path,
+    resets the row's `meeting_id`/`file_path`, and deletes the meeting
+    row. Best-effort on the file-system side — a missing source file
+    (e.g. cleanup race) is logged but does not block the DB rollback.
+    """
+    for att, old_path, new_path in reversed(moved):
+        try:
+            if new_path.exists():
+                old_path.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    os.rename(new_path, old_path)
+                except OSError as exc:
+                    if getattr(exc, "errno", None) == 18:
+                        shutil.move(str(new_path), str(old_path))
+                    else:
+                        raise
+        except OSError as fs_exc:
+            logger.warning("rollback could not move %s back to %s: %s", new_path, old_path, fs_exc)
+        att.file_path = str(old_path)
+        att.meeting_id = None
+    # Remove the meeting row regardless of file-rollback outcome — leaving
+    # a meeting with no attachments behind is worse than losing the file
+    # references on disk.
+    with contextlib.suppress(Exception):
+        await session.delete(meeting)
+        await session.commit()
 
 
 @router.get("", response_model=list[MeetingRead])

@@ -198,3 +198,132 @@ describe("getDownloadUrl", () => {
     expect(getDownloadUrl("m_abc", "att_z")).toBe("/api/meetings/m_abc/attachments/att_z/download");
   });
 });
+
+// ─── Slice-24: staging client functions ─────────────────────────────
+
+describe("uploadStagedAttachment", () => {
+  test("posts to /api/attachments/staging and resolves with the new row", async () => {
+    let openedUrl = "";
+    class TestXHR extends FakeXHR {
+      constructor() {
+        super();
+        (this as { _stubStatus?: number })._stubStatus = 201;
+        (this as { _stubResponse?: string })._stubResponse = JSON.stringify({
+          id: "att_staged",
+          kind: "pdf",
+          original_name: "s.pdf",
+          bytes: 100,
+          uploaded_at: "2026-05-17T00:00:00Z",
+        });
+      }
+      open(method: string, url: string, _async: boolean) {
+        openedUrl = url;
+        super.open(method, url, _async);
+      }
+    }
+    globalThis.XMLHttpRequest = TestXHR as unknown as typeof XMLHttpRequest;
+
+    const { uploadStagedAttachment } = await import("./attachments-api");
+    const file = new File([new Uint8Array(100)], "s.pdf", { type: "application/pdf" });
+    const progressFn = mock(() => undefined);
+
+    const att = await uploadStagedAttachment(file, progressFn);
+
+    expect(openedUrl).toBe("/api/attachments/staging");
+    expect(att.id).toBe("att_staged");
+    expect(progressFn).toHaveBeenCalled();
+  });
+
+  test("throws AttachmentApiError on 422 staging_quota_exceeded", async () => {
+    class TestXHR extends FakeXHR {
+      constructor() {
+        super();
+        (this as { _stubStatus?: number })._stubStatus = 422;
+        (this as { _stubResponse?: string })._stubResponse = JSON.stringify({
+          error_code: "attachment.staging_quota_exceeded",
+          message: "too many",
+        });
+      }
+    }
+    globalThis.XMLHttpRequest = TestXHR as unknown as typeof XMLHttpRequest;
+
+    const { uploadStagedAttachment } = await import("./attachments-api");
+    const file = new File([new Uint8Array(100)], "x.pdf", { type: "application/pdf" });
+
+    let thrown: unknown = null;
+    try {
+      await uploadStagedAttachment(file);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AttachmentApiError);
+    expect((thrown as AttachmentApiError).errorCode).toBe("attachment.staging_quota_exceeded");
+  });
+});
+
+describe("deleteStagedAttachment", () => {
+  test("sends DELETE to /api/attachments/{id}", async () => {
+    let capturedUrl = "";
+    let capturedMethod = "";
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedMethod = init?.method ?? "";
+      return new Response(null, { status: 204 });
+    }) as unknown as typeof fetch;
+
+    const { deleteStagedAttachment } = await import("./attachments-api");
+    await deleteStagedAttachment("att_z");
+
+    expect(capturedUrl).toBe("/api/attachments/att_z");
+    expect(capturedMethod).toBe("DELETE");
+  });
+
+  test("throws AttachmentApiError on 404", async () => {
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ error_code: "attachment.not_found", message: "nope" }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const { deleteStagedAttachment } = await import("./attachments-api");
+    await expect(deleteStagedAttachment("att_x")).rejects.toBeInstanceOf(AttachmentApiError);
+  });
+});
+
+describe("listPendingAttachments (slice-24 real endpoint)", () => {
+  test("hits /api/attachments?status=pending and unwraps the attachments array", async () => {
+    let capturedUrl = "";
+    globalThis.fetch = (async (url: string) => {
+      capturedUrl = url;
+      return new Response(
+        JSON.stringify({
+          attachments: [
+            {
+              id: "att_p",
+              kind: "pdf",
+              original_name: "p.pdf",
+              bytes: 100,
+              uploaded_at: "2026-05-17T00:00:00Z",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const { listPendingAttachments } = await import("./attachments-api");
+    const rows = await listPendingAttachments();
+    expect(capturedUrl).toBe("/api/attachments?status=pending");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe("att_p");
+  });
+
+  test("returns empty array on non-2xx (graceful fallback preserved)", async () => {
+    globalThis.fetch = (async () => new Response(null, { status: 500 })) as unknown as typeof fetch;
+
+    const { listPendingAttachments } = await import("./attachments-api");
+    const rows = await listPendingAttachments();
+    expect(rows).toEqual([]);
+  });
+});

@@ -37,6 +37,7 @@ import { Upload } from "lucide-react";
 import { MeetingAudioMiniPlayer } from "../../components/meeting-audio-mini-player";
 import { miniPlayerStore } from "../../hooks/use-mini-player";
 import { MeetingEditForm } from "../../components/meeting-edit-form";
+import { ExportMeetingButton } from "../../components/export-meeting-button";
 import { MetadataCard } from "../../components/metadata-card";
 import { UploadDialog } from "../../components/offline-ingest/UploadDialog";
 import { Button } from "../../components/ui/button";
@@ -253,17 +254,28 @@ export function MeetingDetail() {
             }
             rerunSlot={<RerunButton meeting={meeting} />}
             uploadSlot={
-              <Button
-                type="button"
-                size="sm"
-                variant={meeting.status === "completed" ? "secondary" : "outline"}
-                disabled={meeting.status === "in_progress"}
-                onClick={() => setOfflineIngestOpen(true)}
-                data-testid="metadata-upload-audio"
-              >
-                <Upload className="size-3.5" />
-                {t("meetings.session.uploadAudio")}
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={meeting.status === "completed" ? "secondary" : "outline"}
+                  disabled={meeting.status === "in_progress"}
+                  onClick={() => setOfflineIngestOpen(true)}
+                  data-testid="metadata-upload-audio"
+                >
+                  <Upload className="size-3.5" />
+                  {t("meetings.session.uploadAudio")}
+                </Button>
+                {/* slice-22 export bundle: visible for every status so the
+                    user can download whatever artefacts already exist.
+                    Failure (e.g. 404 race) is handled by a localized
+                    toast inside the component. */}
+                <ExportMeetingButton
+                  meetingId={meeting.id}
+                  meetingTitle={meeting.title}
+                  scheduledStartAt={meeting.scheduled_start_at}
+                />
+              </>
             }
           />
         )}

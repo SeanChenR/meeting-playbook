@@ -278,6 +278,9 @@
       "recordingExpired": "Recording expired",
       "rerunButton": "Re-run transcription",
       "rerunPending": "Re-running transcription…",
+      "export": "Export",
+      "exporting": "Exporting…",
+      "exportFailed": "Export failed",
       "layout": {
         "stack": "Stack layout",
         "columns": "Columns layout"

@@ -186,6 +186,7 @@ async def upload_attachment(
         att = await repo.create(
             attachment_id=attachment_id,
             meeting_id=meeting_id,
+            user_id=user_id,
             kind=kind,
             original_name=filename or "attachment",
             file_path=str(target_path),

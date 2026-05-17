@@ -43,6 +43,9 @@ async def run_forever(
                 recordings_dir=Path(settings.recordings_dir).expanduser(),
                 attachments_dir=Path(settings.attachment_dir).expanduser(),
                 session_factory=session_factory,
+                # Slice-24 D7: also sweep staged (orphan) attachments
+                # older than the configured TTL (default 24h).
+                staged_ttl_hours=settings.staged_attachment_ttl_hours,
             )
         except asyncio.CancelledError:
             raise

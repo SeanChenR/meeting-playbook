@@ -95,6 +95,7 @@ async def _insert_attachment(
     meeting_id: str,
     original_name: str,
     file_path: str,
+    user_id: str = "u_a",
 ) -> None:
     """Insert a meeting_attachment row directly so tests can control the
     `original_name` exactly (multipart upload escapes quotes in the
@@ -108,11 +109,11 @@ async def _insert_attachment(
                 text(
                     """
                     INSERT INTO meeting_attachment (
-                        id, meeting_id, file_path, kind, original_name,
+                        id, meeting_id, user_id, file_path, kind, original_name,
                         bytes, uploaded_at, deleted_at
                     )
                     VALUES (
-                        :aid, :mid, :path, 'pdf', :name,
+                        :aid, :mid, :uid, :path, 'pdf', :name,
                         2048, now(), NULL
                     )
                     """
@@ -120,6 +121,7 @@ async def _insert_attachment(
                 {
                     "aid": attachment_id,
                     "mid": meeting_id,
+                    "uid": user_id,
                     "path": file_path,
                     "name": original_name,
                 },
@@ -472,6 +474,7 @@ def test_download_content_disposition_escapes_quoted_string(
             async_url,
             attachment_id="att_quoted",
             meeting_id="m_q",
+            user_id="u_q",
             original_name=tricky_name,
             file_path=str(on_disk),
         )

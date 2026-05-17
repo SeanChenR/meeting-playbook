@@ -24,6 +24,12 @@ AttachmentKind = Literal["image", "pdf", "docx", "text", "markdown"]
 
 MAX_ATTACHMENTS_PER_MEETING: Final[int] = 5
 MAX_BYTES_PER_MEETING: Final[int] = 30 * 1024 * 1024  # 30 MiB
+# Slice-24 design D6: per-user staging quota is 2x the per-meeting limit
+# so a user can prep several meetings' worth of files at once. Single-file
+# size cap stays the same (MAX_BYTES_PER_MEETING) so a 31 MiB file is
+# rejected regardless of whether it would fit in the cumulative budget.
+MAX_STAGED_ATTACHMENTS_PER_USER: Final[int] = 10
+MAX_STAGED_BYTES_PER_USER: Final[int] = 60 * 1024 * 1024  # 60 MiB
 
 
 _MIME_TO_KIND: Final[dict[str, AttachmentKind]] = {
@@ -153,12 +159,65 @@ def validate_upload(
     return kind
 
 
+def validate_staging_upload(
+    *,
+    content_type: str,
+    filename: str,
+    declared_bytes: int,
+    staged_count: int,
+    staged_bytes: int,
+) -> AttachmentKind:
+    """Validate a per-user staging upload; return the inferred kind or raise.
+
+    Same whitelist + MIME → kind mapping as `validate_upload`, but the
+    quota check is per-user (slice-24 design D6 — 10 files / 60 MiB)
+    rather than per-meeting. A single file still cannot exceed
+    `MAX_BYTES_PER_MEETING` (30 MiB).
+
+    `staged_count` and `staged_bytes` are the user's current active
+    staged totals BEFORE this upload — the handler should call
+    `AttachmentRepository.count_staged_for_user` to source them.
+    """
+    kind = infer_kind(content_type, filename)
+    if kind is None:
+        raise AttachmentValidationError(
+            "attachment.unsupported_format",
+            f"Unsupported format: content_type={content_type!r}, filename={filename!r}",
+        )
+
+    # Per-file cap reuses the per-meeting byte limit so the frontend's
+    # "file too large" message stays consistent across both upload paths.
+    if int(declared_bytes) > MAX_BYTES_PER_MEETING:
+        raise AttachmentValidationError(
+            "attachment.quota_exceeded",
+            f"Single-file size exceeds {MAX_BYTES_PER_MEETING} bytes (got {int(declared_bytes)}).",
+        )
+
+    if staged_count >= MAX_STAGED_ATTACHMENTS_PER_USER:
+        raise AttachmentValidationError(
+            "attachment.staging_quota_exceeded",
+            f"Per-user staging file count limit ({MAX_STAGED_ATTACHMENTS_PER_USER}) reached.",
+        )
+
+    total = int(staged_bytes) + int(declared_bytes)
+    if total > MAX_STAGED_BYTES_PER_USER:
+        raise AttachmentValidationError(
+            "attachment.staging_quota_exceeded",
+            f"Per-user staging byte quota exceeded ({total} > {MAX_STAGED_BYTES_PER_USER}).",
+        )
+
+    return kind
+
+
 __all__ = [
     "AttachmentKind",
     "AttachmentValidationError",
     "MAX_ATTACHMENTS_PER_MEETING",
     "MAX_BYTES_PER_MEETING",
+    "MAX_STAGED_ATTACHMENTS_PER_USER",
+    "MAX_STAGED_BYTES_PER_USER",
     "canonical_extension",
     "infer_kind",
+    "validate_staging_upload",
     "validate_upload",
 ]

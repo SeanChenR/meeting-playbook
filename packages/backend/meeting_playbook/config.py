@@ -147,6 +147,12 @@ class Settings(BaseSettings):
     # bump for slow disks or very large PDFs.
     attachment_text_extraction_timeout_seconds: int = 15
 
+    # Slice 24 — staged (orphan) attachment retention TTL. Per design D7,
+    # the existing recording-retention background loop also sweeps staged
+    # rows older than this many hours. Default 24h covers the
+    # "上傳今晚弄好，明早建會議" workflow without leaking disk space.
+    staged_attachment_ttl_hours: int = 24
+
     # Slice 16 — audio playback Range cap.
     # Single Range request body is capped here (default 2 MiB ≈ 64 seconds of
     # 16 kHz mono 16-bit PCM). Browsers chase up with a follow-up Range when

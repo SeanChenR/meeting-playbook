@@ -136,10 +136,12 @@ async def test_downgrade_drops_previous_columns_and_upgrade_restores_them(
     async_url = _async_url(sync_url)
 
     try:
-        # Downgrade past 0018 (i.e. land on 0017) to undo the columns 0018
-        # introduces. Earlier this used relative `-1`, but with 0019
-        # (slice-21 meeting_link) sitting on top of 0018, `-1` now undoes
-        # the wrong revision.
+        # Downgrade to the revision BEFORE 0018 (i.e. land on 0017) to
+        # undo the columns 0018 introduces, regardless of how many later
+        # migrations exist. Targeting `0017_attachment_hash_snapshot`
+        # directly keeps the test stable across additions (slice-21
+        # added 0019_meeting_link, slice-24 adds a parallel 0019;
+        # whichever lands second will renumber).
         _run_alembic("downgrade", "0017_attachment_hash_snapshot", sync_url)
 
         engine = create_async_engine(async_url, future=True)

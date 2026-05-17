@@ -57,18 +57,32 @@ async def _seed_meeting(session, *, uid: str, mid: str) -> None:
 
 
 async def _seed_attachment(
-    session, *, aid: str, mid: str, file_path: str, kind: str, name: str
+    session,
+    *,
+    aid: str,
+    mid: str,
+    file_path: str,
+    kind: str,
+    name: str,
+    uid: str = "u_sm_mm",
 ) -> None:
     await session.execute(
         text(
             """
             INSERT INTO meeting_attachment
-              (id, meeting_id, file_path, kind, original_name, bytes, uploaded_at)
+              (id, meeting_id, user_id, file_path, kind, original_name, bytes, uploaded_at)
             VALUES
-              (:aid, :mid, :path, :kind, :name, 128, now())
+              (:aid, :mid, :uid, :path, :kind, :name, 128, now())
             """
         ),
-        {"aid": aid, "mid": mid, "path": file_path, "kind": kind, "name": name},
+        {
+            "aid": aid,
+            "mid": mid,
+            "uid": uid,
+            "path": file_path,
+            "kind": kind,
+            "name": name,
+        },
     )
     await session.commit()
 

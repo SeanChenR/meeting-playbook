@@ -458,16 +458,55 @@ describe("NewMeeting form", () => {
     expect((posted!.body as Record<string, unknown>).calendar_event_id).toBeUndefined();
   });
 
-  test("(slice-20b) selecting 2 attachments + submit includes attachments[] in payload", async () => {
+  // ─── Slice-24: staged-attachment dropzone replaces the picker ─────────
+
+  test("(slice-24) staging dropzone renders unconditionally (empty pending list)", async () => {
+    // Backend returns the new {attachments: []} shape with zero entries —
+    // the dropzone MUST still render so the user can drop new files in.
+    fetchHandler = async (url) => {
+      if (url.includes("/api/attachments?status=pending")) {
+        return new Response(JSON.stringify({ attachments: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("[]", { status: 200 });
+    };
+
+    await renderInRouter("/meetings/new");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("staged-dropzone-area")).toBeDefined();
+    });
+  });
+
+  test("(slice-24) form submit includes ALL staged attachment ids (no checkboxes)", async () => {
+    // Slice-24 design D9: the dropzone auto-selects every staged row,
+    // so submit sends them all in `attachments[]` without any user
+    // interaction beyond dropping files.
     const user = userEvent.setup();
     let posted: { body: unknown } | null = null;
     fetchHandler = async (url, init) => {
       if (url.includes("/api/attachments?status=pending")) {
         return new Response(
-          JSON.stringify([
-            { id: "att_1", filename: "a.pdf" },
-            { id: "att_2", filename: "b.docx" },
-          ]),
+          JSON.stringify({
+            attachments: [
+              {
+                id: "att_1",
+                kind: "pdf",
+                original_name: "a.pdf",
+                bytes: 100,
+                uploaded_at: "2026-05-17T00:00:00Z",
+              },
+              {
+                id: "att_2",
+                kind: "docx",
+                original_name: "b.docx",
+                bytes: 200,
+                uploaded_at: "2026-05-17T00:00:00Z",
+              },
+            ],
+          }),
           { status: 200, headers: { "content-type": "application/json" } },
         );
       }
@@ -497,13 +536,12 @@ describe("NewMeeting form", () => {
 
     await renderInRouter("/meetings/new");
 
+    // Wait for staged rows to render → that means the dropzone has
+    // synced its onChange with the parent's selectedAttachments.
     await waitFor(() => {
-      expect(screen.getByTestId("attachment-att_1")).toBeDefined();
-      expect(screen.getByTestId("attachment-att_2")).toBeDefined();
+      expect(screen.getByTestId("staged-row-att_1")).toBeDefined();
+      expect(screen.getByTestId("staged-row-att_2")).toBeDefined();
     });
-
-    await user.click(screen.getByTestId("attachment-att_1"));
-    await user.click(screen.getByTestId("attachment-att_2"));
 
     await user.type(screen.getByLabelText(/標題/), "with attachments");
     await user.type(screen.getByLabelText(/對方顯示名稱/), "C");

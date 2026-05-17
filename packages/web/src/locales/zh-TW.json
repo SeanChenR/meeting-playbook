@@ -232,15 +232,19 @@
       "errorFallback": "建立失敗",
       "preFillBanner": "正在從 Calendar 預填欄位…",
       "preFillMultiAttendeeHint": "事件有多位非自己的與會者，請手動填入「對方」欄位",
-      "attachmentsLabel": "附件",
-      "attachmentsHint": "勾選要附加到這場會議的檔案；新檔案請先到附件頁上傳。",
-      "attachmentsEmpty": "目前沒有可附加的待上傳檔案",
       "linksLabel": "關聯會議",
       "linksHint": "建立時就選擇要關聯的會議；之後也可從詳細頁加。",
       "linksEmpty": "目前沒有其他會議可關聯",
       "linksSearchPlaceholder": "搜尋會議標題…",
       "linksNoMatch": "查無符合的會議",
-      "linksCount": "已選 {{count}} 場"
+      "linksCount": "已選 {{count}} 場",
+      "staging": {
+        "section_label": "附件",
+        "dropzone_label": "拖檔到這裡上傳到暫存區",
+        "empty_hint": "尚未暫存任何附件，拖檔到下方即可上傳",
+        "remove_button": "移除",
+        "uploading_label": "上傳中… {{percent}}%"
+      }
     },
     "edit": {
       "title": "標題",
@@ -718,9 +722,6 @@
       "event_not_found": "找不到這個 Calendar 事件 — 可能已被刪除",
       "import_endpoint_removed": "Calendar 匯入流程已更新，請重新整理頁面後再試"
     },
-    "attachment": {
-      "not_attachable": "選取的附件目前無法附加到這場會議（可能已被別場會議使用或不屬於你）"
-    },
     "playbook": {
       "generation_timeout": "Playbook 生成逾時（>60 秒）— 請稍後再試",
       "generation_failed": "Playbook 生成失敗 — LLM 回傳內容無法解析",
@@ -814,6 +815,9 @@
       "quota_exceeded": "已超過每場會議 30MB 上限",
       "expired": "附件已過期或不存在",
       "not_found": "找不到此附件",
+      "not_attachable": "選取的附件目前無法附加到這場會議（可能已被別場會議使用或不屬於你）",
+      "staging_quota_exceeded": "暫存附件已達上限（10 個或 60 MiB），請先移除舊的再上傳",
+      "invalid_status_filter": "不支援的附件 status 查詢值",
       "uploadFailed": "上傳失敗，請稍後再試",
       "network_error": "上傳過程網路錯誤，請重試"
     },

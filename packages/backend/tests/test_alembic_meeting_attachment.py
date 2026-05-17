@@ -135,9 +135,9 @@ async def test_meeting_attachment_kind_check_constraint_rejects_invalid(
                 text(
                     """
                     INSERT INTO meeting_attachment (
-                        id, meeting_id, file_path, kind, original_name, bytes
+                        id, meeting_id, user_id, file_path, kind, original_name, bytes
                     )
-                    VALUES (:aid, 'm_chk', '/tmp/x', :bad_kind, 'x', 100)
+                    VALUES (:aid, 'm_chk', 'u_chk', '/tmp/x', :bad_kind, 'x', 100)
                     """
                 ),
                 {"aid": "att_bad_kind", "bad_kind": "video"},
@@ -177,9 +177,9 @@ async def test_meeting_attachment_bytes_check_rejects_zero(
                 text(
                     """
                     INSERT INTO meeting_attachment (
-                        id, meeting_id, file_path, kind, original_name, bytes
+                        id, meeting_id, user_id, file_path, kind, original_name, bytes
                     )
-                    VALUES ('att_bz_zero', 'm_bz', '/tmp/x', 'pdf', 'x.pdf', 0)
+                    VALUES ('att_bz_zero', 'm_bz', 'u_bz', '/tmp/x', 'pdf', 'x.pdf', 0)
                     """
                 )
             )
@@ -216,9 +216,9 @@ async def test_meeting_attachment_cascade_on_meeting_delete(
                 text(
                     """
                     INSERT INTO meeting_attachment (
-                        id, meeting_id, file_path, kind, original_name, bytes
+                        id, meeting_id, user_id, file_path, kind, original_name, bytes
                     )
-                    VALUES (:aid, 'm_cas', '/tmp/x', 'pdf', 'x.pdf', 100)
+                    VALUES (:aid, 'm_cas', 'u_cas', '/tmp/x', 'pdf', 'x.pdf', 100)
                     """
                 ),
                 {"aid": f"att_cas_{i}"},

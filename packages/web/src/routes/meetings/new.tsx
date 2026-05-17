@@ -50,7 +50,7 @@ import {
   useCreateMeetingMutation,
   type Meeting,
 } from "../../lib/meetings-api";
-import { pendingAttachmentsQueryOptions, type PendingAttachment } from "../../lib/attachments-api";
+import { StagedAttachmentDropzone } from "../../components/staged-attachment-dropzone";
 
 /**
  * Slice-20b: pick the counterparty display name from a calendar attendee list.
@@ -150,12 +150,6 @@ export function NewMeeting() {
     ...calendarEventQueryOptions(fromCalendarEventId ?? ""),
     enabled: Boolean(fromCalendarEventId),
   });
-
-  // Slice-20b: pull the user's pending (meeting_id IS NULL) attachments so
-  // the preview form can offer them as checkboxes. The query is enabled
-  // unconditionally — manual creates also benefit from attaching pre-
-  // uploaded files.
-  const attachmentsQuery = useQuery(pendingAttachmentsQueryOptions());
 
   // Pre-fill form from the calendar event once it resolves.
   useEffect(() => {
@@ -270,12 +264,6 @@ export function NewMeeting() {
         setError(t("meetings.new.errorFallback"));
       }
     }
-  }
-
-  function toggleAttachment(id: string) {
-    setSelectedAttachments((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
   }
 
   const isPreFilling = Boolean(fromCalendarEventId) && calendarEventQuery.isLoading;
@@ -413,16 +401,18 @@ export function NewMeeting() {
                 />
               </div>
 
-              {/* Slice-20b: attachment picker. Listed when the user has any
-                  pending attachments (meeting_id IS NULL). The query gracefully
-                  yields `[]` when the attachment capability is absent (S20a
-                  not yet deployed), so the section degrades cleanly. */}
-              <AttachmentPicker
-                attachments={attachmentsQuery.data ?? []}
-                selectedIds={selectedAttachments}
-                onToggle={toggleAttachment}
-                t={t}
-              />
+              {/* Slice-24: staged-attachment dropzone. Always renders so the
+                  user can drop files even when none are staged yet. Replaces
+                  the slice-20b `<AttachmentPicker>` which was permanently
+                  invisible (there was no way to stage attachments before
+                  the meeting existed). */}
+              <div className="space-y-1">
+                <Label>{t("meetings.new.staging.section_label")}</Label>
+                <StagedAttachmentDropzone
+                  selectedIds={selectedAttachments}
+                  onChange={setSelectedAttachments}
+                />
+              </div>
 
               {/* Slice-21: multi-select link picker. Skipped when there are
                   no other meetings to link to (cold-start case). The picker
@@ -556,49 +546,6 @@ function LinkPicker({
           )}
         </>
       )}
-    </div>
-  );
-}
-
-function AttachmentPicker({
-  attachments,
-  selectedIds,
-  onToggle,
-  t,
-}: {
-  attachments: PendingAttachment[];
-  selectedIds: string[];
-  onToggle: (id: string) => void;
-  t: (k: string) => string;
-}) {
-  if (attachments.length === 0) {
-    // Per design: list the empty state explicitly when the user has no
-    // pending attachments — keeps the affordance discoverable.
-    return null;
-  }
-  return (
-    <div className="space-y-2" data-testid="attachments-section">
-      <div className="space-y-1">
-        <Label>{t("meetings.new.attachmentsLabel")}</Label>
-        <p className="text-xs text-(--color-muted-foreground)">
-          {t("meetings.new.attachmentsHint")}
-        </p>
-      </div>
-      <ul className="space-y-1.5">
-        {attachments.map((a) => (
-          <li key={a.id}>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                data-testid={`attachment-${a.id}`}
-                checked={selectedIds.includes(a.id)}
-                onChange={() => onToggle(a.id)}
-              />
-              <span>{a.filename ?? a.id}</span>
-            </label>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

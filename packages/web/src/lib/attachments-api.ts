@@ -175,26 +175,37 @@ export function getDownloadUrl(meetingId: string, attachmentId: string): string 
 // ─── slice-20b: pending-attachment picker for the meeting preview form ───
 
 /**
- * A user-uploaded attachment that is not yet attached to a meeting
- * (`meeting_id IS NULL`). The preview form on `/meetings/new` lists these
- * so users can tick which ones to attach to the new meeting being created.
+ * A user-uploaded staged attachment (`meeting_id IS NULL`). The
+ * `<StagedAttachmentDropzone>` on `/meetings/new` lists these so users
+ * can drop files now and have them attached when the meeting is created.
  *
- * The shape is intentionally narrow — only `id` is required, `filename`
- * is rendered when present and falls back to the id otherwise.
+ * Slice-24 extends the shape from the slice-20b stub (just `id` +
+ * optional `filename`) to the full Attachment shape so the dropzone can
+ * render file size + kind without a second round-trip.
  */
 export interface PendingAttachment {
   id: string;
+  // The dropzone displays `original_name` when present; `filename` is
+  // the legacy slice-20b alias kept for backward compatibility with
+  // tests that still set `filename` on stub data.
+  original_name?: string;
   filename?: string;
+  kind?: AttachmentKind;
+  bytes?: number;
+  uploaded_at?: string;
+}
+
+interface PendingAttachmentsResponse {
+  attachments: PendingAttachment[];
 }
 
 /**
  * Fetches the current user's pending (unattached) attachments.
  *
- * Degrades gracefully when the backend endpoint is missing: returns `[]`
- * on any non-2xx response so the preview form renders no attachment
- * section rather than blocking the user with an inscrutable error. Once
- * the backend ships the endpoint, the section becomes interactive
- * automatically.
+ * Slice-24: the endpoint now exists for real (`GET /api/attachments?
+ * status=pending` returns `{attachments: [...]}` per the staging spec).
+ * The slice-20b graceful fallback is preserved — a non-2xx response or
+ * a network error returns `[]` so the dropzone never blocks rendering.
  */
 export async function listPendingAttachments(): Promise<PendingAttachment[]> {
   try {
@@ -203,8 +214,12 @@ export async function listPendingAttachments(): Promise<PendingAttachment[]> {
       // Graceful degradation — see function doc.
       return [];
     }
-    const body = (await resp.json()) as PendingAttachment[];
-    return Array.isArray(body) ? body : [];
+    const body = (await resp.json()) as PendingAttachmentsResponse | PendingAttachment[];
+    if (Array.isArray(body)) {
+      // Legacy stub shape — slice-20b returned a bare array.
+      return body;
+    }
+    return Array.isArray(body.attachments) ? body.attachments : [];
   } catch {
     return [];
   }
@@ -218,4 +233,97 @@ export function pendingAttachmentsQueryOptions() {
     // case, and stale data here is harmless.
     retry: false,
   };
+}
+
+/**
+ * Slice-24: upload a file to the per-user staging area.
+ *
+ * POSTs to `/api/attachments/staging` via XHR so the dropzone can render
+ * per-file progress, mirroring the meeting-scoped `uploadAttachment`
+ * helper. On success the row carries `meeting_id=NULL`; the dropzone
+ * keeps the id in its `selectedIds[]` so submitting the form attaches
+ * it to the new meeting.
+ */
+export function uploadStagedAttachment(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<Attachment> {
+  return new Promise<Attachment>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/attachments/staging", true);
+
+    if (onProgress) {
+      try {
+        onProgress(0);
+      } catch {
+        // Ignore caller errors — same defensive pattern as the
+        // meeting-scoped upload helper.
+      }
+    }
+
+    xhr.upload.onprogress = (evt) => {
+      if (!onProgress || !evt.lengthComputable) return;
+      const percent = Math.min(100, Math.round((evt.loaded / evt.total) * 100));
+      try {
+        onProgress(percent);
+      } catch {
+        // see above
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const att = JSON.parse(xhr.responseText) as Attachment;
+          resolve(att);
+        } catch (err) {
+          reject(
+            new AttachmentApiError(
+              xhr.status,
+              "common.internal_error",
+              `Malformed JSON in success response: ${(err as Error).message}`,
+            ),
+          );
+        }
+        return;
+      }
+      let errorCode: string | undefined;
+      let message = `HTTP ${xhr.status}`;
+      try {
+        const body = JSON.parse(xhr.responseText) as {
+          error_code?: string;
+          message?: string;
+        };
+        if (typeof body.error_code === "string") errorCode = body.error_code;
+        if (typeof body.message === "string" && body.message.length > 0) {
+          message = body.message;
+        }
+      } catch {
+        // ignore — leave defaults
+      }
+      reject(new AttachmentApiError(xhr.status, errorCode, message));
+    };
+
+    xhr.onerror = () => {
+      reject(new AttachmentApiError(0, "common.network_error", "Network error"));
+    };
+
+    const form = new FormData();
+    form.append("file", file, file.name);
+    xhr.send(form);
+  });
+}
+
+/**
+ * Slice-24: delete a staged attachment by id.
+ *
+ * Routes to `/api/attachments/{id}` (top-level, no meeting id in the
+ * path). The backend refuses to delete attached rows here — callers
+ * with an attached attachment must use the meeting-scoped delete.
+ */
+export async function deleteStagedAttachment(attachmentId: string): Promise<void> {
+  const resp = await fetch(`/api/attachments/${encodeURIComponent(attachmentId)}`, {
+    method: "DELETE",
+  });
+  if (!resp.ok) throw await _envelopeError(resp);
 }

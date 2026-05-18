@@ -80,6 +80,14 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
               {t("nav.meetings")}
             </Link>
             <Link
+              to="/recordings"
+              data-testid="navbar-recordings-link"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"
+              activeProps={{ className: "bg-(--color-muted) text-(--color-foreground)" }}
+            >
+              {t("nav.recordings")}
+            </Link>
+            <Link
               to="/dashboard"
               data-testid="navbar-dashboard-link"
               className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"

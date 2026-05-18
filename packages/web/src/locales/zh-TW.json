@@ -16,6 +16,7 @@
     "backToList": "返回列表",
     "home": "首頁",
     "meetings": "會議",
+    "recordings": "錄音檔",
     "dashboard": "儀表板",
     "settings": "設定"
   },
@@ -699,6 +700,51 @@
       }
     }
   },
+  "recordings": {
+    "list": {
+      "heading": "錄音檔",
+      "subheading": "保留 30 天內的所有錄音檔",
+      "empty": "目前沒有錄音檔",
+      "emptyExpiredHint": "超過 30 天的錄音檔已依保留政策清除",
+      "loading": "載入中…",
+      "loadError": "載入錄音檔失敗",
+      "searchPlaceholder": "搜尋會議名稱",
+      "dateRange": {
+        "since": "起",
+        "until": "迄"
+      },
+      "columns": {
+        "date": "錄音時間",
+        "meeting": "會議",
+        "counterparty": "對方",
+        "duration": "時長",
+        "size": "檔案大小",
+        "stream": "聲道",
+        "actions": "操作"
+      },
+      "streamBadge": {
+        "me": "我方",
+        "counterparty": "對方"
+      },
+      "action": {
+        "download": "下載",
+        "batchDownload": "批量下載",
+        "viewMeeting": "前往會議",
+        "selectAll": "全選"
+      },
+      "batch": {
+        "selectedCount": "已選 {{count}} 筆",
+        "confirm": "下載 ZIP",
+        "zipReady": "ZIP 下載已開始",
+        "oversize": "選取的錄音檔總大小超過上限，請減少數量"
+      },
+      "pagination": {
+        "previous": "上一頁",
+        "next": "下一頁",
+        "status": "第 {{page}} 頁 / 共 {{total}} 頁"
+      }
+    }
+  },
   "offline_ingest": {
     "dialog": {
       "heading": "上傳會議音檔",
@@ -848,7 +894,11 @@
     },
     "recording": {
       "mixed_not_applicable": "這場會議不是雙聲道錄音，無法播放混音",
-      "mix_failed": "混音生成失敗，請改聽我方或對方單一聲道"
+      "mix_failed": "混音生成失敗，請改聽我方或對方單一聲道",
+      "forbidden": "你沒有權限存取選取的錄音檔",
+      "retention_expired": "選取的錄音檔中有 {{count}} 筆已超過保留期",
+      "invalid_stream": "錄音檔聲道資料不正確，請聯絡支援",
+      "batch_oversize": "選取的錄音檔總大小超過 {{limit}}，請減少數量後再試"
     }
   },
   "attachments": {

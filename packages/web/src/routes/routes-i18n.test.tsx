@@ -139,3 +139,52 @@ describe("TotpVerify — i18n", () => {
 });
 
 // Slice-18: Home — i18n describe block removed with legacy Home component.
+
+// ─── P4 IA refactor: /recordings page locale parity ───────────────────
+//
+// Drops legacy `/calendar/import` route assertions (the route no longer
+// exists) and asserts the new `/recordings` page renders its zh-TW + en
+// headings via the `recordings.list.heading` namespace.
+//
+// Uses a fetch stub instead of `mock.module("../lib/recordings-api")` so
+// the global recordings-api module stays intact for sibling tests in the
+// same `bun test` run (mock.module is process-global with no teardown).
+
+import { i18n as i18nForRecordings } from "../lib/i18n";
+import { RecordingsIndex } from "./recordings";
+
+describe("/recordings — i18n", () => {
+  const originalFetch = globalThis.fetch;
+  beforeEach(() => {
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.startsWith("/api/recordings")) {
+        return new Response(JSON.stringify({ recordings: [], total: 0, page: 1, page_size: 25 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("[]", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("renders zh-TW heading by default", async () => {
+    await i18nForRecordings.changeLanguage("zh-TW");
+    await wrap(<RecordingsIndex />, "/recordings");
+    expect(screen.getAllByText("錄音檔").length).toBeGreaterThan(0);
+    expect(screen.getByText("保留 30 天內的所有錄音檔")).toBeDefined();
+  });
+
+  test("renders en heading after changeLanguage('en')", async () => {
+    await i18nForRecordings.changeLanguage("en");
+    await wrap(<RecordingsIndex />, "/recordings");
+    expect(screen.getAllByText("Recordings").length).toBeGreaterThan(0);
+    expect(screen.getByText("All recordings within the 30-day Recording window")).toBeDefined();
+  });
+});

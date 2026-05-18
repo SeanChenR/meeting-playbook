@@ -14,7 +14,7 @@ import { MeetingDetail } from "./routes/meetings/detail";
 import { MeetingsCalendar } from "./routes/meetings/calendar";
 import { MeetingsList } from "./routes/meetings/list";
 import { NewMeeting } from "./routes/meetings/new";
-import { UpcomingEvents } from "./routes/calendar/upcoming";
+import { RecordingsIndex } from "./routes/recordings";
 import { Signup } from "./routes/signup";
 import { TotpEnroll } from "./routes/totp/enroll";
 import { TotpVerify } from "./routes/totp/verify";
@@ -88,13 +88,16 @@ const meetingDetailRoute = createRoute({
   component: MeetingDetail,
 });
 
-// Slice-7: rename `/calendar` → `/calendar/import` to disambiguate from
-// `/meetings/calendar` (the new calendar VIEW). The component + file name
-// stays as `routes/calendar/upcoming.tsx` — only the URL path changes.
-const calendarImportRoute = createRoute({
+// P4 IA refactor (A1 + A4): `/calendar/import` is removed — calendar
+// integration lives solely at `/settings/integrations` (avoids two
+// surfaces rendering the same `CalendarIntegrationPanel`). The new
+// `/recordings` page indexes every Recording inside the active 30-day
+// Recording window with search + batch download (per spec
+// `recording-index`).
+const recordingsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/calendar/import",
-  component: UpcomingEvents,
+  path: "/recordings",
+  component: RecordingsIndex,
 });
 
 // Slice-19 v3 (Sean revision): `/settings` is now a single scrollable page
@@ -170,7 +173,7 @@ export const routeTree = rootRoute.addChildren([
   meetingsNewRoute,
   meetingsCalendarRoute,
   meetingDetailRoute,
-  calendarImportRoute,
+  recordingsRoute,
   settingsLayoutRoute,
   settingsProfileRoute,
   settingsSecurityRoute,

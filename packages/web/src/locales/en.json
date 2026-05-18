@@ -16,6 +16,7 @@
     "backToList": "Back to list",
     "home": "Home",
     "meetings": "Meetings",
+    "recordings": "Recordings",
     "dashboard": "Dashboard",
     "settings": "Settings"
   },
@@ -699,6 +700,51 @@
       }
     }
   },
+  "recordings": {
+    "list": {
+      "heading": "Recordings",
+      "subheading": "All recordings within the 30-day Recording window",
+      "empty": "No recordings yet",
+      "emptyExpiredHint": "Recordings older than 30 days are removed by the retention policy",
+      "loading": "Loading…",
+      "loadError": "Failed to load recordings",
+      "searchPlaceholder": "Search meeting title",
+      "dateRange": {
+        "since": "From",
+        "until": "To"
+      },
+      "columns": {
+        "date": "Captured at",
+        "meeting": "Meeting",
+        "counterparty": "Counterparty",
+        "duration": "Duration",
+        "size": "File size",
+        "stream": "Stream",
+        "actions": "Actions"
+      },
+      "streamBadge": {
+        "me": "Me",
+        "counterparty": "Counterparty"
+      },
+      "action": {
+        "download": "Download",
+        "batchDownload": "Batch download",
+        "viewMeeting": "Open meeting",
+        "selectAll": "Select all"
+      },
+      "batch": {
+        "selectedCount": "{{count}} selected",
+        "confirm": "Download ZIP",
+        "zipReady": "ZIP download started",
+        "oversize": "Selected recordings exceed the size cap; reduce the selection"
+      },
+      "pagination": {
+        "previous": "Previous",
+        "next": "Next",
+        "status": "Page {{page}} of {{total}}"
+      }
+    }
+  },
   "offline_ingest": {
     "dialog": {
       "heading": "Upload meeting audio",
@@ -848,7 +894,11 @@
     },
     "recording": {
       "mixed_not_applicable": "This meeting is not dual-channel; mixed audio is unavailable",
-      "mix_failed": "Failed to mix audio streams; switch to the Me or Counterparty source"
+      "mix_failed": "Failed to mix audio streams; switch to the Me or Counterparty source",
+      "forbidden": "You do not have access to the selected recordings",
+      "retention_expired": "{{count}} of the selected recordings have passed the Recording window",
+      "invalid_stream": "Recording stream metadata is invalid; please contact support",
+      "batch_oversize": "Selected recordings exceed {{limit}}; reduce the selection and retry"
     }
   },
   "attachments": {

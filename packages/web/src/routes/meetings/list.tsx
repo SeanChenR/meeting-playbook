@@ -73,8 +73,9 @@ export function MeetingsList() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <TagFilter />
           <Link
-            to="/calendar/import"
+            to="/settings/integrations"
             className={buttonVariants({ variant: "secondary", size: "sm" })}
+            data-testid="meetings-list-import-calendar"
           >
             <CalendarIcon className="size-3.5" />
             {t("meetings.list.fromCalendarButton")}

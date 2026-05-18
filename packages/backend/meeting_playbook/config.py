@@ -160,6 +160,14 @@ class Settings(BaseSettings):
     # without preventing full-file playback.
     audio_range_max_bytes: int = 2_097_152
 
+    # P4 IA refactor — `/recordings` batch-download size cap.
+    # Sum of selected `recording.bytes` across a batch-download request MUST
+    # NOT exceed this value; over-limit requests get 413 with
+    # `error_code: "recording.batch_oversize"`. Default 2 GiB covers a typical
+    # 30-day Recording window for a single user (~30 × 1-hour meetings at
+    # ~60 MB / hour). Tune via env if downstream observes oversize rejections.
+    recording_batch_download_max_bytes: int = 2_147_483_648
+
     # Backend service URL (gateway forwards /api/* here)
     backend_url: str = "http://localhost:8000"
 

@@ -103,16 +103,52 @@ describe("ProtectedShell NavBar", () => {
     expect(screen.getByTestId("user-avatar")).toBeDefined();
   });
 
-  test("exposes the two top-level destinations as nav links", async () => {
-    // Slice-18 v2 (Sean revision): home link retired; only meetings + dashboard.
+  test("exposes the three top-level destinations as nav links", async () => {
+    // P4 IA refactor: Recordings (`/recordings`) sits between Meetings and
+    // Dashboard. Verifies the destination set + their DOM order.
     await renderWithRouter(
       <ProtectedShell>
         <div />
       </ProtectedShell>,
       { initialEntries: ["/x"], path: "/x" },
     );
-    expect(screen.getByTestId("navbar-meetings-link")).toBeDefined();
-    expect(screen.getByTestId("navbar-dashboard-link")).toBeDefined();
+    const meetingsLink = screen.getByTestId("navbar-meetings-link");
+    const recordingsLink = screen.getByTestId("navbar-recordings-link");
+    const dashboardLink = screen.getByTestId("navbar-dashboard-link");
+    expect(recordingsLink.getAttribute("href")).toBe("/recordings");
     expect(screen.queryByTestId("navbar-home-link")).toBeNull();
+
+    const navLinks = Array.from(
+      meetingsLink.parentElement?.querySelectorAll("[data-testid^='navbar-']") ?? [],
+    );
+    const indices = ["navbar-meetings-link", "navbar-recordings-link", "navbar-dashboard-link"].map(
+      (id) => navLinks.findIndex((el) => el.getAttribute("data-testid") === id),
+    );
+    expect(indices[0]).toBeLessThan(indices[1] ?? -1);
+    expect(indices[1]).toBeLessThan(indices[2] ?? -1);
+    expect(dashboardLink).toBeDefined();
+  });
+
+  test("Recordings nav entry label is localized in zh-TW and en", async () => {
+    const { i18n } = await import("../lib/i18n");
+    await i18n.changeLanguage("zh-TW");
+    const { unmount } = await renderWithRouter(
+      <ProtectedShell>
+        <div />
+      </ProtectedShell>,
+      { initialEntries: ["/x"], path: "/x" },
+    );
+    expect(screen.getByTestId("navbar-recordings-link").textContent).toBe("錄音檔");
+    unmount();
+
+    await i18n.changeLanguage("en");
+    await renderWithRouter(
+      <ProtectedShell>
+        <div />
+      </ProtectedShell>,
+      { initialEntries: ["/x"], path: "/x" },
+    );
+    expect(screen.getByTestId("navbar-recordings-link").textContent).toBe("Recordings");
+    await i18n.changeLanguage("zh-TW");
   });
 });

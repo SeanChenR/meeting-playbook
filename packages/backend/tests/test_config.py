@@ -157,3 +157,24 @@ def test_staged_attachment_ttl_env_override(monkeypatch):
 
     settings = Settings(_env_file=None)
     assert settings.staged_attachment_ttl_hours == 72
+
+
+# ─── P4 IA refactor: recording batch download size cap ──────────────
+
+
+def test_recording_batch_size_cap_default(monkeypatch):
+    """Without an env override, the batch-download cap defaults to 2 GiB."""
+    _set_required(monkeypatch)
+    monkeypatch.delenv("RECORDING_BATCH_DOWNLOAD_MAX_BYTES", raising=False)
+
+    settings = Settings(_env_file=None)
+    assert settings.recording_batch_download_max_bytes == 2_147_483_648
+
+
+def test_recording_batch_size_cap_override(monkeypatch):
+    """Env var RECORDING_BATCH_DOWNLOAD_MAX_BYTES overrides the default."""
+    _set_required(monkeypatch)
+    monkeypatch.setenv("RECORDING_BATCH_DOWNLOAD_MAX_BYTES", "5368709120")
+
+    settings = Settings(_env_file=None)
+    assert settings.recording_batch_download_max_bytes == 5_368_709_120

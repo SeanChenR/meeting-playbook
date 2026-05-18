@@ -274,11 +274,41 @@ The web UI SHALL provide a `PlaybookPane` component that the meeting detail page
 
 The free-form view's primary editor SHALL be a plain `<textarea>` containing the markdown source. Inside the free-form view, a sub-mode toggle SHALL switch between **two or three** sub-modes:
 
-- **Edit** (default): the `<textarea>` is shown for editing markdown source.
-- **Preview**: a read-only rendered view powered by `react-markdown` + `remark-gfm` + `rehype-sanitize`. Switching to Preview MUST NOT mutate the `<textarea>` value; switching back to Edit MUST restore the user's caret position to the beginning of the textarea (or an acceptable default — caret restoration is not strictly required).
+- **Preview** (default): a read-only rendered view powered by `react-markdown` + `remark-gfm` + `rehype-sanitize`. When the `PlaybookPane` first mounts for a given `meetingId`, the sub-mode state SHALL initialize to `"preview"` so the user sees rendered markdown (headings as large text, list markers as bullets, bold spans, GFM tables, sanitized code blocks) without having to toggle. Switching into Preview from another sub-mode MUST NOT mutate the textarea draft state. The `freeform-preview-tab` button SHALL have `aria-pressed="true"` on initial mount; `freeform-edit-tab` SHALL have `aria-pressed="false"` on initial mount.
+- **Edit**: the `<textarea>` is shown for editing markdown source. The user SHALL reach Edit by clicking the `freeform-edit-tab` button. Switching back to Preview MUST NOT mutate the textarea draft state; switching from Preview into Edit MUST surface a textarea pre-populated with the current draft markdown (caret position restoration is not strictly required).
 - **Diff** (slice-23, conditional): a third sub-mode that SHALL render the line-level visual difference between `previous_free_form_markdown` and the current `free_form_markdown`, plus action buttons that map to the discard-previous / restore-previous / cherry-pick endpoints. The Diff toggle button SHALL appear in the sub-mode group only when `query.data?.has_previous_version === true`. When `has_previous_version === false`, the sub-mode toggle SHALL render exactly two buttons (Edit and Preview), matching the slice-7 / slice-20a contract.
 
 Switching out of Diff mode SHALL NOT mutate the textarea value or the snapshot columns; only the explicit action buttons inside Diff mode mutate state.
+
+When the user is in Diff sub-mode and the server-side snapshot disappears (i.e. `query.data?.has_previous_version` transitions to `false`), the component SHALL fall back to `"preview"` sub-mode (not `"edit"`) so the post-fallback state aligns with the default mount state.
+
+The sub-mode toggle buttons SHALL retain stable `data-testid` attributes across this change: `freeform-edit-tab`, `freeform-preview-tab`, and (conditionally) `freeform-diff-tab`. No new i18n keys are introduced; existing `playbook.freeform.editTab`, `playbook.freeform.previewTab`, and `playbook.diff.tab` keys are reused.
+
+#### Scenario: Preview is the default sub-mode on initial mount
+
+- **GIVEN** a `PlaybookPane` mounted for a `meetingId` whose playbook has `free_form_markdown` containing markdown source (e.g. `# Heading\n- bullet\n**bold**`)
+- **WHEN** the pane finishes its first render
+- **THEN** the rendered `MarkdownPreview` element (e.g. `data-testid="markdown-preview"`) SHALL be present in the DOM
+- **AND** the raw `<textarea>` for `free_form_markdown` SHALL NOT be present in the DOM
+- **AND** the `freeform-preview-tab` button SHALL have `aria-pressed="true"`
+- **AND** the `freeform-edit-tab` button SHALL have `aria-pressed="false"`
+
+#### Scenario: User clicks Edit to switch into the textarea
+
+- **GIVEN** a `PlaybookPane` rendered with the default Preview sub-mode active
+- **WHEN** the user clicks the `freeform-edit-tab` button
+- **THEN** the raw `<textarea>` for `free_form_markdown` SHALL be present in the DOM with its `value` equal to the current draft markdown
+- **AND** the `MarkdownPreview` element SHALL NOT be present in the DOM
+- **AND** the `freeform-edit-tab` button SHALL have `aria-pressed="true"`
+- **AND** the `freeform-preview-tab` button SHALL have `aria-pressed="false"`
+
+#### Scenario: User switches back from Edit to Preview without losing draft
+
+- **GIVEN** a `PlaybookPane` in Edit sub-mode with the user having typed `## new section` into the textarea (draft state updated, but not yet saved)
+- **WHEN** the user clicks the `freeform-preview-tab` button
+- **THEN** the `MarkdownPreview` element SHALL be present in the DOM and SHALL render the updated draft (including `## new section` as a level-2 heading)
+- **AND** the `<textarea>` SHALL NOT be present in the DOM
+- **AND** the in-memory draft state SHALL still contain `## new section` (verifiable by clicking `freeform-edit-tab` again and observing the textarea value)
 
 #### Scenario: Two sub-mode buttons when no snapshot exists
 
@@ -299,52 +329,35 @@ Switching out of Diff mode SHALL NOT mutate the textarea value or the snapshot c
 - **THEN** the textarea value SHALL be the row's current `free_form_markdown` (unchanged from before entering Diff mode)
 - **AND** the row's `previous_*` columns SHALL be unchanged
 
+#### Scenario: Snapshot disappearance from Diff falls back to Preview
+
+- **GIVEN** the pane is in Diff sub-mode and `query.data.has_previous_version === true`
+- **WHEN** the server-side snapshot is cleared (`has_previous_version` transitions to `false`, e.g. after a successful `discard_previous` mutation)
+- **THEN** the component SHALL transition the sub-mode state to `"preview"` (NOT `"edit"`)
+- **AND** the `MarkdownPreview` element SHALL be present in the DOM
+- **AND** the Diff toggle button SHALL no longer be rendered (only Edit and Preview buttons remain)
+
 
 <!-- @trace
-source: slice-23-playbook-versioning-and-diff
-updated: 2026-05-17
+source: playbook-markdown-rendering
+updated: 2026-05-18
 code:
-  - packages/backend/meeting_playbook/calendar/token_store.py
-  - packages/backend/meeting_playbook/calendar/router.py
-  - packages/web/src/components/playbook-diff-viewer.tsx
-  - bun.lock
-  - packages/web/src/locales/en.json
-  - packages/backend/meeting_playbook/playbooks/models.py
-  - packages/web/src/routes/meetings/new.tsx
-  - packages/backend/meeting_playbook/meetings/schemas.py
-  - packages/web/src/components/calendar/calendar-integration-panel.tsx
-  - packages/backend/meeting_playbook/playbooks/router.py
-  - packages/backend/meeting_playbook/meetings/router.py
-  - packages/web/src/locales/zh-TW.json
-  - packages/web/src/lib/playbook-api.ts
-  - packages/backend/meeting_playbook/calendar/client.py
-  - packages/web/package.json
-  - packages/backend/meeting_playbook/calendar/schemas.py
   - packages/web/src/components/playbook-pane.tsx
-  - packages/backend/meeting_playbook/playbooks/schemas.py
-  - packages/web/src/lib/attachments-api.ts
-  - packages/backend/alembic/versions/0018_playbook_previous_snapshot.py
   - packages/web/src/lib/meetings-api.ts
-  - packages/web/src/lib/calendar-api.ts
-  - docs/adr/0027-calendar-scope-link.md
-  - packages/backend/meeting_playbook/playbooks/repository.py
+  - packages/web/src/components/meeting-audio-mini-player.tsx
+  - packages/web/src/locales/zh-TW.json
+  - packages/web/src/locales/en.json
+  - packages/backend/meeting_playbook/audio_playback/router.py
+  - packages/backend/meeting_playbook/audio_playback/mixer.py
+  - packages/web/src/hooks/use-mini-player.ts
 tests:
-  - packages/backend/tests/playbooks/test_router.py
-  - packages/web/src/components/playbook-diff-viewer.test.tsx
-  - packages/web/src/routes/meetings/new.test.tsx
-  - packages/backend/tests/test_alembic_playbook_previous.py
-  - packages/web/src/routes/calendar/upcoming.test.tsx
-  - packages/backend/tests/playbooks/test_endpoints.py
-  - packages/backend/tests/playbooks/test_versioning_repository.py
-  - packages/web/src/lib/playbook-api.test.ts
-  - packages/backend/tests/calendar/test_endpoints.py
+  - packages/backend/tests/audio_playback/test_router_mixed.py
+  - packages/web/src/components/meeting-audio-mini-player.test.tsx
+  - packages/web/src/hooks/use-mini-player.test.ts
   - packages/web/src/components/playbook-pane.test.tsx
-  - packages/web/src/lib/calendar-api.mutations.test.tsx
-  - packages/backend/tests/meetings/test_validation.py
-  - packages/backend/tests/test_alembic_playbook.py
-  - packages/web/src/lib/calendar-api.queries.test.ts
-  - packages/backend/tests/calendar/test_get_event_endpoint.py
-  - packages/backend/tests/meetings/test_create_with_calendar_and_attachments.py
+  - packages/web/src/lib/meetings-api.test.ts
+  - packages/web/src/routes/meetings/detail.test.tsx
+  - packages/backend/tests/audio_playback/test_mixer.py
 -->
 
 ---

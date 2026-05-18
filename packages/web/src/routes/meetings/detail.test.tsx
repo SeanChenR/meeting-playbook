@@ -123,11 +123,13 @@ describe("MeetingDetail route", () => {
     // zh-TW: meetings.status.scheduled → "已排程"
     expect(screen.getByText(/已排程/)).toBeDefined();
 
-    // PlaybookPane is mounted: heading + free-form textarea visible.
+    // PlaybookPane is mounted: heading + freeform sub-toggle visible.
+    // Slice-26 D1: mount default is Preview (not Edit) — assert via the
+    // sub-toggle button instead of the now-absent textarea.
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /^Playbook$/ })).toBeDefined();
     });
-    expect(screen.getByLabelText(/自由格式 Markdown/)).toBeDefined();
+    expect(screen.getByTestId("freeform-preview-tab")).toBeDefined();
   });
 
   test("delete confirmation flow: open dialog → confirm → DELETE → redirect to list", async () => {

@@ -172,6 +172,20 @@ describe("MeetingsList route", () => {
 
   // ─── Slice-17 addition ────────────────────────────────────────────────
 
+  test("meetings_list_import_calendar_button_targets_settings_integrations", async () => {
+    // P4 IA refactor task 3.3: the "從行事曆匯入" / "Import from calendar"
+    // button now points at `/settings/integrations` (the canonical home of
+    // the CalendarIntegrationPanel) instead of the retired `/calendar/import`.
+    fetchHandler = async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+
+    await renderWithRouter(<MeetingsList />, { initialEntries: ["/meetings"], path: "/meetings" });
+
+    const importBtn = await screen.findByTestId("meetings-list-import-calendar");
+    expect(importBtn.tagName).toBe("A");
+    expect(importBtn.getAttribute("href")).toBe("/settings/integrations");
+  });
+
   test("(slice-17) meeting card shows tag chips when tags are attached", async () => {
     fetchHandler = async (url) => {
       if (url.startsWith("/api/meetings")) {

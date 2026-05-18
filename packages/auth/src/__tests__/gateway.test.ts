@@ -272,6 +272,33 @@ describe("PUBLIC_API_PATHS pass through without auth", () => {
     expect(res.status).toBe(401);
     expect(calls).toHaveLength(0);
   });
+
+  // ─ P4 IA refactor lock-in: /api/recordings/** rides the wildcard ─
+  test("forwards GET /api/recordings to backend with X-User-Id", async () => {
+    const { gateway, calls } = buildGateway(mockAuth({ user: { id: "usr_rec" } }));
+
+    const res = await gateway(new Request("http://localhost:3001/api/recordings?since=2026-05-01"));
+
+    expect(res.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("http://localhost:8000/api/recordings?since=2026-05-01");
+    expect(calls[0]?.headers.get("X-User-Id")).toBe("usr_rec");
+  });
+
+  test("forwards POST /api/recordings/batch-download with body + X-User-Id", async () => {
+    const { gateway, calls } = buildGateway(mockAuth({ user: { id: "usr_rec" } }));
+    const req = new Request("http://localhost:3001/api/recordings/batch-download", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ recording_ids: ["r1", "r2"] }),
+    });
+
+    await gateway(req);
+
+    expect(calls[0]?.url).toBe("http://localhost:8000/api/recordings/batch-download");
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.headers.get("X-User-Id")).toBe("usr_rec");
+  });
 });
 
 // ─── Non-API paths ───

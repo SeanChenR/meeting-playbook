@@ -43,6 +43,7 @@ from meeting_playbook.meetings.router import router as meetings_router
 from meeting_playbook.offline_ingest import pipeline as _offline_ingest_pipeline  # noqa: F401 — auto-registers tus completion handler
 from meeting_playbook.offline_ingest.router import router as offline_ingest_router
 from meeting_playbook.playbooks.router import router as playbooks_router
+from meeting_playbook.recordings.router import router as recordings_router
 from meeting_playbook.retention import runtime as retention_runtime
 from meeting_playbook.sessions.router import router as sessions_router
 from meeting_playbook.tags.router import router as tags_router
@@ -196,6 +197,11 @@ def create_app() -> FastAPI:
     app.include_router(audio_playback_router)
     app.include_router(transcript_edit_router)
     app.include_router(attachments_router)
+    # P4 IA refactor: flat `/api/recordings` index + batch-download. Mounted
+    # after the meeting-scoped audio playback router so neither prefix shadows
+    # the other (the per-meeting recording endpoints live at
+    # `/api/meetings/{id}/recordings/...`).
+    app.include_router(recordings_router)
     # Slice-24: staged (orphan) attachment endpoints live at /api/attachments
     # (not /api/meetings/{id}/attachments). Mount after the meeting-scoped
     # router so neither prefix shadows the other.

@@ -69,6 +69,35 @@ describe("Router contract", () => {
     const { router } = await renderAppRoutes(routeTree, { initialEntries: ["/dashboard"] });
     expect(router.routesById["/dashboard"]).toBeDefined();
   });
+
+  // P4 IA refactor (task 3.2): /calendar/import deleted, /recordings registered.
+  test("/calendar/import route is no longer registered", async () => {
+    const { router } = await renderAppRoutes(routeTree, {
+      initialEntries: ["/calendar/import"],
+    });
+    expect(router.routesById["/calendar/import"]).toBeUndefined();
+    const childMatch = router.state.matches.find((m) => m.routeId !== "__root__");
+    expect(childMatch === undefined || childMatch.status === "notFound").toBe(true);
+  });
+
+  test("/calendar/upcoming route is no longer registered", async () => {
+    const { router } = await renderAppRoutes(routeTree, {
+      initialEntries: ["/calendar/upcoming"],
+    });
+    expect(router.routesById["/calendar/upcoming"]).toBeUndefined();
+  });
+
+  test("/recordings route is registered", async () => {
+    const { router } = await renderAppRoutes(routeTree, { initialEntries: ["/recordings"] });
+    expect(router.routesById["/recordings"]).toBeDefined();
+  });
+
+  test("/settings/integrations remains registered as the canonical calendar surface", async () => {
+    const { router } = await renderAppRoutes(routeTree, {
+      initialEntries: ["/settings/integrations"],
+    });
+    expect(router.routesById["/settings/integrations"]).toBeDefined();
+  });
 });
 
 // Login success must navigate to /meetings (was briefly "/" in slice-18 v1).

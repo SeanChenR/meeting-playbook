@@ -89,6 +89,51 @@ def test_unknown_client_message_type_is_rejected():
         parse_client_message(raw)
 
 
+# ─── Slice-27 (single-channel-recording-entry): mode field on StartMeetingMessage
+# Per D2 — Mode 欄位的 wire contract: `mode: "dual" | "single"`, missing → default
+# `"dual"`, invalid → ValidationError. Mirrors spec Example table for boundary
+# cases (the JSON shape lines), so the wire contract is locked here.
+
+
+def test_start_meeting_mode_default_dual():
+    """缺 `mode` 欄位的 frame 視為 `dual`（向後相容舊 client）。"""
+    raw = '{"type": "start_meeting", "meeting_id": "m_t"}'
+    parsed = parse_client_message(raw)
+    assert isinstance(parsed, StartMeetingMessage)
+    assert parsed.mode == "dual"
+
+
+def test_start_meeting_mode_single_accepted():
+    """`mode: "single"` 是合法值。"""
+    raw = '{"type": "start_meeting", "meeting_id": "m_t", "mode": "single"}'
+    parsed = parse_client_message(raw)
+    assert isinstance(parsed, StartMeetingMessage)
+    assert parsed.mode == "single"
+
+
+def test_start_meeting_mode_dual_explicit_accepted():
+    """顯式傳 `mode: "dual"` 與舊行為一致。"""
+    raw = '{"type": "start_meeting", "meeting_id": "m_t", "mode": "dual"}'
+    parsed = parse_client_message(raw)
+    assert isinstance(parsed, StartMeetingMessage)
+    assert parsed.mode == "dual"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"type": "start_meeting", "meeting_id": "m_t", "mode": "invalid"}',
+        '{"type": "start_meeting", "meeting_id": "m_t", "mode": "both"}',
+        '{"type": "start_meeting", "meeting_id": "m_t", "mode": null}',
+        '{"type": "start_meeting", "meeting_id": "m_t", "mode": ""}',
+    ],
+)
+def test_start_meeting_mode_invalid_rejected(raw: str):
+    """非 "dual" / "single" 的值（含 null、空字串）必須被 Pydantic 拒絕。"""
+    with pytest.raises(Exception):  # pydantic ValidationError
+        parse_client_message(raw)
+
+
 def test_transcript_chunk_message_carries_all_required_keys():
     """Per spec example matrix row for transcript_chunk."""
     required = {

@@ -167,7 +167,9 @@ def _build_client(
 
 
 def _make_capture_factory(tmp_path: Path, n_chunks=2):
-    def factory(meeting_id):
+    # Slice-27: factory signature accepts `(meeting_id, mode)` — summary spawn
+    # tests run dual mode (the default).
+    def factory(meeting_id, mode: str = "dual"):
         return {
             "me": _ScriptedCapture(
                 meeting_id=meeting_id,
@@ -196,9 +198,7 @@ def _reset_inflight():
 # ─── Tests ───────────────────────────────────────────────────────────────
 
 
-def test_end_meeting_spawns_summary_task(
-    _migrated_db_url, tmp_path, monkeypatch
-):
+def test_end_meeting_spawns_summary_task(_migrated_db_url, tmp_path, monkeypatch):
     """Slice-10 5.1: end_meeting → spawn_summary_task called once with meeting_id."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_s", meeting_id="m_spawn"))

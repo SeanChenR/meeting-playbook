@@ -472,6 +472,97 @@ describe("useMeetingSession", () => {
     expect(observedReqId as string | null).toBe(requestId);
   });
 
+  // ─── Slice-27: recording mode state ──────────────────────────────
+
+  test("mode defaults to 'dual' on the initial state", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    expect(result.current.state.mode).toBe("dual");
+  });
+
+  test("setMode('single') updates state and start() sends mode:'single' in the frame", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.setMode("single");
+    });
+    expect(result.current.state.mode).toBe("single");
+
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+    });
+    const firstFrame = JSON.parse(ws.sent[0]!);
+    expect(firstFrame).toEqual({
+      type: "start_meeting",
+      meeting_id: "m_a",
+      mode: "single",
+    });
+  });
+
+  test("start() in default state sends mode:'dual'", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+    });
+    const firstFrame = JSON.parse(ws.sent[0]!);
+    expect(firstFrame).toEqual({
+      type: "start_meeting",
+      meeting_id: "m_a",
+      mode: "dual",
+    });
+  });
+
+  test("mode resets to 'dual' after the session ends", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.setMode("single");
+    });
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
+      ws.simulateMessage({ type: "meeting_ended", meeting_id: "m_a" });
+    });
+    expect(result.current.state.phase).toBe("ended");
+    expect(result.current.state.mode).toBe("dual");
+  });
+
+  test("setMode called after start() does not change the in-flight session's mode", () => {
+    const { result } = renderHook(() => useMeetingSession("m_a"));
+    act(() => {
+      result.current.setMode("single");
+    });
+    act(() => {
+      result.current.start();
+    });
+    const ws = MockWebSocket.instances[0]!;
+    act(() => {
+      ws.simulateOpen();
+      ws.simulateMessage({ type: "meeting_started", meeting_id: "m_a" });
+    });
+    // The frame already left with mode:"single"; flipping again has no
+    // effect on this WS exchange.
+    const before = ws.sent.length;
+    act(() => {
+      result.current.setMode("dual");
+    });
+    expect(ws.sent.length).toBe(before);
+    // No second start_meeting frame is sent.
+    const startFrames = ws.sent
+      .map((s) => JSON.parse(s) as { type: string })
+      .filter((m) => m.type === "start_meeting");
+    expect(startFrames).toHaveLength(1);
+  });
+
   test("unexpected close during in_progress triggers ONE retry then enters error", async () => {
     const { result } = renderHook(() => useMeetingSession("m_a"));
     act(() => {

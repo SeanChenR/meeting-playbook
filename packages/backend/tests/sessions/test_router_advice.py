@@ -291,7 +291,9 @@ def _build_client(
 
 
 def _make_capture_factory(tmp_path: Path, n_chunks: int = 2, chunk_delay_s: float = 0.0):
-    def factory(meeting_id: str):
+    # Slice-27: factory signature accepts `(meeting_id, mode)` so the router
+    # can branch on recording mode. Advice tests run in dual mode (default).
+    def factory(meeting_id: str, mode: str = "dual"):
         return {
             "me": _ScriptedCapture(
                 meeting_id=meeting_id,
@@ -315,9 +317,7 @@ def _make_capture_factory(tmp_path: Path, n_chunks: int = 2, chunk_delay_s: floa
 # ─── Tests ─────────────────────────────────────────────────────────────────
 
 
-def test_request_advice_streams_chunks_then_done(
-    _migrated_db_url, tmp_path, monkeypatch
-):
+def test_request_advice_streams_chunks_then_done(_migrated_db_url, tmp_path, monkeypatch):
     """Slice-08: client `request_advice` → 3 `advice_chunk` frames + 1 `advice_done`."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_ad", meeting_id="m_ad"))
@@ -424,9 +424,7 @@ def test_vertex_quota_error_emits_advisor_failed_and_keeps_ws_open(
     assert seen_transcript_after_failure, "WS must stay open after advisor_failed"
 
 
-def test_end_meeting_cancels_in_flight_advice(
-    _migrated_db_url, tmp_path, monkeypatch
-):
+def test_end_meeting_cancels_in_flight_advice(_migrated_db_url, tmp_path, monkeypatch):
     """Slice-08: a slow advice stream cancelled by end_meeting MUST NOT
     leak any further `advice_chunk` frames. `meeting_ended` arrives
     normally."""
@@ -668,9 +666,7 @@ def test_request_advice_button_path_inserts_pair_with_default_user_content(
     assert rows == [("user", "請給出戰術建議。"), ("advisor", "建議內容")]
 
 
-def test_failed_advice_writes_no_chat_message_rows(
-    _migrated_db_url, tmp_path, monkeypatch
-):
+def test_failed_advice_writes_no_chat_message_rows(_migrated_db_url, tmp_path, monkeypatch):
     """Slice-09 4.5: ResourceExhausted from advisor → no DB rows written."""
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_fl", meeting_id="m_fl"))

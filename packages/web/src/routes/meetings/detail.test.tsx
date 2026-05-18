@@ -481,6 +481,87 @@ describe("MeetingDetail slice-06 session UI", () => {
     expect(screen.queryByRole("button", { name: /^結束會議$/ })).toBeNull();
   });
 
+  // ─── Slice-27: recording mode selector + HeadphonesHint conditional ──
+
+  test("(slice-27) RecordingModeSelector renders when meeting status is scheduled", async () => {
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    // Selector visible with default `dual` selected.
+    expect(screen.getByTestId("recording-mode-selector")).toBeDefined();
+    const dual = screen.getByTestId("recording-mode-dual") as HTMLInputElement;
+    expect(dual.checked).toBe(true);
+  });
+
+  test("(slice-27) HeadphonesHint is visible when mode is dual (default)", async () => {
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    // Default dual → hint shows.
+    expect(screen.queryByTestId("headphones-hint")).not.toBeNull();
+  });
+
+  test("(slice-27) HeadphonesHint disappears when user picks single mode", async () => {
+    const user = userEvent.setup();
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+
+    expect(screen.queryByTestId("headphones-hint")).not.toBeNull();
+
+    // Pick single — hint must disappear (no echo loop risk when mic-only).
+    await user.click(screen.getByTestId("recording-mode-single"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("headphones-hint")).toBeNull();
+    });
+  });
+
+  test("(slice-27) selector is hidden once the session enters in_progress", async () => {
+    const user = userEvent.setup();
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    expect(screen.getByTestId("recording-mode-selector")).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: /^開始會議$/ }));
+    const ws = _MockSessionWS.instances[0]!;
+    ws.simulateMessage({ type: "meeting_started", meeting_id: "m_abc" });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("recording-mode-selector")).toBeNull();
+    });
+  });
+
+  test("(slice-27) start_meeting frame includes mode:'single' after the user picks single", async () => {
+    const user = userEvent.setup();
+    await renderInRouter();
+    await waitFor(() => {
+      expect(screen.getByText("Q3 review")).toBeDefined();
+    });
+    await user.click(screen.getByTestId("recording-mode-single"));
+    await user.click(screen.getByRole("button", { name: /^開始會議$/ }));
+
+    const ws = _MockSessionWS.instances[0]!;
+    // Trigger the onopen handler so the hook sends the start_meeting frame.
+    ws.readyState = 1;
+    ws.onopen?.(new Event("open"));
+
+    await waitFor(() => {
+      expect(ws.sent.length).toBeGreaterThan(0);
+    });
+    const firstFrame = JSON.parse(ws.sent[0]!);
+    expect(firstFrame).toEqual({
+      type: "start_meeting",
+      meeting_id: "m_abc",
+      mode: "single",
+    });
+  });
+
   // ─── Slice-08: AdvisorPane integration into the detail page ─────────
 
   test("AdvisorPane is mounted; placeholder string is gone; Get Advice appears once in_progress", async () => {

@@ -7,7 +7,12 @@
  */
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { openSessionSocket, type SessionMessage } from "./session-ws";
+import {
+  openSessionSocket,
+  type RecordingMode,
+  type SessionMessage,
+  type StartMeetingMessage,
+} from "./session-ws";
 
 // ─── Minimal MockWebSocket ─────────────────────────────────────────────────
 
@@ -112,11 +117,11 @@ describe("openSessionSocket", () => {
     const ws = MockWebSocket.instances[0]!;
     ws.simulateOpen();
 
-    sock.send({ type: "start_meeting", meeting_id: "m_abc" });
+    sock.send({ type: "start_meeting", meeting_id: "m_abc", mode: "dual" });
     sock.send({ type: "end_meeting", meeting_id: "m_abc" });
 
     expect(ws.sent).toEqual([
-      JSON.stringify({ type: "start_meeting", meeting_id: "m_abc" }),
+      JSON.stringify({ type: "start_meeting", meeting_id: "m_abc", mode: "dual" }),
       JSON.stringify({ type: "end_meeting", meeting_id: "m_abc" }),
     ]);
   });
@@ -223,6 +228,54 @@ describe("openSessionSocket", () => {
       expect(received[2]!.error_code).toBe("advisor.timeout");
       expect(received[2]!.message).toContain("timed out");
     }
+  });
+
+  // ─── Slice-27: recording mode on start_meeting frame ──────────────
+
+  test("StartMeetingMessage accepts mode: 'single' and serializes it on the wire", () => {
+    installMock();
+    const sock = openSessionSocket("m_solo");
+    const ws = MockWebSocket.instances[0]!;
+    ws.simulateOpen();
+
+    const frame: StartMeetingMessage = {
+      type: "start_meeting",
+      meeting_id: "m_solo",
+      mode: "single",
+    };
+    sock.send(frame);
+
+    expect(ws.sent).toHaveLength(1);
+    const parsed = JSON.parse(ws.sent[0]!);
+    expect(parsed).toEqual({
+      type: "start_meeting",
+      meeting_id: "m_solo",
+      mode: "single",
+    });
+  });
+
+  test("StartMeetingMessage accepts mode: 'dual' as the default selection", () => {
+    installMock();
+    const sock = openSessionSocket("m_dual");
+    const ws = MockWebSocket.instances[0]!;
+    ws.simulateOpen();
+
+    const frame: StartMeetingMessage = {
+      type: "start_meeting",
+      meeting_id: "m_dual",
+      mode: "dual",
+    };
+    sock.send(frame);
+
+    const parsed = JSON.parse(ws.sent[0]!);
+    expect(parsed.mode).toBe("dual");
+  });
+
+  test("RecordingMode union type is exported and assignable from both literals", () => {
+    const a: RecordingMode = "dual";
+    const b: RecordingMode = "single";
+    expect(a).toBe("dual");
+    expect(b).toBe("single");
   });
 
   test("parses silence_warning frame including stream field", () => {

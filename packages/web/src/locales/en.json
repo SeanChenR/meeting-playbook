@@ -321,6 +321,13 @@
       "rerunOverlay": "Re-running transcription…",
       "rerunOverlayProgress": "({{processed}}/{{total}} chunks)",
       "rerunOverlayEstimating": "(...)",
+      "recordingMode": {
+        "label": "Recording mode",
+        "dual": "Dual-channel (Me + Counterparty)",
+        "single": "Mic only (Me)",
+        "dualHelper": "Requires BlackHole to route system audio",
+        "singleHelper": "Counterparty audio will not be captured; useful for solo recording or testing"
+      },
       "speaker": {
         "cluster": "Speaker {{n}}",
         "cluster_unknown": "Speaker (unidentified)"
@@ -740,6 +747,7 @@
     },
     "session": {
       "no_audio_device": "No microphone found — check system permissions",
+      "no_blackhole_device": "BlackHole 2ch device not found — see docs/BLACKHOLE_SETUP.md, or switch to 'Mic only' mode",
       "bad_start": "Invalid session start message",
       "bad_status": "Meeting status does not allow restarting a session",
       "persist_failed": "Failed to persist transcript — session aborted",

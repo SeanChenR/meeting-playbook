@@ -44,6 +44,12 @@ export interface MetadataCardProps {
   captureIndicator: ReactNode;
   /** ASR provider <Select>; passed in so the parent owns the mutation. */
   asrSelector: ReactNode;
+  /**
+   * Slice-27: pre-session recording mode selector slot. Rendered above the
+   * Start Meeting action row only while the meeting is `scheduled`. Parent
+   * supplies the wired `<RecordingModeSelector />`.
+   */
+  modeSelector?: ReactNode;
   /** Active session phase — flips the start/end button visibility. */
   phase: "idle" | "connecting" | "in_progress" | "ending" | "ended" | "error";
   onStart: () => void;
@@ -73,6 +79,7 @@ export function MetadataCard({
   meeting,
   captureIndicator,
   asrSelector,
+  modeSelector,
   phase,
   onStart,
   onEnd,
@@ -184,6 +191,12 @@ export function MetadataCard({
             {captureIndicator}
           </div>
         </div>
+
+        {/* Slice-27: recording mode selector sits between the metadata
+            block and the action row so the user explicitly picks the
+            capture pipeline before pressing Start. Parent decides when
+            to render (only `status === "scheduled"`). */}
+        {modeSelector && <div data-testid="metadata-mode-selector-slot">{modeSelector}</div>}
 
         <Separator />
 

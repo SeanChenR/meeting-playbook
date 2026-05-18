@@ -218,16 +218,23 @@ def _build_client(
 
 def _make_capture_factory(tmp_path: Path, n_chunks: int = 2):
     """Slice-7: factory returns a dict[Stream, capture]. Both me + counterparty
-    captures by default emit `n_chunks` events."""
+    captures by default emit `n_chunks` events.
 
-    def factory(meeting_id: str):
+    Slice-27: factory signature is `(meeting_id, mode)`. `mode="single"`
+    returns only the `me` capture (mirrors `_default_capture_factory`).
+    """
+
+    def factory(meeting_id: str, mode: str = "dual"):
+        me_cap = _ScriptedCapture(
+            meeting_id=meeting_id,
+            recordings_dir=tmp_path,
+            n_chunks=n_chunks,
+            stream_label="me",
+        )
+        if mode == "single":
+            return {"me": me_cap}
         return {
-            "me": _ScriptedCapture(
-                meeting_id=meeting_id,
-                recordings_dir=tmp_path,
-                n_chunks=n_chunks,
-                stream_label="me",
-            ),
+            "me": me_cap,
             "counterparty": _ScriptedCapture(
                 meeting_id=meeting_id,
                 recordings_dir=tmp_path,
@@ -360,7 +367,7 @@ def test_no_blackhole_device_aborts_session(_migrated_db_url, tmp_path, monkeypa
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_nb", meeting_id="m_nb"))
 
-    def failing_factory(meeting_id: str):
+    def failing_factory(meeting_id: str, mode: str = "dual"):
         raise NoBlackholeDevice("BlackHole 2ch not detected — see docs/BLACKHOLE_SETUP.md")
 
     client = _build_client(_migrated_db_url, monkeypatch, capture_factory_override=failing_factory)
@@ -415,7 +422,7 @@ def test_stream_failed_at_start_aborts(_migrated_db_url, tmp_path, monkeypatch):
     asyncio.run(_truncate(_async_url(_migrated_db_url)))
     asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_sf", meeting_id="m_sf"))
 
-    def factory(meeting_id: str):
+    def factory(meeting_id: str, mode: str = "dual"):
         return {
             "me": _ScriptedCapture(
                 meeting_id=meeting_id,
@@ -681,3 +688,295 @@ def test_mid_session_provider_switch_ignored(_migrated_db_url, tmp_path, monkeyp
         return row.asr_provider if row else ""
 
     assert asyncio.run(_read_provider()) == "qwen3"
+
+
+# ─── Slice-27 (single-channel-recording-entry): mode = single ─────────────
+
+
+async def _read_recordings(db_url: str, meeting_id: str) -> list[dict]:
+    """List the recording rows for a meeting (stream + file_path only)."""
+    engine = create_async_engine(db_url, future=True)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as s:
+        rows = (
+            await s.execute(
+                text(
+                    "SELECT stream, file_path FROM recording "
+                    "WHERE meeting_id = :mid ORDER BY stream"
+                ),
+                {"mid": meeting_id},
+            )
+        ).all()
+    await engine.dispose()
+    return [{"stream": r.stream, "file_path": r.file_path} for r in rows]
+
+
+def test_single_mode_skips_blackhole_check(_migrated_db_url, tmp_path, monkeypatch):
+    """`mode: "single"` MUST start `meeting_started` even with NO BlackHole.
+
+    Spec scenario "Missing BlackHole device does NOT abort a single-mode
+    session" — the factory is allowed to return only `{"me": ...}` and the
+    router accepts it without raising `session.no_blackhole_device`.
+    """
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_s1", meeting_id="m_s1"))
+
+    # Factory raises NoBlackholeDevice for dual but returns mic-only for single.
+    # If the router still calls into BlackHole discovery somewhere we'd see
+    # the dual path explode here.
+    def factory(meeting_id: str, mode: str = "dual"):
+        if mode == "dual":
+            from meeting_playbook.audio.devices import NoBlackholeDevice as _NBHD
+
+            raise _NBHD("no BlackHole")
+        return {
+            "me": _ScriptedCapture(
+                meeting_id=meeting_id,
+                recordings_dir=tmp_path,
+                n_chunks=1,
+                stream_label="me",
+            ),
+        }
+
+    client = _build_client(_migrated_db_url, monkeypatch, capture_factory_override=factory)
+    types_seen: list[str] = []
+    with client.websocket_connect(
+        "/api/meetings/m_s1/session", headers={"X-User-Id": "u_s1"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_s1", "mode": "single"}))
+        try:
+            while True:
+                raw = ws.receive_text()
+                types_seen.append(json.loads(raw)["type"])
+        except WebSocketDisconnect:
+            pass
+
+    assert "meeting_started" in types_seen, (
+        f"single mode must reach meeting_started; got {types_seen}"
+    )
+    assert "error" not in types_seen, f"no error frame expected; got {types_seen}"
+
+
+def test_single_mode_finalize_writes_one_recording(_migrated_db_url, tmp_path, monkeypatch):
+    """After a single-mode finalize, the DB has exactly one `recording` row
+    with `stream = 'me'`. No `counterparty` row is written.
+    """
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_s2", meeting_id="m_s2"))
+
+    def factory(meeting_id: str, mode: str = "dual"):
+        # Mode is single → only mic capture is created.
+        return {
+            "me": _ScriptedCapture(
+                meeting_id=meeting_id,
+                recordings_dir=tmp_path,
+                n_chunks=1,
+                stream_label="me",
+            ),
+        }
+
+    client = _build_client(_migrated_db_url, monkeypatch, capture_factory_override=factory)
+    with client.websocket_connect(
+        "/api/meetings/m_s2/session", headers={"X-User-Id": "u_s2"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_s2", "mode": "single"}))
+        try:
+            while True:
+                ws.receive_text()
+        except WebSocketDisconnect:
+            pass
+
+    rows = asyncio.run(_read_recordings(_async_url(_migrated_db_url), "m_s2"))
+    assert len(rows) == 1, f"single mode must produce 1 recording row; got {rows}"
+    assert rows[0]["stream"] == "me", f"recording.stream must be 'me'; got {rows[0]}"
+    assert rows[0]["file_path"].endswith("me.wav"), (
+        f"single mode file path must end with me.wav; got {rows[0]}"
+    )
+
+
+class _WarmupCountingASRProvider:
+    """ASRProvider stand-in that records every warmup() call."""
+
+    name = "warmup-counter"
+
+    def __init__(self) -> None:
+        self.warmup_calls = 0
+
+    async def warmup(self) -> None:
+        self.warmup_calls += 1
+
+    async def transcribe_chunk(self, audio_bytes, sample_rate_hz, language_hint=None):
+        return TranscriptChunk(
+            text="hi",
+            started_at=datetime.now(UTC),
+            ended_at=datetime.now(UTC) + timedelta(milliseconds=50),
+            asr_provider_used=self.name,
+            confidence=0.9,
+        )
+
+
+def test_single_mode_warmup_calls_only_me_provider(_migrated_db_url, tmp_path, monkeypatch):
+    """Per D4: single mode warms up `me_provider` only — the `counterparty`
+    provider's `warmup()` MUST NOT be awaited.
+    """
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_s3", meeting_id="m_s3"))
+
+    me_provider = _WarmupCountingASRProvider()
+    cp_provider = _WarmupCountingASRProvider()
+
+    def factory(meeting_id: str, mode: str = "dual"):
+        return {
+            "me": _ScriptedCapture(
+                meeting_id=meeting_id,
+                recordings_dir=tmp_path,
+                n_chunks=1,
+                stream_label="me",
+            ),
+        }
+
+    client = _build_client(
+        _migrated_db_url,
+        monkeypatch,
+        capture_factory_override=factory,
+        providers_override=(me_provider, cp_provider),
+    )
+    with client.websocket_connect(
+        "/api/meetings/m_s3/session", headers={"X-User-Id": "u_s3"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_s3", "mode": "single"}))
+        try:
+            while True:
+                ws.receive_text()
+        except WebSocketDisconnect:
+            pass
+
+    assert me_provider.warmup_calls == 1, (
+        f"me_provider.warmup() must run once; got {me_provider.warmup_calls}"
+    )
+    assert cp_provider.warmup_calls == 0, (
+        f"counterparty_provider.warmup() MUST NOT run in single mode; got {cp_provider.warmup_calls}"
+    )
+
+
+def test_dual_mode_unchanged_regression(_migrated_db_url, tmp_path, monkeypatch):
+    """Dual mode (the default) still produces TWO recording rows + warms up
+    BOTH ASR providers. Guards against the new branch breaking the legacy path.
+    """
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_s4", meeting_id="m_s4"))
+
+    me_provider = _WarmupCountingASRProvider()
+    cp_provider = _WarmupCountingASRProvider()
+
+    client = _build_client(
+        _migrated_db_url,
+        monkeypatch,
+        capture_factory_override=_make_capture_factory(tmp_path, n_chunks=1),
+        providers_override=(me_provider, cp_provider),
+    )
+    with client.websocket_connect(
+        "/api/meetings/m_s4/session", headers={"X-User-Id": "u_s4"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_s4", "mode": "dual"}))
+        try:
+            while True:
+                ws.receive_text()
+        except WebSocketDisconnect:
+            pass
+
+    rows = asyncio.run(_read_recordings(_async_url(_migrated_db_url), "m_s4"))
+    streams = sorted(r["stream"] for r in rows)
+    assert streams == ["counterparty", "me"], (
+        f"dual mode must produce both recording rows; got {streams}"
+    )
+    assert me_provider.warmup_calls == 1
+    assert cp_provider.warmup_calls == 1
+
+
+# ─── Task 3.2 — single-mode failure modes ──────────────────────────────────
+
+
+def test_single_mode_mic_missing_emits_no_audio_device(_migrated_db_url, tmp_path, monkeypatch):
+    """`mode="single"` + factory raises `MicDeviceNotFound` → server emits
+    `session.no_audio_device` and the meeting status stays `scheduled`.
+    """
+    from meeting_playbook.audio.devices import MicDeviceNotFound
+
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_sm1", meeting_id="m_sm1"))
+
+    def factory(meeting_id: str, mode: str = "dual"):
+        raise MicDeviceNotFound("mic missing")
+
+    client = _build_client(_migrated_db_url, monkeypatch, capture_factory_override=factory)
+    with client.websocket_connect(
+        "/api/meetings/m_sm1/session", headers={"X-User-Id": "u_sm1"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_sm1", "mode": "single"}))
+        msg = json.loads(ws.receive_text())
+
+    assert msg["type"] == "error"
+    assert msg["error_code"] == "session.no_audio_device"
+    final_status = asyncio.run(_read_meeting_status(_async_url(_migrated_db_url), "m_sm1"))
+    assert final_status == "scheduled"
+
+
+def test_single_mode_warmup_failure_emits_stream_failed_at_start(
+    _migrated_db_url, tmp_path, monkeypatch
+):
+    """`mode="single"` + ASR provider's `warmup()` raises → server emits
+    `session.stream_failed_at_start` and rolls the meeting back to `completed`.
+    """
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(_setup_meeting(_async_url(_migrated_db_url), user_id="u_sm2", meeting_id="m_sm2"))
+
+    class _BoomMeProvider:
+        name = "boom"
+
+        async def warmup(self) -> None:
+            raise RuntimeError("warmup blew up")
+
+        async def transcribe_chunk(self, audio_bytes, sample_rate_hz, language_hint=None):
+            return TranscriptChunk(
+                text="",
+                started_at=datetime.now(UTC),
+                ended_at=datetime.now(UTC),
+                asr_provider_used=self.name,
+                confidence=0.0,
+            )
+
+    def factory(meeting_id: str, mode: str = "dual"):
+        return {
+            "me": _ScriptedCapture(
+                meeting_id=meeting_id,
+                recordings_dir=tmp_path,
+                n_chunks=1,
+                stream_label="me",
+            ),
+        }
+
+    client = _build_client(
+        _migrated_db_url,
+        monkeypatch,
+        capture_factory_override=factory,
+        providers_override=(_BoomMeProvider(), _StubASRProvider()),
+    )
+    error_codes: list[str] = []
+    with client.websocket_connect(
+        "/api/meetings/m_sm2/session", headers={"X-User-Id": "u_sm2"}
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_sm2", "mode": "single"}))
+        try:
+            while True:
+                raw = ws.receive_text()
+                msg = json.loads(raw)
+                if msg["type"] == "error":
+                    error_codes.append(msg["error_code"])
+        except WebSocketDisconnect:
+            pass
+
+    assert "session.stream_failed_at_start" in error_codes
+    # Per existing router behaviour for warmup failure: meeting flips to completed.
+    final_status = asyncio.run(_read_meeting_status(_async_url(_migrated_db_url), "m_sm2"))
+    assert final_status == "completed"

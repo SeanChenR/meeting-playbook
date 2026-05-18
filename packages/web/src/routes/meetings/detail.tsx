@@ -39,6 +39,7 @@ import { miniPlayerStore } from "../../hooks/use-mini-player";
 import { MeetingEditForm } from "../../components/meeting-edit-form";
 import { ExportMeetingButton } from "../../components/export-meeting-button";
 import { MetadataCard } from "../../components/metadata-card";
+import { RecordingModeSelector } from "../../components/recording-mode-selector";
 import { UploadDialog } from "../../components/offline-ingest/UploadDialog";
 import { Button } from "../../components/ui/button";
 import { PlaybookPane } from "../../components/playbook-pane";
@@ -244,6 +245,19 @@ export function MeetingDetail() {
             startDisabled={startDisabled}
             onDelete={() => setConfirmOpen(true)}
             asrSelector={<AsrProviderSelector meeting={meeting} />}
+            // Slice-27 D5 / D6: render the recording-mode selector only
+            // while the meeting is scheduled AND the WS session has not
+            // started yet. After `start_meeting` is accepted the mode is
+            // immutable for the session (spec ADDED requirement), so the
+            // selector is hidden as soon as `phase` leaves `idle`. The
+            // meeting.status guard handles the "already-completed" case;
+            // the phase guard handles the in-flight live session before
+            // the meeting cache invalidation lands.
+            modeSelector={
+              meeting.status === "scheduled" && session.state.phase === "idle" ? (
+                <RecordingModeSelector value={session.state.mode} onChange={session.setMode} />
+              ) : undefined
+            }
             captureIndicator={
               <CaptureIndicator
                 streamStatus={indicatorStreamStatus}
@@ -352,7 +366,19 @@ export function MeetingDetail() {
           </Dialog>
         )}
 
-        {meeting && <HeadphonesHint visible={meeting.status === "scheduled"} />}
+        {/* Slice-27 D6: only show the headphone callout when dual-channel
+            capture is selected — single mode has no echo loop risk. Also
+            hide once the session has started (the callout is pre-flight
+            advice, not an in-meeting reminder). */}
+        {meeting && (
+          <HeadphonesHint
+            visible={
+              meeting.status === "scheduled" &&
+              session.state.phase === "idle" &&
+              session.state.mode === "dual"
+            }
+          />
+        )}
         {sessionError && <Alert variant="destructive">{sessionError}</Alert>}
 
         {meeting && (

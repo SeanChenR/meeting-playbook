@@ -95,7 +95,25 @@ export type SessionMessage =
 
 // ─── Client → server message types ─────────────────────────────────────────
 
-export type StartMeetingMessage = { type: "start_meeting"; meeting_id: string };
+/**
+ * Slice-27 (single-channel-recording-entry): recording mode chooses the
+ * capture pipeline before the session opens.
+ *
+ * - `"dual"`  → capture mic (`me`) + BlackHole (`counterparty`). Pre-flight
+ *               requires BlackHole; backend default for missing field.
+ * - `"single"` → capture mic only. Pre-flight skips the BlackHole check.
+ *
+ * Mirrors `RecordingMode` in
+ * `packages/backend/meeting_playbook/sessions/messages.py`. Keep both in
+ * lockstep — the spec Example table is the contract.
+ */
+export type RecordingMode = "dual" | "single";
+
+export type StartMeetingMessage = {
+  type: "start_meeting";
+  meeting_id: string;
+  mode: RecordingMode;
+};
 export type EndMeetingMessage = { type: "end_meeting"; meeting_id: string };
 // Slice-8: button-only path leaves user_question undefined; slice-9 chatbox
 // will populate it with the user's typed prompt.

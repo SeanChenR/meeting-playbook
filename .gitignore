@@ -34,8 +34,10 @@ bun.lockb
 .agents/
 skills-lock.json
 
-# Project artifacts
-recordings/
+# Project artifacts — anchor to repo root so we don't accidentally ignore the
+# backend module at packages/backend/meeting_playbook/recordings/ or the web
+# route at packages/web/src/routes/recordings/.
+/recordings/
 *.db
 *.sqlite
 *.sqlite3

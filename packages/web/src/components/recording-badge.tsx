@@ -30,7 +30,7 @@ export function RecordingBadge({ available }: RecordingBadgeProps) {
           aria-hidden
           className={
             available
-              ? "inline-block h-2 w-2 rounded-full bg-(--color-success, #22c55e)"
+              ? "inline-block h-2 w-2 rounded-full bg-(--color-success)"
               : "inline-block h-2 w-2 rounded-full bg-(--color-muted-foreground)"
           }
         />

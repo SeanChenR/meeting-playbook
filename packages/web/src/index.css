@@ -26,18 +26,20 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * Meeting Playbook — Design tokens
+ * Meeting Playbook — Design tokens (Aura family)
  *
- * Slice ui-overhaul-claude-design Decision 3:
- *   Light theme: 紫羅蘭主色 (primary-hue 280)
- *   Dark theme:  暖橘主色 (primary-hue-dark 50)
+ * Change `ui-overhaul-aura-tokens` rewrites the token catalogue to match
+ * DESIGN.md §2 / §3 / §4. Both themes anchor to the violet hue family
+ * (primary-hue 290); accent is an independent magenta; me=blue (hue 220)
+ * and them=magenta (hue 320) decouple from `--primary-hue` so the speaker
+ * semantic stays invariant when design-canvas tunes primary.
  *
  * Tokens live as CSS variables on `:root` / `[data-theme="light"|"dark"]`
  * blocks; Tailwind v4 consumes them via the `text-(--color-primary)`
  * arbitrary-value syntax already used throughout the app.
  *
- * No raw hex values appear outside this file (per ui-design-system spec
- * requirement "no raw hex appears in component class strings").
+ * No raw hex literals appear outside this file or the test allowlist
+ * (`packages/web/src/lib/tokens.test.ts`) — see DESIGN.md §5.
  * ───────────────────────────────────────────────────────────────────────── */
 
 :root {
@@ -68,24 +70,28 @@
   --space-6: 32px;
   --space-7: 48px;
 
-  /* Radii (tweakable via [data-radius]) */
+  /* Radii — sharp 4/6/8/12 base per DESIGN.md `rounded`. The knob
+   * variants `[data-radius="sharp"]` / `[data-radius="soft"]` ride on
+   * top so design-canvas can A/B without rebuilding. */
   --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
   --radius-pill: 999px;
 
-  /* Hue knobs (tweakable via design-canvas) */
-  --primary-hue: 280; /* light: violet */
-  --primary-hue-dark: 50; /* dark: warm orange */
+  /* Hue knobs (tweakable via design-canvas). Both themes share violet 290
+   * by default; me/them tokens are NOT derived from these — they pin to
+   * blue 220 / magenta 320 so the speaker semantic stays invariant. */
+  --primary-hue: 290;
+  --primary-hue-dark: 290;
 
   /* Transcript speaker contrast (tweakable via [data-transcript-contrast]) */
   --me-tint-alpha: 0.07;
-  --them-tint-alpha: 0.10;
+  --them-tint-alpha: 0.1;
 }
 
 /* ──────────────────────────────────────────────
- * LIGHT — 紫色主題（預設）
+ * LIGHT — Aura soft mirror (Mist Bone + violet soft)
  * `:root` carries the light values so a bare html element (no data-theme
  * attribute, e.g. on cold load before ThemeProvider hydrates) still renders
  * light, avoiding a flash of dark.
@@ -94,90 +100,102 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --color-background: oklch(0.985 0.003 var(--primary-hue));
+  /* Surfaces — Mist Bone backdrop, pure white surface to lift cards. */
+  --color-background: oklch(0.97 0.003 295);
   --color-surface: oklch(1 0 0);
-  --color-surface-2: oklch(0.965 0.006 var(--primary-hue));
-  --color-surface-3: oklch(0.93 0.012 var(--primary-hue));
+  --color-surface-2: oklch(0.91 0.006 295);
+  --color-surface-3: oklch(0.85 0.008 295);
 
-  --color-foreground: oklch(0.18 0.02 var(--primary-hue));
-  --color-muted-foreground: oklch(0.5 0.025 var(--primary-hue));
-  --color-subtle-foreground: oklch(0.68 0.02 var(--primary-hue));
+  --color-foreground: oklch(0.2 0.015 290);
+  --color-muted-foreground: oklch(0.45 0.018 290);
+  --color-subtle-foreground: oklch(0.6 0.015 290);
 
-  --color-border: oklch(0.91 0.008 var(--primary-hue));
-  --color-border-strong: oklch(0.82 0.015 var(--primary-hue));
+  --color-border: oklch(0.82 0.008 290);
+  --color-border-strong: oklch(0.7 0.012 290);
 
-  --color-primary: oklch(0.55 0.18 var(--primary-hue));
-  --color-primary-hover: oklch(0.5 0.19 var(--primary-hue));
-  --color-primary-soft: oklch(0.95 0.04 var(--primary-hue));
-  --color-primary-soft-2: oklch(0.88 0.07 var(--primary-hue));
+  /* Primary — Aura Violet Soft (#8464C6). Tuned softer than dark vibrant
+   * Aura Purple so it doesn't vibrate on a near-white background. */
+  --color-primary: oklch(0.5 0.18 var(--primary-hue));
+  --color-primary-hover: oklch(0.46 0.19 var(--primary-hue));
+  --color-primary-soft: oklch(0.92 0.04 var(--primary-hue));
+  --color-primary-soft-2: oklch(0.85 0.07 var(--primary-hue));
   --color-primary-foreground: oklch(1 0 0);
 
-  /* Slice-7 / slice-3 compat — kept so existing utilities keep resolving. */
+  /* Slice-7 / slice-3 compat — keep so existing utilities keep resolving. */
   --color-card: var(--color-surface);
   --color-card-foreground: var(--color-foreground);
   --color-muted: var(--color-surface-2);
   --color-input: var(--color-border);
   --color-ring: var(--color-primary);
 
-  /* Slice meetings-ux-revamp Decision 1: secondary is its own teal hue
-     (195) — not a surface-2 alias. Roughly opposite both light primary
-     (purple 280) and dark primary (orange 50) on the oklch wheel. */
-  --color-secondary: oklch(0.62 0.12 195);
-  --color-secondary-foreground: oklch(1 0 0);
+  /* Secondary — Mint Soft (#54C59F), DESIGN.md §2. Independent of primary. */
+  --color-secondary: oklch(0.74 0.12 155);
+  --color-secondary-foreground: oklch(0.2 0.015 290);
 
-  --color-accent: var(--color-primary);
-  --color-accent-foreground: var(--color-primary-foreground);
+  /* Accent — Mauve Soft (#C17AC8), DESIGN.md §2 D5. NOT a primary alias. */
+  --color-accent: oklch(0.55 0.15 320);
+  --color-accent-foreground: oklch(1 0 0);
 
-  /* Transcript speakers — 主色淺 (me) / 主色深飽和 (counterparty) */
-  --color-me: oklch(0.65 0.1 var(--primary-hue));
-  --color-me-soft: oklch(0.96 0.025 var(--primary-hue));
-  --color-them: oklch(0.45 0.2 var(--primary-hue));
-  --color-them-soft: oklch(0.93 0.05 var(--primary-hue));
+  /* Speakers — me=Steel Blue (hue 220) / them=Mauve Soft (hue 320).
+   * Decoupled from --primary-hue per DESIGN.md §2 + D2. */
+  --color-me: oklch(0.65 0.1 220);
+  --color-me-soft: oklch(0.92 0.04 220);
+  --color-them: oklch(0.55 0.15 320);
+  --color-them-soft: oklch(0.9 0.05 320);
 
-  /* Semantic */
-  --color-success: oklch(0.62 0.15 155);
-  --color-success-soft: oklch(0.95 0.04 155);
-  --color-warning: oklch(0.72 0.15 75);
-  --color-warning-soft: oklch(0.96 0.05 75);
-  --color-danger: oklch(0.58 0.2 25);
-  --color-danger-soft: oklch(0.96 0.04 25);
+  /* Semantic — DESIGN.md §2 light mirror. */
+  --color-success: oklch(0.74 0.12 155);
+  --color-success-soft: oklch(0.94 0.05 155);
+  --color-warning: oklch(0.73 0.1 75);
+  --color-warning-soft: oklch(0.95 0.05 75);
+  --color-danger: oklch(0.58 0.15 25);
+  --color-danger-soft: oklch(0.94 0.04 25);
   --color-destructive: var(--color-danger);
   --color-destructive-foreground: oklch(1 0 0);
 
-  --color-recording: oklch(0.58 0.2 25);
+  /* Info — Steel Blue, value-equal to --color-me but declared independently
+   * so the speaker semantic and the status semantic can diverge later. */
+  --color-info: oklch(0.65 0.1 220);
+  --color-info-soft: oklch(0.92 0.04 220);
 
-  --shadow-sm:
-    0 1px 2px rgba(20, 14, 40, 0.04), 0 1px 1px rgba(20, 14, 40, 0.03);
+  --color-recording: oklch(0.58 0.15 25);
+
+  /* Shadows — DESIGN.md `shadow.light`. rgba() is the permitted exception
+   * to "no raw rgb/rgba" since CSS shadow specification has incomplete
+   * oklch support across browsers (D4). */
+  --shadow-sm: 0 1px 2px rgba(20, 14, 40, 0.04);
   --shadow-md:
     0 4px 16px rgba(20, 14, 40, 0.06), 0 1px 3px rgba(20, 14, 40, 0.04);
   --shadow-lg:
     0 12px 32px rgba(20, 14, 40, 0.1), 0 2px 6px rgba(20, 14, 40, 0.06);
-  --shadow-focus: 0 0 0 3px oklch(0.55 0.18 var(--primary-hue) / 0.25);
+  --shadow-focus: 0 0 0 3px oklch(0.5 0.18 var(--primary-hue) / 0.25);
 }
 
 /* ──────────────────────────────────────────────
- * DARK — 暖橘主題
+ * DARK — Aura canonical (Ink Violet + Aura Purple vibrant)
  * ────────────────────────────────────────────── */
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --color-background: oklch(0.14 0.012 var(--primary-hue-dark));
-  --color-surface: oklch(0.18 0.014 var(--primary-hue-dark));
-  --color-surface-2: oklch(0.22 0.015 var(--primary-hue-dark));
-  --color-surface-3: oklch(0.27 0.018 var(--primary-hue-dark));
+  /* Surfaces — Ink Violet base stepping up to Surface Lift. */
+  --color-background: oklch(0.17 0.015 290);
+  --color-surface: oklch(0.21 0.018 290);
+  --color-surface-2: oklch(0.25 0.018 290);
+  --color-surface-3: oklch(0.29 0.02 290);
 
-  --color-foreground: oklch(0.96 0.012 var(--primary-hue-dark));
-  --color-muted-foreground: oklch(0.7 0.02 var(--primary-hue-dark));
-  --color-subtle-foreground: oklch(0.55 0.018 var(--primary-hue-dark));
+  --color-foreground: oklch(0.93 0.003 295);
+  --color-muted-foreground: oklch(0.75 0.008 295);
+  --color-subtle-foreground: oklch(0.6 0.01 295);
 
-  --color-border: oklch(0.3 0.018 var(--primary-hue-dark));
-  --color-border-strong: oklch(0.4 0.022 var(--primary-hue-dark));
+  --color-border: oklch(0.32 0.018 290);
+  --color-border-strong: oklch(0.4 0.022 290);
 
-  --color-primary: oklch(0.72 0.18 var(--primary-hue-dark));
-  --color-primary-hover: oklch(0.77 0.19 var(--primary-hue-dark));
-  --color-primary-soft: oklch(0.3 0.08 var(--primary-hue-dark));
-  --color-primary-soft-2: oklch(0.4 0.12 var(--primary-hue-dark));
-  --color-primary-foreground: oklch(0.14 0.012 var(--primary-hue-dark));
+  /* Primary — Aura Purple vibrant (#A277FF). */
+  --color-primary: oklch(0.65 0.22 var(--primary-hue-dark));
+  --color-primary-hover: oklch(0.72 0.22 var(--primary-hue-dark));
+  --color-primary-soft: oklch(0.36 0.1 var(--primary-hue-dark));
+  --color-primary-soft-2: oklch(0.46 0.16 var(--primary-hue-dark));
+  --color-primary-foreground: oklch(0.17 0.015 290);
 
   --color-card: var(--color-surface);
   --color-card-foreground: var(--color-foreground);
@@ -185,34 +203,85 @@
   --color-input: var(--color-border);
   --color-ring: var(--color-primary);
 
-  /* Slice meetings-ux-revamp Decision 1: secondary stays teal (195) in
-     dark theme, brighter L for readability against the dark background. */
-  --color-secondary: oklch(0.7 0.13 195);
-  --color-secondary-foreground: oklch(0.14 0.012 var(--primary-hue-dark));
+  /* Secondary — Cyber Green (#61FFCA), DESIGN.md §2 dark. */
+  --color-secondary: oklch(0.92 0.18 155);
+  --color-secondary-foreground: oklch(0.17 0.015 290);
 
-  --color-accent: var(--color-primary);
-  --color-accent-foreground: var(--color-primary-foreground);
+  /* Accent — Magenta Bloom (#F694FF), DESIGN.md §2 D5. */
+  --color-accent: oklch(0.77 0.22 320);
+  --color-accent-foreground: oklch(0.17 0.015 290);
 
-  --color-me: oklch(0.78 0.1 var(--primary-hue-dark));
-  --color-me-soft: oklch(0.24 0.025 var(--primary-hue-dark));
-  --color-them: oklch(0.65 0.2 var(--primary-hue-dark));
-  --color-them-soft: oklch(0.3 0.08 var(--primary-hue-dark));
+  /* Speakers — me=Glacier Blue (hue 220) / them=Magenta Bloom (hue 320).
+   * Decoupled from --primary-hue-dark per DESIGN.md §2 + D2. */
+  --color-me: oklch(0.86 0.12 220);
+  --color-me-soft: oklch(0.32 0.06 220);
+  --color-them: oklch(0.77 0.22 320);
+  --color-them-soft: oklch(0.36 0.1 320);
 
-  --color-success: oklch(0.72 0.16 155);
-  --color-success-soft: oklch(0.28 0.06 155);
-  --color-warning: oklch(0.78 0.15 75);
-  --color-warning-soft: oklch(0.3 0.06 75);
+  /* Semantic — DESIGN.md §2 dark vibrant. */
+  --color-success: oklch(0.92 0.18 155);
+  --color-success-soft: oklch(0.32 0.08 155);
+  --color-warning: oklch(0.85 0.12 75);
+  --color-warning-soft: oklch(0.34 0.07 75);
   --color-danger: oklch(0.68 0.2 25);
-  --color-danger-soft: oklch(0.28 0.06 25);
+  --color-danger-soft: oklch(0.32 0.08 25);
   --color-destructive: var(--color-danger);
-  --color-destructive-foreground: oklch(0.96 0.012 var(--primary-hue-dark));
+  --color-destructive-foreground: oklch(0.93 0.003 295);
+
+  /* Info — value-equal to me but independent declaration. */
+  --color-info: oklch(0.86 0.12 220);
+  --color-info-soft: oklch(0.32 0.06 220);
 
   --color-recording: oklch(0.68 0.2 25);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-focus: 0 0 0 3px oklch(0.72 0.18 var(--primary-hue-dark) / 0.3);
+  /* Shadows — DESIGN.md `shadow.dark`: inset hairline only, no drop.
+   * Dark mode card/surface separation comes from the background→surface
+   * lightness step (0.17 → 0.21), not from drop shadows. */
+  --shadow-sm: none;
+  --shadow-md: 0 1px 0 rgba(0, 0, 0, 0.3) inset;
+  --shadow-lg:
+    0 0 0 1px rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-focus: 0 0 0 3px oklch(0.65 0.22 var(--primary-hue-dark) / 0.25);
+}
+
+/* ──────────────────────────────────────────────
+ * Sonner Toast — 4 semantic variants via data-attr CSS selectors.
+ *
+ * P1 change `ui-overhaul-aura-tokens` D7 / requirement "Sonner Toaster
+ * SHALL render four semantic colour variants via CSS data-attribute
+ * selectors". Sonner writes `--normal-bg` / `--normal-border` /
+ * `--normal-text` as inline style on `[data-sonner-toast]`; the only
+ * stable override path that survives Sonner's internal rich-colour
+ * mapping is to set these custom properties on the data-type-suffixed
+ * selector. The `<Toaster>` React component is NOT modified here — that
+ * is deferred to P2 `ui-overhaul-primitive-upgrade`.
+ *
+ * Selector source: `node_modules/sonner` — verified against sonner@2.x.
+ * If a Sonner major upgrade changes the data attribute schema, this
+ * block needs revisiting alongside the P2 Toaster component swap.
+ * ────────────────────────────────────────────── */
+[data-sonner-toast][data-type="success"] {
+  --normal-bg: var(--color-success-soft);
+  --normal-border: var(--color-success);
+  --normal-text: var(--color-foreground);
+}
+
+[data-sonner-toast][data-type="error"] {
+  --normal-bg: var(--color-danger-soft);
+  --normal-border: var(--color-danger);
+  --normal-text: var(--color-foreground);
+}
+
+[data-sonner-toast][data-type="warning"] {
+  --normal-bg: var(--color-warning-soft);
+  --normal-border: var(--color-warning);
+  --normal-text: var(--color-foreground);
+}
+
+[data-sonner-toast][data-type="info"] {
+  --normal-bg: var(--color-info-soft);
+  --normal-border: var(--color-info);
+  --normal-text: var(--color-foreground);
 }
 
 /* ──────────────────────────────────────────────
@@ -250,6 +319,10 @@
   --space-6: 36px;
 }
 
+/* Radius knobs — base scale is sharp 4/6/8/12 per DESIGN.md `rounded`.
+ * `[data-radius="sharp"]` goes one step sharper for an even more editor-
+ * like feel; `[data-radius="soft"]` keeps the legacy softer values for
+ * existing usage sites that opted into the softer variant. */
 [data-radius="sharp"] {
   --radius-sm: 2px;
   --radius-md: 4px;

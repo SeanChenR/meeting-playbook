@@ -108,40 +108,42 @@ export interface BatchDownloadPayload {
 }
 
 /**
- * Trigger a streaming download of the selected recordings as a ZIP. The
- * browser saves the file using the filename embedded in the response's
- * Content-Disposition header (falls back to `recordings.zip` when absent).
+ * Trigger a streaming download of the selected recordings as a ZIP.
+ *
+ * Flow (gemini PR #48 HIGH + MEDIUM feedback):
+ *   1. POST to /preflight to surface 4xx error envelopes (forbidden / expired
+ *      / invalid_stream / batch_oversize) as JS exceptions before the browser
+ *      navigates to a JSON error page.
+ *   2. If preflight passes, point a hidden anchor at the GET endpoint so the
+ *      browser streams the response directly to disk. This avoids buffering
+ *      the multi-GiB zip body into JS memory via `resp.blob()` + `Blob` URL,
+ *      which would OOM on mobile / low-RAM devices when the batch approaches
+ *      the 2 GiB server cap.
+ *   3. Schedule anchor removal on a short timeout so Firefox has time to
+ *      initiate the download before the element is torn down.
  */
 export async function batchDownloadRecordings(payload: BatchDownloadPayload): Promise<void> {
-  const resp = await fetch("/api/recordings/batch-download", {
+  const preflight = await fetch("/api/recordings/batch-download/preflight", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!resp.ok) throw await _envelopeError(resp);
+  if (!preflight.ok) throw await _envelopeError(preflight);
 
-  const blob = await resp.blob();
-  const filename = _parseFilename(resp.headers.get("content-disposition")) ?? "recordings.zip";
-  _saveBlobToDisk(blob, filename);
-}
-
-function _parseFilename(header: string | null): string | null {
-  if (!header) return null;
-  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
-  return match?.[1] ?? null;
-}
-
-function _saveBlobToDisk(blob: Blob, filename: string): void {
   if (typeof document === "undefined") return;
-  const url = URL.createObjectURL(blob);
+
+  const ids = encodeURIComponent(payload.recording_ids.join(","));
+  const url = `/api/recordings/batch-download?ids=${ids}`;
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
   a.style.display = "none";
   document.body.appendChild(a);
   a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  // Delay cleanup so Firefox can begin the download before the anchor is
+  // detached — gemini MEDIUM.
+  setTimeout(() => {
+    a.remove();
+  }, 100);
 }
 
 export function useBatchDownloadMutation() {

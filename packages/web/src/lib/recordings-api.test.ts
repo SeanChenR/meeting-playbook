@@ -6,7 +6,9 @@
  *   - GET URL composition with filter / pagination params
  *   - Happy-path JSON decoding into `RecordingListResponse`
  *   - Backend `{error_code, message}` envelope is surfaced via `RecordingApiError`
- *     for 410 / 413 / 422 / 403 batch-download failure modes
+ *     for 410 / 413 / 422 / 403 batch-download failure modes (POST /preflight)
+ *   - Happy-path batch download routes through POST /preflight + anchor-click
+ *     GET so the browser streams to disk (gemini PR #48 HIGH + MEDIUM)
  *   - `recordingAudioUrl` mirrors the existing per-meeting audio endpoint path
  */
 
@@ -20,8 +22,6 @@ import {
 } from "./recordings-api";
 
 const originalFetch = globalThis.fetch;
-const originalCreateObjectURL = globalThis.URL?.createObjectURL;
-const originalRevokeObjectURL = globalThis.URL?.revokeObjectURL;
 
 let fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
 
@@ -53,25 +53,10 @@ function installFetch(specs: MockSpec[]): void {
 
 beforeEach(() => {
   fetchCalls = [];
-  // jsdom in bun-test does not expose URL.createObjectURL by default;
-  // monkey-patch a no-op so the download helper can run.
-  if (typeof URL !== "undefined") {
-    (URL as unknown as { createObjectURL: (b: Blob) => string }).createObjectURL = () =>
-      "blob://test";
-    (URL as unknown as { revokeObjectURL: (u: string) => void }).revokeObjectURL = () => {};
-  }
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  if (typeof URL !== "undefined") {
-    if (originalCreateObjectURL)
-      (URL as unknown as { createObjectURL: typeof URL.createObjectURL }).createObjectURL =
-        originalCreateObjectURL;
-    if (originalRevokeObjectURL)
-      (URL as unknown as { revokeObjectURL: typeof URL.revokeObjectURL }).revokeObjectURL =
-        originalRevokeObjectURL;
-  }
 });
 
 describe("recordingsListQueryOptions", () => {
@@ -170,11 +155,13 @@ describe("recordingAudioUrl", () => {
   });
 });
 
-describe("batchDownloadRecordings error envelope mapping", () => {
-  test("410 → recording.retention_expired surfaces in RecordingApiError", async () => {
+describe("batchDownloadRecordings preflight error mapping", () => {
+  // The frontend POSTs to /preflight first so 4xx envelopes surface as JS
+  // exceptions before the browser ever navigates to the streaming GET URL.
+  test("410 recording.retention_expired surfaces in RecordingApiError", async () => {
     installFetch([
       {
-        url: "/api/recordings/batch-download",
+        url: "/api/recordings/batch-download/preflight",
         status: 410,
         body: { error_code: "recording.retention_expired", message: "expired" },
       },
@@ -188,10 +175,10 @@ describe("batchDownloadRecordings error envelope mapping", () => {
     }
   });
 
-  test("413 → recording.batch_oversize surfaces in RecordingApiError", async () => {
+  test("413 recording.batch_oversize surfaces in RecordingApiError", async () => {
     installFetch([
       {
-        url: "/api/recordings/batch-download",
+        url: "/api/recordings/batch-download/preflight",
         status: 413,
         body: { error_code: "recording.batch_oversize", message: "too big" },
       },
@@ -204,10 +191,10 @@ describe("batchDownloadRecordings error envelope mapping", () => {
     }
   });
 
-  test("422 → recording.invalid_stream surfaces in RecordingApiError", async () => {
+  test("422 recording.invalid_stream surfaces in RecordingApiError", async () => {
     installFetch([
       {
-        url: "/api/recordings/batch-download",
+        url: "/api/recordings/batch-download/preflight",
         status: 422,
         body: { error_code: "recording.invalid_stream", message: "bad stream" },
       },
@@ -220,10 +207,10 @@ describe("batchDownloadRecordings error envelope mapping", () => {
     }
   });
 
-  test("403 → recording.forbidden surfaces in RecordingApiError", async () => {
+  test("403 recording.forbidden surfaces in RecordingApiError", async () => {
     installFetch([
       {
-        url: "/api/recordings/batch-download",
+        url: "/api/recordings/batch-download/preflight",
         status: 403,
         body: { error_code: "recording.forbidden", message: "nope" },
       },
@@ -236,27 +223,28 @@ describe("batchDownloadRecordings error envelope mapping", () => {
     }
   });
 
-  test("happy path posts payload, triggers blob save, calls anchor click", async () => {
+  test("happy path posts to /preflight then anchor-clicks the streaming GET URL", async () => {
     installFetch([
       {
-        url: "/api/recordings/batch-download",
+        url: "/api/recordings/batch-download/preflight",
         status: 200,
-        bodyText: "PKfake-zip",
-        headers: {
-          "content-type": "application/zip",
-          "content-disposition": 'attachment; filename="recordings-20260518-1601.zip"',
-        },
+        body: { ok: true, archive_name: "recordings-20260518-1601.zip", entry_count: 2 },
       },
     ]);
 
-    // Stub document.createElement so we can capture the synthesized <a>.
+    // Capture the synthesized anchor so we can assert on its href + click.
     const originalCreateElement = document.createElement.bind(document);
-    const created: { download?: string; href?: string }[] = [];
+    const created: HTMLAnchorElement[] = [];
+    let clickCount = 0;
     document.createElement = ((tag: string) => {
       if (tag === "a") {
         const fake = originalCreateElement("a") as HTMLAnchorElement;
+        const realClick = fake.click.bind(fake);
+        fake.click = () => {
+          clickCount += 1;
+          realClick();
+        };
         created.push(fake);
-        // jsdom anchors don't fire navigation, so click() is a noop.
         return fake;
       }
       return originalCreateElement(tag);
@@ -264,9 +252,10 @@ describe("batchDownloadRecordings error envelope mapping", () => {
 
     await batchDownloadRecordings({ recording_ids: ["r_a", "r_b"] });
 
-    expect(fetchCalls[0]?.url).toBe("/api/recordings/batch-download");
+    expect(fetchCalls[0]?.url).toBe("/api/recordings/batch-download/preflight");
     expect(fetchCalls[0]?.init?.method).toBe("POST");
-    expect(created[0]?.download).toBe("recordings-20260518-1601.zip");
+    expect(clickCount).toBe(1);
+    expect(created[0]?.getAttribute("href")).toBe("/api/recordings/batch-download?ids=r_a%2Cr_b");
 
     document.createElement = originalCreateElement;
   });

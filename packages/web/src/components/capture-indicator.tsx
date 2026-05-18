@@ -25,6 +25,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Stream } from "../lib/session-ws";
 import { cn } from "../lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export type StreamPillState = "active" | "silence" | "stopped";
 
@@ -94,49 +95,53 @@ export function CaptureIndicator({
         const rowBars = bars[stream];
 
         return (
-          <div
-            key={stream}
-            data-testid="capture-indicator"
-            data-stream={stream}
-            data-state={state}
-            className="flex items-center gap-2"
-          >
-            <span
-              aria-hidden
-              className={cn(
-                "inline-block size-2 rounded-full",
-                isActive
-                  ? "bg-(--color-destructive) animate-pulse"
-                  : isWarning
-                    ? "bg-(--color-destructive)"
-                    : "bg-(--color-muted-foreground)",
-              )}
-            />
-            <span className="min-w-[100px] text-xs text-(--color-foreground)">
-              {_label(stream)}
-            </span>
-            <div className="flex h-3 flex-1 items-end gap-0.5">
-              {rowBars.map((b, i) => (
+          <Tooltip key={stream}>
+            <TooltipTrigger asChild>
+              <div
+                data-testid="capture-indicator"
+                data-stream={stream}
+                data-state={state}
+                className="flex items-center gap-2"
+              >
                 <span
-                  key={i}
                   aria-hidden
-                  data-testid="capture-indicator-bar"
                   className={cn(
-                    "w-0.5 rounded-[1px] transition-[height,opacity] duration-200",
+                    "inline-block size-2 rounded-full",
                     isActive
-                      ? "bg-(--color-destructive)"
-                      : isMuted
-                        ? "bg-(--color-border)"
-                        : "bg-(--color-destructive)/60",
+                      ? "bg-(--color-destructive) animate-pulse"
+                      : isWarning
+                        ? "bg-(--color-destructive)"
+                        : "bg-(--color-muted-foreground)",
                   )}
-                  style={{
-                    height: isActive ? `${b * 1.6}px` : "1px",
-                    opacity: isActive ? 0.55 + b / 12 : 1,
-                  }}
                 />
-              ))}
-            </div>
-          </div>
+                <span className="min-w-[100px] text-xs text-(--color-foreground)">
+                  {_label(stream)}
+                </span>
+                <div className="flex h-3 flex-1 items-end gap-0.5">
+                  {rowBars.map((b, i) => (
+                    <span
+                      key={i}
+                      aria-hidden
+                      data-testid="capture-indicator-bar"
+                      className={cn(
+                        "w-0.5 rounded-[1px] transition-[height,opacity] duration-200",
+                        isActive
+                          ? "bg-(--color-destructive)"
+                          : isMuted
+                            ? "bg-(--color-border)"
+                            : "bg-(--color-destructive)/60",
+                      )}
+                      style={{
+                        height: isActive ? `${b * 1.6}px` : "1px",
+                        opacity: isActive ? 0.55 + b / 12 : 1,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>{t("ui.tooltip.capture")}</TooltipContent>
+          </Tooltip>
         );
       })}
     </div>

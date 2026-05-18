@@ -14,11 +14,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { localizedErrorMessage } from "@/lib/i18n-errors";
@@ -162,18 +163,32 @@ export function MeetingEditForm({ meeting, onSaved, onCancel }: MeetingEditFormP
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="meeting-edit-start">{t("meetings.edit.scheduledStart")}</Label>
-          <Input
-            id="meeting-edit-start"
-            type="datetime-local"
-            {...form.register("scheduled_start_at")}
+          <Controller
+            control={form.control}
+            name="scheduled_start_at"
+            render={({ field }) => (
+              <DateTimePicker
+                id="meeting-edit-start"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+              />
+            )}
           />
         </div>
         <div className="space-y-1">
           <Label htmlFor="meeting-edit-end">{t("meetings.edit.scheduledEnd")}</Label>
-          <Input
-            id="meeting-edit-end"
-            type="datetime-local"
-            {...form.register("scheduled_end_at")}
+          <Controller
+            control={form.control}
+            name="scheduled_end_at"
+            render={({ field }) => (
+              <DateTimePicker
+                id="meeting-edit-end"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+              />
+            )}
           />
           {endErrorLocalized ? (
             <p role="alert" className="text-xs text-(--color-destructive)">

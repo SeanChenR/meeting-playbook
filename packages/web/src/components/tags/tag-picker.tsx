@@ -16,12 +16,14 @@
  *   row appears. Clicking it issues `POST /api/tags` then chains
  *   `POST /api/meetings/{id}/tags` with the returned id.
  *
- * Popover backend: Radix `react-popover` rendered in a Portal so the panel
- * escapes any `overflow-hidden` ancestor (e.g. the meetings-kanban column
- * that previously clipped the popover and pushed a horizontal scrollbar).
+ * Popover backend: ui-overhaul-primitive-upgrade task 3 — barrel from
+ * `@/components/ui/popover` (radix Popover + animate-ui motion). Portal
+ * is wrapped inside `<PopoverContent>` so the panel still escapes any
+ * `overflow-hidden` ancestor (e.g. the meetings-kanban column that
+ * previously clipped the popover and pushed a horizontal scrollbar).
  */
 
-import * as Popover from "@radix-ui/react-popover";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -114,8 +116,8 @@ export function TagPicker({ meetingId, currentTags, onAttached, onDetached }: Ta
   }
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <button
           type="button"
           data-testid="tag-picker-trigger"
@@ -127,76 +129,65 @@ export function TagPicker({ meetingId, currentTags, onAttached, onDetached }: Ta
         >
           {t("tags.picker.trigger")}
         </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
-          data-testid="tag-picker-panel"
-          align="end"
-          sideOffset={6}
-          collisionPadding={12}
-          // `data-side` flips automatically — top/bottom + left/right by
-          // available viewport room. Portal output sits on `document.body`
-          // so kanban-column `overflow-hidden` no longer clips this panel.
-          className={cn(
-            "z-50 w-64 rounded-md border border-(--color-border)",
-            "bg-(--color-card) p-2 shadow-lg",
-            "data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-            "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",
+      </PopoverTrigger>
+      <PopoverContent
+        data-testid="tag-picker-panel"
+        align="end"
+        sideOffset={6}
+        collisionPadding={12}
+        className={cn("w-64 p-2")}
+      >
+        <input
+          ref={inputRef}
+          data-testid="tag-picker-search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("tags.picker.placeholder")}
+          className="mb-2 w-full rounded-sm border border-(--color-border) bg-(--color-card) px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-(--color-primary)/40"
+        />
+        <ul className="max-h-60 overflow-y-auto" role="listbox">
+          {filtered.length === 0 && !showCreateRow && (
+            <li className="px-2 py-1 text-xs text-(--color-muted-foreground)">
+              {t("tags.picker.noResults")}
+            </li>
           )}
-        >
-          <input
-            ref={inputRef}
-            data-testid="tag-picker-search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("tags.picker.placeholder")}
-            className="mb-2 w-full rounded-sm border border-(--color-border) bg-(--color-card) px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-(--color-primary)/40"
-          />
-          <ul className="max-h-60 overflow-y-auto" role="listbox">
-            {filtered.length === 0 && !showCreateRow && (
-              <li className="px-2 py-1 text-xs text-(--color-muted-foreground)">
-                {t("tags.picker.noResults")}
-              </li>
-            )}
-            {filtered.map((tag) => {
-              const isAttached = attachedIds.has(tag.id);
-              return (
-                <li
-                  key={tag.id}
-                  data-testid={`tag-picker-row-${tag.id}`}
-                  data-attached={isAttached}
-                  role="option"
-                  aria-selected={isAttached}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-sm px-2 py-1 hover:bg-(--color-muted)"
-                  onClick={() => {
-                    void _toggleAttach(tag);
-                  }}
-                >
-                  <TagChip name={tag.name} color={tag.color} />
-                  {isAttached && (
-                    <span className="text-xs text-(--color-primary)" aria-hidden>
-                      ✓
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-            {showCreateRow && (
+          {filtered.map((tag) => {
+            const isAttached = attachedIds.has(tag.id);
+            return (
               <li
-                data-testid="tag-picker-create-row"
+                key={tag.id}
+                data-testid={`tag-picker-row-${tag.id}`}
+                data-attached={isAttached}
                 role="option"
-                className="cursor-pointer rounded-sm px-2 py-1 text-sm text-(--color-foreground) hover:bg-(--color-muted)"
+                aria-selected={isAttached}
+                className="flex cursor-pointer items-center justify-between gap-2 rounded-sm px-2 py-1 hover:bg-(--color-muted)"
                 onClick={() => {
-                  void _createAndAttach();
+                  void _toggleAttach(tag);
                 }}
               >
-                {t("tags.picker.create", { query: trimmedQuery })}
+                <TagChip name={tag.name} color={tag.color} />
+                {isAttached && (
+                  <span className="text-xs text-(--color-primary)" aria-hidden>
+                    ✓
+                  </span>
+                )}
               </li>
-            )}
-          </ul>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+            );
+          })}
+          {showCreateRow && (
+            <li
+              data-testid="tag-picker-create-row"
+              role="option"
+              className="cursor-pointer rounded-sm px-2 py-1 text-sm text-(--color-foreground) hover:bg-(--color-muted)"
+              onClick={() => {
+                void _createAndAttach();
+              }}
+            >
+              {t("tags.picker.create", { query: trimmedQuery })}
+            </li>
+          )}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -1,18 +1,15 @@
 /**
- * Toaster — sonner wrapper bound to the project theme tokens.
- * Slice ui-overhaul-claude-design task 1.3.
+ * Toaster — sonner wrapper bound to the Aura theme tokens.
+ * ui-overhaul-primitive-upgrade task 8 (Decision 2: 4 semantic variants).
  *
- * `<Toaster />` MUST be mounted once at the app root (ProtectedShell wraps
- * it). Callsites trigger toasts via `import { toast } from "sonner"` —
- * we re-export `toast` here so consumers can stay on the project barrel
- * instead of importing from the sonner package directly.
+ * it). Callsites use the semantic helpers via the re-exported `toast`:
+ *   toast.info("...", { description: "..." })
+ *   toast.success("...") / .warning(...) / .error(...)
  *
- * P1 `ui-overhaul-aura-tokens` D7 note: the 4 semantic toast variants
- * (success / error / warning / info) are coloured via CSS data-attribute
- * selectors in `packages/web/src/index.css`, NOT via this component's
- * props. P1 is a CSS-only override; the component's JSX, motion, and
- * behaviour are deliberately untouched. The full component swap to
- * animate-ui Toaster lands in P2 `ui-overhaul-primitive-upgrade`.
+ * Stripe colour per variant is wired via `[data-sonner-toast][data-type=...]`
+ * attribute selectors in `index.css` (set by P1 `ui-overhaul-aura-tokens`
+ * D7) — keeps raw token refs out of component className strings. P2 layers
+ * the semantic helper API + the surface/border/shadow token bindings below.
  */
 
 import { Toaster as SonnerToaster, toast } from "sonner";
@@ -29,7 +26,7 @@ export function Toaster(props: React.ComponentProps<typeof SonnerToaster>) {
       toastOptions={{
         classNames: {
           toast:
-            "group toast border border-(--color-border) bg-(--color-card) text-(--color-foreground) shadow-md",
+            "group toast relative overflow-hidden border border-(--color-border) bg-(--color-surface) text-(--color-foreground) shadow-(--shadow-lg)",
           description: "text-(--color-muted-foreground)",
           actionButton: "bg-(--color-primary) text-(--color-primary-foreground)",
           cancelButton: "bg-(--color-muted) text-(--color-muted-foreground)",

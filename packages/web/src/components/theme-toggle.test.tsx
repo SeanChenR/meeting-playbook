@@ -1,10 +1,9 @@
 /**
- * ThemeToggle tests — slice ui-overhaul-claude-design task 1.4.
+ * ThemeToggle tests — ui-overhaul-primitive-upgrade task 7 (Decision 4).
  *
- * Three cases per task description:
- *   - render
- *   - clicking dark → setTheme("dark")
- *   - clicking system → setTheme("system")
+ * Two-state toggle (dark ↔ light); `system` is still honoured at fresh-load
+ * via ThemeProvider's matchMedia detection but the UI no longer surfaces
+ * a system entry.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -15,7 +14,6 @@ import { ThemeProvider } from "../lib/theme-provider";
 import { ThemeToggle } from "./theme-toggle";
 
 beforeEach(() => {
-  // Stub matchMedia so happy-dom doesn't blow up inside ThemeProvider.
   // @ts-expect-error — overriding for tests
   window.matchMedia = (_q: string) => ({
     matches: false,
@@ -39,28 +37,35 @@ describe("ThemeToggle", () => {
     expect(screen.getByTestId("theme-toggle")).toBeDefined();
   });
 
-  test("clicking 'dark' sets theme=dark and flips data-theme", async () => {
+  test("first click on light flips to dark + persists", async () => {
     render(
       <ThemeProvider initialTheme="light">
         <ThemeToggle />
       </ThemeProvider>,
     );
     await userEvent.click(screen.getByTestId("theme-toggle"));
-    await userEvent.click(await screen.findByTestId("theme-option-dark"));
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(window.localStorage.getItem("mp-theme")).toBe("dark");
   });
 
-  test("clicking 'system' sets theme=system and resolves against matchMedia", async () => {
+  test("second click flips back to light", async () => {
     render(
       <ThemeProvider initialTheme="dark">
         <ThemeToggle />
       </ThemeProvider>,
     );
     await userEvent.click(screen.getByTestId("theme-toggle"));
-    await userEvent.click(await screen.findByTestId("theme-option-system"));
-    // matchMedia stub returns matches:false → system resolves to light
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
-    expect(window.localStorage.getItem("mp-theme")).toBe("system");
+    expect(window.localStorage.getItem("mp-theme")).toBe("light");
+  });
+
+  test("toggle never writes 'system' to localStorage", async () => {
+    render(
+      <ThemeProvider initialTheme="dark">
+        <ThemeToggle />
+      </ThemeProvider>,
+    );
+    await userEvent.click(screen.getByTestId("theme-toggle"));
+    expect(window.localStorage.getItem("mp-theme")).not.toBe("system");
   });
 });

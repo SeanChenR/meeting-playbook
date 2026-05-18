@@ -105,9 +105,18 @@ describe("MeetingEditForm", () => {
       ),
     );
 
-    fireEvent.change(screen.getByLabelText(/預定結束/) as HTMLInputElement, {
-      // Earlier than scheduled_start_at (2026-06-15 14:00).
-      target: { value: "2026-06-15T13:00" },
+    // Slice ui-overhaul-primitive-upgrade task 9: end field is now a
+    // DateTimePicker composed of a date popover + time input. Open the
+    // calendar popover and click the "today" link so end has a date that
+    // happens to be before `meeting.scheduled_start_at` (2026-06-15);
+    // any time-change after that will keep end < start.
+    fireEvent.click(screen.getByTestId("meeting-edit-end-date") as HTMLElement);
+    // The calendar's `today` button is rendered as a localized link;
+    // grab by text via the i18n key fallback ("今天" in zh-TW / "Today" in en).
+    const todayLink = await screen.findByText("今天");
+    fireEvent.click(todayLink);
+    fireEvent.change(screen.getByTestId("meeting-edit-end-time") as HTMLInputElement, {
+      target: { value: "13:00" },
     });
     fireEvent.click(screen.getByRole("button", { name: /儲存/ }));
 

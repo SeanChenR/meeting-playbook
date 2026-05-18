@@ -16,6 +16,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
+import { Loading } from "./loading";
+import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { Progress } from "./progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
 import { Skeleton } from "./skeleton";
 import { Toaster } from "./sonner";
@@ -78,5 +81,29 @@ describe("ui primitives smoke", () => {
         </ThemeProvider>,
       ),
     ).not.toThrow();
+  });
+
+  test("Popover trigger renders via barrel", () => {
+    render(
+      <Popover>
+        <PopoverTrigger data-testid="popover-trigger">open</PopoverTrigger>
+        <PopoverContent>panel</PopoverContent>
+      </Popover>,
+    );
+    expect(screen.getByTestId("popover-trigger")).toBeDefined();
+  });
+
+  test("Progress renders with role=progressbar and value", () => {
+    render(<Progress value={42} aria-label="progress" />);
+    const bar = screen.getByRole("progressbar");
+    expect(bar.getAttribute("aria-valuenow")).toBe("42");
+    expect(bar.getAttribute("aria-label")).toBe("progress");
+  });
+
+  test("Loading renders with aria-label and animation class", () => {
+    render(<Loading aria-label="loading model" />);
+    const node = screen.getByLabelText("loading model");
+    expect(node).toBeDefined();
+    expect(node.className).toContain("mp-loading");
   });
 });

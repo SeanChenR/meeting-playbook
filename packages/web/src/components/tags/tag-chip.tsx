@@ -37,7 +37,11 @@ export function TagChip({ name, color, onRemove, size = "sm" }: TagChipProps) {
       className={cn(
         "inline-flex max-w-full items-center gap-1 rounded-full font-medium leading-none",
         sizeClasses,
-        isDark ? "text-(--color-foreground)" : "text-white",
+        // Tag colors are theme-invariant (fixed palette) — the readable text
+        // colour must NOT swap with the app theme. `text-[#1a1a1a]` matches
+        // the DARK_FG_HEX threshold used in `pickReadableTextColor` for
+        // contrast computation; `text-white` matches LIGHT_FG_HEX.
+        isDark ? "text-[#1a1a1a]" : "text-white",
       )}
       style={{ backgroundColor: color }}
     >
@@ -54,7 +58,7 @@ export function TagChip({ name, color, onRemove, size = "sm" }: TagChipProps) {
           }}
           className={cn(
             "inline-flex size-3.5 items-center justify-center rounded-full transition-opacity hover:opacity-70",
-            isDark ? "text-(--color-foreground)/70" : "text-white/80",
+            isDark ? "text-[#1a1a1a]/70" : "text-white/80",
           )}
         >
           <X className="size-3" aria-hidden />

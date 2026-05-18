@@ -449,3 +449,40 @@
     border: 2px solid transparent;
   }
 }
+
+/* ──────────────────────────────────────────────
+ * react-big-calendar dark-mode token overrides
+ *   The library's default stylesheet uses hardcoded light-mode colours
+ *   (e.g. `.rbc-today { background-color: #eaf6ff }`) which read as
+ *   near-white columns against our Aura dark background. Map the
+ *   essential surfaces to our tokens so dark mode renders correctly.
+ *   Light mode keeps library defaults (they pair fine with `#EDECEE`).
+ * ────────────────────────────────────────────── */
+[data-theme="dark"] .rbc-today {
+  background-color: oklch(0.27 0.025 var(--primary-hue-dark) / 0.55);
+}
+[data-theme="dark"] .rbc-off-range-bg {
+  background-color: var(--color-surface-2);
+}
+[data-theme="dark"] .rbc-off-range {
+  color: var(--color-subtle-foreground);
+}
+[data-theme="dark"] .rbc-header,
+[data-theme="dark"] .rbc-time-header,
+[data-theme="dark"] .rbc-time-header-content,
+[data-theme="dark"] .rbc-time-content,
+[data-theme="dark"] .rbc-time-view,
+[data-theme="dark"] .rbc-month-view,
+[data-theme="dark"] .rbc-day-bg,
+[data-theme="dark"] .rbc-day-slot,
+[data-theme="dark"] .rbc-time-gutter,
+[data-theme="dark"] .rbc-timeslot-group {
+  border-color: var(--color-border);
+}
+[data-theme="dark"] .rbc-current-time-indicator {
+  background-color: var(--color-primary);
+}
+[data-theme="dark"] .rbc-show-more {
+  color: var(--color-primary);
+  background-color: var(--color-surface);
+}

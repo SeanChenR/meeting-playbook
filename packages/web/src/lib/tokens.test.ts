@@ -67,6 +67,16 @@ const RAW_COLOR_ALLOWLIST: ReadonlyArray<{ file: string; reason: string }> = [
     file: "routes/settings/profile.tsx",
     reason: "Google brand SVG fill — brand asset, not a project colour",
   },
+  {
+    // reason: tag chip readability is a function of the (theme-invariant)
+    // tag colour, not the app theme. `text-[#1a1a1a]` matches DARK_FG_HEX
+    // in `lib/tag-palette.ts` — the constant used by `pickReadableTextColor`
+    // to compute contrast. Using `text-(--color-foreground)` here breaks in
+    // dark mode where `--color-foreground` is bone-white (`#EDECEE`) and
+    // becomes invisible on the light-end TAG_PALETTE swatches.
+    file: "components/tags/tag-chip.tsx",
+    reason: "theme-invariant dark text matches tag-palette DARK_FG_HEX (#1a1a1a)",
+  },
 ];
 
 const ALLOWLIST_FILES = new Set(RAW_COLOR_ALLOWLIST.map((entry) => entry.file));

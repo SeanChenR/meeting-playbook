@@ -321,6 +321,13 @@
       "rerunOverlay": "重新轉錄中…",
       "rerunOverlayProgress": "({{processed}}/{{total}} chunks)",
       "rerunOverlayEstimating": "(...)",
+      "recordingMode": {
+        "label": "錄音模式",
+        "dual": "雙聲道擷取（我方 + 對方）",
+        "single": "只錄我方",
+        "dualHelper": "需要 BlackHole 路由系統聲音",
+        "singleHelper": "不會錄到對方聲音；適合自言自語或測試"
+      },
       "speaker": {
         "cluster": "與會者 {{n}}",
         "cluster_unknown": "與會者（未辨識）"
@@ -740,6 +747,7 @@
     },
     "session": {
       "no_audio_device": "找不到麥克風 — 請確認系統權限",
+      "no_blackhole_device": "找不到 BlackHole 2ch 裝置 — 請參考 docs/BLACKHOLE_SETUP.md，或將模式切換為「只錄我方」",
       "bad_start": "啟動會議訊息錯誤",
       "bad_status": "會議狀態不允許重新啟動 session",
       "persist_failed": "逐字稿寫入失敗 — 已中止 session",

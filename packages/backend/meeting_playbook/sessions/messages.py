@@ -12,7 +12,6 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_validator
 
-
 # Slice-12 (ADR-0029): transcript_chunk.speaker may be "me", "counterparty",
 # or a single-channel cluster label `speaker_cluster_<N>` / `speaker_cluster_unknown`.
 _SPEAKER_CLUSTER_RE = re.compile(r"^speaker_cluster_(\d+|unknown)$")
@@ -139,9 +138,25 @@ _ServerAdapter = TypeAdapter(ServerMessage)
 # ─── Client → server ────────────────────────────────────────────────────────
 
 
+RecordingMode = Literal["dual", "single"]
+
+
 class StartMeetingMessage(BaseModel):
+    """Slice-27 (single-channel-recording-entry): `mode` chooses the recording
+    pipeline. Missing field falls back to `"dual"` for backwards compatibility
+    with older clients (Pydantic default). `"single"` triggers the mic-only
+    path that skips the BlackHole pre-flight check. Anything else (incl.
+    `null`, empty string, unknown literal) raises `ValidationError` and the
+    router maps to `error_code: session.unknown_message`.
+
+    Per design.md D2 — Mode 欄位的 wire contract; spec ADDED requirement
+    "Pre-flight recording mode selector chooses dual-channel or
+    single-channel capture".
+    """
+
     type: Literal["start_meeting"] = "start_meeting"
     meeting_id: str
+    mode: RecordingMode = "dual"
 
     model_config = {"extra": "forbid"}
 
@@ -221,6 +236,7 @@ __all__ = [
     "ErrorMessage",
     "MeetingEndedMessage",
     "MeetingStartedMessage",
+    "RecordingMode",
     "RequestAdviceMessage",
     "ServerMessage",
     "SilenceWarningMessage",

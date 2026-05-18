@@ -154,11 +154,13 @@ async def meeting_session_endpoint(
     # captured into a local var so any mid-session PUT to meeting.asr_provider
     # does NOT swap the live providers (Decision 1 + spec scenario
     # "Switching meeting.asr_provider mid-session has no effect on the live WS").
+    #
+    # Slice-27: the `providers` dict is finalised AFTER we parse the
+    # `start_meeting` frame because single mode only uses `me_provider`.
+    # We resolve both providers up-front (cold-start is the same) and pick
+    # the keyset later so `SessionService` sees exactly the streams the
+    # capture factory returns.
     me_provider, counterparty_provider = get_asr_providers_for_meeting(meeting.asr_provider)
-    providers: dict[Stream, ASRProvider] = {
-        "me": me_provider,
-        "counterparty": counterparty_provider,
-    }
 
     await websocket.accept()
 
@@ -194,13 +196,18 @@ async def meeting_session_endpoint(
         await websocket.close()
         return
 
-    # ─── Pre-flight: build the two captures (BlackHole + mic) ─────────────
+    # ─── Pre-flight: build captures per recording mode ────────────────────
+    # Slice-27: the client-provided `mode` selects the capture pipeline.
+    # `dual` (default, legacy) opens BlackHole + mic; `single` opens mic
+    # only and the factory MUST NOT consult `find_blackhole_device`.
+    #
     # The factory raises NoBlackholeDevice / MicDeviceNotFound on failure;
     # we map both to typed error frames before any status transition or
     # WebSocket teardown. Status remains `scheduled` so the user can retry
     # after fixing their audio config.
+    mode = client_msg.mode
     try:
-        captures = capture_factory(meeting_id)
+        captures = capture_factory(meeting_id, mode)
     except NoBlackholeDevice as exc:
         await _send_error("session.no_blackhole_device", str(exc))
         await websocket.close()
@@ -209,6 +216,12 @@ async def meeting_session_endpoint(
         await _send_error("session.no_audio_device", str(exc))
         await websocket.close()
         return
+
+    # Slice-27: providers mapping mirrors `captures` keyset so the
+    # per-stream ASR routing invariant holds. Single mode → only `me`.
+    providers: dict[Stream, ASRProvider] = {"me": me_provider}
+    if "counterparty" in captures:
+        providers["counterparty"] = counterparty_provider
 
     # ─── Transition status scheduled → in_progress ────────────────────────
     try:
@@ -224,9 +237,11 @@ async def meeting_session_endpoint(
         await websocket.close()
         return
 
-    # ─── Warm up both providers in parallel — model load is the slowest
-    # cold-start step (~10–25s on first ever run); running both providers
-    # via asyncio.gather keeps the wall-clock cost equivalent to one. ────
+    # ─── Warm up the active providers in parallel — model load is the
+    # slowest cold-start step (~10–25s on first ever run); running both
+    # providers via asyncio.gather keeps the wall-clock cost equivalent to
+    # one. Slice-27: single mode skips the counterparty provider's warmup
+    # (the dict was already trimmed above), saving ~10–25s + RAM/GPU. ───
     try:
         await asyncio.gather(*(p.warmup() for p in providers.values()))
     except Exception as exc:

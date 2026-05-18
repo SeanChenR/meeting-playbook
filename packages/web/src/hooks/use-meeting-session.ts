@@ -22,11 +22,17 @@ import { useTranslation } from "react-i18next";
 import type { ChatMessage } from "../lib/chat-api";
 import {
   openSessionSocket,
+  type RecordingMode,
   type SessionMessage,
   type SessionSocket,
   type Stream,
   type TranscriptChunkMessage,
 } from "../lib/session-ws";
+
+// Slice-27: recording mode default. Lives in module scope so the reset
+// transition (`session ended → mode: "dual"`) reuses the same literal as
+// `initialState` and the spec contract stays in one place.
+const DEFAULT_RECORDING_MODE: RecordingMode = "dual";
 
 // ─── State ─────────────────────────────────────────────────────────────────
 
@@ -69,29 +75,39 @@ export interface AdvisorState {
 
 const initialAdvisor: AdvisorState = { messages: [], inFlight: null };
 
+// Slice-27 D7: `mode` lives on every state variant so the UI can read it
+// regardless of phase. The reducer initialises and resets to "dual" per D1.
 export type SessionState =
-  | { phase: "idle"; advisor: AdvisorState }
-  | { phase: "connecting"; advisor: AdvisorState }
+  | { phase: "idle"; advisor: AdvisorState; mode: RecordingMode }
+  | { phase: "connecting"; advisor: AdvisorState; mode: RecordingMode }
   | {
       phase: "in_progress";
       chunks: TranscriptChunkMessage[];
       silenceSinceByStream: SilenceSinceByStream;
       streamStatus: StreamStatusByStream;
       advisor: AdvisorState;
+      mode: RecordingMode;
     }
   | {
       phase: "ending";
       chunks: TranscriptChunkMessage[];
       streamStatus: StreamStatusByStream;
       advisor: AdvisorState;
+      mode: RecordingMode;
     }
-  | { phase: "ended"; chunks: TranscriptChunkMessage[]; advisor: AdvisorState }
+  | {
+      phase: "ended";
+      chunks: TranscriptChunkMessage[];
+      advisor: AdvisorState;
+      mode: RecordingMode;
+    }
   | {
       phase: "error";
       errorCode: string;
       message: string;
       chunks: TranscriptChunkMessage[];
       advisor: AdvisorState;
+      mode: RecordingMode;
     };
 
 type Action =
@@ -105,16 +121,23 @@ type Action =
       userContent: string;
       source: "button" | "chatbox";
     }
+  | { type: "SET_MODE"; mode: RecordingMode }
   | { type: "UNEXPECTED_CLOSE" }
   | { type: "RETRY_FAILED" }
   | { type: "RESET" };
 
-const initialState: SessionState = { phase: "idle", advisor: initialAdvisor };
+const initialState: SessionState = {
+  phase: "idle",
+  advisor: initialAdvisor,
+  mode: DEFAULT_RECORDING_MODE,
+};
 
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case "START":
-      return { phase: "connecting", advisor: state.advisor };
+      // Slice-27 D5: mode is locked at this point; carried through the
+      // session lifecycle and read by `start()` for the start_meeting frame.
+      return { phase: "connecting", advisor: state.advisor, mode: state.mode };
     case "END_REQUESTED":
       if (state.phase === "in_progress") {
         return {
@@ -122,9 +145,23 @@ function reducer(state: SessionState, action: Action): SessionState {
           chunks: state.chunks,
           streamStatus: state.streamStatus,
           advisor: state.advisor,
+          mode: state.mode,
         };
       }
       return state;
+    case "SET_MODE":
+      // Slice-27 D5: mode is mutable ONLY in pre-session phases. While
+      // `connecting` / `in_progress` / `ending` are live the WS already
+      // owns the chosen mode; ignore the action so a stray UI click can't
+      // desync the user-visible state from the wire contract.
+      if (
+        state.phase === "connecting" ||
+        state.phase === "in_progress" ||
+        state.phase === "ending"
+      ) {
+        return state;
+      }
+      return { ...state, mode: action.mode };
     case "HISTORY_LOADED":
       // Equality guard: if the same array reference (React Query stable
       // cache) lands here, return the same state object so React skips
@@ -203,6 +240,9 @@ function reducer(state: SessionState, action: Action): SessionState {
           message: msg.message,
           chunks,
           advisor: state.advisor,
+          // Preserve the mode that triggered the error so the UI can show
+          // which path failed; the next `RESET` snaps it back to default.
+          mode: state.mode,
         };
       }
       if (msg.type === "meeting_started") {
@@ -212,6 +252,7 @@ function reducer(state: SessionState, action: Action): SessionState {
           silenceSinceByStream: { ...initialSilenceSince },
           streamStatus: { ...initialStreamStatus },
           advisor: state.advisor,
+          mode: state.mode,
         };
       }
       if (msg.type === "transcript_chunk") {
@@ -260,7 +301,16 @@ function reducer(state: SessionState, action: Action): SessionState {
       }
       if (msg.type === "meeting_ended") {
         if (state.phase !== "in_progress" && state.phase !== "ending") return state;
-        return { phase: "ended", chunks: state.chunks, advisor: state.advisor };
+        // Slice-27 D1 + D7: session lifecycle ends → reset mode to dual
+        // so a subsequent session on the same hook instance starts from
+        // the documented default. Avoids the "last time single, this time
+        // I forgot" failure mode without persisting state.
+        return {
+          phase: "ended",
+          chunks: state.chunks,
+          advisor: state.advisor,
+          mode: DEFAULT_RECORDING_MODE,
+        };
       }
       return state;
     }
@@ -280,6 +330,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         message: "WebSocket disconnected; retry attempt also failed.",
         chunks,
         advisor: state.advisor,
+        mode: state.mode,
       };
     }
     case "RESET":
@@ -296,6 +347,12 @@ export interface UseMeetingSessionResult {
   requestAdvice: () => void;
   sendChatMessage: (content: string) => void;
   loadHistory: (messages: ChatMessage[]) => void;
+  /** Slice-27: set the recording mode prior to `start()`. Ignored once the
+   * session is `connecting` / `in_progress` / `ending` (mode is immutable
+   * after the WS `start_meeting` frame is sent, per spec ADDED requirement
+   * "...Once `start_meeting` has been accepted the mode SHALL be immutable
+   * for the lifetime of that WebSocket"). */
+  setMode: (mode: RecordingMode) => void;
   /** Notification hook: invoked after the reducer processes `advice_done`.
    * The route uses this to invalidate the React Query cache so the persisted
    * pair lands in `messages`. Slice-9 design.md Decision 6. */
@@ -316,6 +373,11 @@ export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
   const retryAttemptedRef = useRef<boolean>(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intentionalCloseRef = useRef<boolean>(false);
+  // Slice-27: keep the latest mode in a ref so the stable `start` callback
+  // can read it without re-binding (and without going stale). The reducer
+  // is the source of truth; the ref is just a cheap read for the WS frame.
+  const modeRef = useRef<RecordingMode>(state.mode);
+  modeRef.current = state.mode;
   // Slice-9: route registers a callback here so the reducer can notify
   // when a stream completes (so React Query can invalidate the chat_messages
   // cache and refetch). Stored in a ref so the route can update it without
@@ -368,9 +430,19 @@ export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
     socketRef.current = sock;
     wireSocket(sock);
     sock.onOpen = () => {
-      sock.send({ type: "start_meeting", meeting_id: meetingId });
+      // Slice-27: include the user-selected recording mode in the
+      // start_meeting frame so the backend can route the pre-flight.
+      sock.send({
+        type: "start_meeting",
+        meeting_id: meetingId,
+        mode: modeRef.current,
+      });
     };
   }, [meetingId, wireSocket]);
+
+  const setMode = useCallback((mode: RecordingMode) => {
+    dispatch({ type: "SET_MODE", mode });
+  }, []);
 
   const end = useCallback(() => {
     if (!socketRef.current) return;
@@ -453,6 +525,7 @@ export function useMeetingSession(meetingId: string): UseMeetingSessionResult {
     requestAdvice,
     sendChatMessage,
     loadHistory,
+    setMode,
     get onAdviceDone() {
       return onAdviceDoneRef.current;
     },

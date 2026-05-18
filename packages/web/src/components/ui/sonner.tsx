@@ -6,6 +6,13 @@
  * it). Callsites trigger toasts via `import { toast } from "sonner"` —
  * we re-export `toast` here so consumers can stay on the project barrel
  * instead of importing from the sonner package directly.
+ *
+ * P1 `ui-overhaul-aura-tokens` D7 note: the 4 semantic toast variants
+ * (success / error / warning / info) are coloured via CSS data-attribute
+ * selectors in `packages/web/src/index.css`, NOT via this component's
+ * props. P1 is a CSS-only override; the component's JSX, motion, and
+ * behaviour are deliberately untouched. The full component swap to
+ * animate-ui Toaster lands in P2 `ui-overhaul-primitive-upgrade`.
  */
 
 import { Toaster as SonnerToaster, toast } from "sonner";

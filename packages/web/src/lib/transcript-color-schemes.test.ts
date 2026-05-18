@@ -77,6 +77,25 @@ describe("_resolveClusterColor", () => {
     expect(c.accent).toBe("var(--color-them)");
   });
 
+  test("me speaker accent is a token reference, not a hardcoded oklch literal", () => {
+    // P1 `ui-overhaul-aura-tokens` task 4.4: after the token block rewrite
+    // the me/them speaker accents MUST stay token-driven so dark/light parity
+    // is invariant — they must NOT short-circuit to hardcoded oklch strings.
+    const c = _resolveClusterColor("me", _DEFAULT_PREF);
+    expect(c.accent).toBe("var(--color-me)");
+    expect(c.accent).not.toMatch(/^oklch\(/i);
+    expect(c.background).toContain("var(--color-me-soft)");
+  });
+
+  test("counterparty speaker accent is a token reference, not a hardcoded oklch literal", () => {
+    // P1 `ui-overhaul-aura-tokens` task 4.4: them ditto — pinned to the
+    // `--color-them` token so the magenta hue swap propagates through.
+    const c = _resolveClusterColor("counterparty", _DEFAULT_PREF);
+    expect(c.accent).toBe("var(--color-them)");
+    expect(c.accent).not.toMatch(/^oklch\(/i);
+    expect(c.background).toContain("var(--color-them-soft)");
+  });
+
   test("(f) speaker_cluster_unknown → muted; overrides ignored", () => {
     const pref: TranscriptColorPref = {
       scheme: "default",

@@ -91,7 +91,7 @@ export function AdvisorPane({ session, meDisplayName }: AdvisorPaneProps) {
     <Pane
       data-testid="advisor-pane"
       title={t("meetings.advisor.heading")}
-      accent="oklch(0.62 0.18 145)"
+      accent="var(--color-success)"
       bodyClassName="flex flex-col gap-3 p-3.5"
     >
       {showEmptyState ? (

@@ -58,7 +58,10 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
   // button for diff is only rendered when `has_previous_version === true`
   // (per spec `playbook-versioning`: "diff button SHALL only appear
   // when has_previous_version === true").
-  const [freeformMode, setFreeformMode] = useState<"edit" | "preview" | "diff">("edit");
+  // Slice-26 (playbook-markdown-rendering) D1: default to rendered preview —
+  // playbook is read-heavy and seeing raw markdown symbols on every meeting
+  // detail load was friction. Edit tab remains an explicit toggle.
+  const [freeformMode, setFreeformMode] = useState<"edit" | "preview" | "diff">("preview");
   const [draft, setDraft] = useState<string>("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
@@ -103,7 +106,8 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
   // user can't be sitting on a diff that no longer exists.
   useEffect(() => {
     if (freeformMode === "diff" && query.data && !query.data.has_previous_version) {
-      setFreeformMode("edit");
+      // Slice-26 D2: fallback target aligned with mount default (preview).
+      setFreeformMode("preview");
     }
   }, [freeformMode, query.data]);
 

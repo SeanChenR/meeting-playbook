@@ -40,8 +40,10 @@ async function renderPane(): Promise<void> {
       <PlaybookPane meetingId="m_test" />
     </Wrapper>,
   );
+  // Slice-26 D1: mount default is Preview, not Edit — wait for the
+  // preview tab (always rendered) instead of the textarea (Edit-mode only).
   await waitFor(() => {
-    expect(screen.getByLabelText(/自由格式 Markdown/)).toBeDefined();
+    expect(screen.getByTestId("freeform-preview-tab")).toBeDefined();
   });
 }
 
@@ -61,12 +63,56 @@ describe("PlaybookPane", () => {
     cleanup();
   });
 
-  test("renders the free-form textarea by default", async () => {
+  test("renders rendered markdown preview by default (slice-26 D1)", async () => {
     await renderPane();
-    expect(screen.getByLabelText(/自由格式 Markdown/)).toBeDefined();
+    // Mount default is Preview: markdown-preview is present, textarea is NOT in DOM.
+    expect(screen.getByTestId("markdown-preview")).toBeDefined();
+    expect(screen.queryByLabelText(/自由格式 Markdown/)).toBeNull();
     // Slice-7 round 3: structured tab removed entirely.
     expect(screen.queryByLabelText("目標")).toBeNull();
     expect(screen.queryByRole("button", { name: /^結構化$/ })).toBeNull();
+    // aria-pressed: preview is active, edit is not.
+    expect(screen.getByTestId("freeform-preview-tab").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("freeform-edit-tab").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  test("clicking Edit tab swaps preview for textarea; clicking Preview swaps back (slice-26 D3)", async () => {
+    const user = userEvent.setup();
+    await renderPane();
+
+    // Start: preview visible, textarea absent.
+    expect(screen.getByTestId("markdown-preview")).toBeDefined();
+    expect(screen.queryByLabelText(/自由格式 Markdown/)).toBeNull();
+
+    // Click Edit → textarea mounts, preview unmounts.
+    await user.click(screen.getByTestId("freeform-edit-tab"));
+    expect(screen.getByLabelText(/自由格式 Markdown/)).toBeDefined();
+    expect(screen.queryByTestId("markdown-preview")).toBeNull();
+    expect(screen.getByTestId("freeform-edit-tab").getAttribute("aria-pressed")).toBe("true");
+
+    // Click Preview again → preview re-mounts, textarea unmounts.
+    await user.click(screen.getByTestId("freeform-preview-tab"));
+    expect(screen.getByTestId("markdown-preview")).toBeDefined();
+    expect(screen.queryByLabelText(/自由格式 Markdown/)).toBeNull();
+  });
+
+  test("Edit → modify → switch back to Preview without losing draft (slice-26 D3)", async () => {
+    const user = userEvent.setup();
+    await renderPane();
+
+    await user.click(screen.getByTestId("freeform-edit-tab"));
+    const textarea = screen.getByLabelText(/自由格式 Markdown/) as HTMLTextAreaElement;
+    await user.type(textarea, "# Draft");
+    expect(textarea.value).toBe("# Draft");
+
+    await user.click(screen.getByTestId("freeform-preview-tab"));
+    expect(screen.getByTestId("markdown-preview").querySelector("h1")?.textContent).toBe("Draft");
+
+    // Switch back to Edit — draft preserved.
+    await user.click(screen.getByTestId("freeform-edit-tab"));
+    expect((screen.getByLabelText(/自由格式 Markdown/) as HTMLTextAreaElement).value).toBe(
+      "# Draft",
+    );
   });
 
   test("save button posts free_form_markdown plus empty placeholders for the other six fields", async () => {
@@ -89,6 +135,8 @@ describe("PlaybookPane", () => {
     };
 
     await renderPane();
+    // Slice-26 D5: mount default is Preview; need to click Edit first to access the textarea.
+    await user.click(screen.getByTestId("freeform-edit-tab"));
     await user.type(screen.getByLabelText(/自由格式 Markdown/), "# brief");
     await user.click(screen.getByRole("button", { name: /^儲存$/ }));
 
@@ -127,6 +175,8 @@ describe("PlaybookPane", () => {
     expect(screen.getByTestId("freeform-edit-tab")).toBeDefined();
     expect(screen.getByTestId("freeform-preview-tab")).toBeDefined();
 
+    // Slice-26 D5: mount default is Preview; click Edit before typing.
+    await user.click(screen.getByTestId("freeform-edit-tab"));
     const freeform = screen.getByLabelText(/自由格式 Markdown/);
     await user.type(freeform, "# Goals");
 
@@ -213,6 +263,59 @@ describe("PlaybookPane", () => {
     await waitFor(() => {
       expect(screen.getByTestId("playbook-diff-viewer")).toBeDefined();
     });
+  });
+
+  test("(5.3) snapshot disappearance from Diff falls back to Preview, not Edit (slice-26 D2)", async () => {
+    // Test-local QueryClient so we can `invalidateQueries` directly after
+    // flipping the fetch handler. The shared Wrapper creates its own client
+    // per render which we cannot reach.
+    const user = userEvent.setup();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+
+    fetchHandler = async () =>
+      new Response(
+        JSON.stringify(
+          SAMPLE({
+            free_form_markdown: "v2",
+            previous_free_form_markdown: "v1",
+            has_previous_version: true,
+          }),
+        ),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+
+    render(
+      <QueryClientProvider client={client}>
+        <PlaybookPane meetingId="m_test" />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("freeform-diff-tab")).toBeDefined();
+    });
+    await user.click(screen.getByTestId("freeform-diff-tab"));
+    await waitFor(() => {
+      expect(screen.getByTestId("playbook-diff-viewer")).toBeDefined();
+    });
+
+    // Snapshot disappears: next GET returns has_previous_version=false.
+    fetchHandler = async () =>
+      new Response(
+        JSON.stringify(SAMPLE({ free_form_markdown: "v2", has_previous_version: false })),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    // Invalidate so the useQuery refetches with the new handler's response.
+    await client.invalidateQueries({ queryKey: ["playbook", "m_test"] });
+
+    await waitFor(() => {
+      // Diff button gone (has_previous_version === false).
+      expect(screen.queryByTestId("freeform-diff-tab")).toBeNull();
+    });
+    // Fallback target is preview, NOT edit.
+    expect(screen.getByTestId("freeform-preview-tab").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("freeform-edit-tab").getAttribute("aria-pressed")).toBe("false");
   });
 
   test("(5.2) regenerate does NOT auto-switch when current === previous", async () => {

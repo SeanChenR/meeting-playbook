@@ -682,7 +682,13 @@
         "currentTime": "Current",
         "duration": "Duration",
         "chunkExpired": "Recording exceeded the 30-day retention window",
-        "playbackError": "Audio playback error"
+        "playbackError": "Audio playback error",
+        "sourceLabel": "Audio source",
+        "source": {
+          "mixed": "Mixed",
+          "me": "Me",
+          "counterparty": "Counterparty"
+        }
       }
     }
   },
@@ -831,6 +837,10 @@
       "duplicate": "These meetings are already linked",
       "self_reference": "Cannot link a meeting to itself",
       "not_found": "Meeting link not found"
+    },
+    "recording": {
+      "mixed_not_applicable": "This meeting is not dual-channel; mixed audio is unavailable",
+      "mix_failed": "Failed to mix audio streams; switch to the Me or Counterparty source"
     }
   },
   "attachments": {

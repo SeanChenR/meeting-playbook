@@ -17,7 +17,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import type { Meeting } from "../lib/meetings-api";
+import { type Meeting, mixedAudioUrl, recordingAudioUrl } from "../lib/meetings-api";
 
 export interface Recording {
   id: string;
@@ -212,3 +212,59 @@ export function pickMeetingRecording(recordings: Recording[]): Recording | null 
 
 /** Convenience: surfaces the meeting object's id so callers can build URLs. */
 export type MeetingWithId = Pick<Meeting, "id">;
+
+// ─── slice-25 task 3.2 — source toggle resolution ───────────────────────
+
+/** Toggle source key persisted in `localStorage.miniPlayerSource`. */
+export type SourceKey = "mixed" | "me" | "counterparty";
+
+export interface PlaybackSources {
+  /** `dual` = both me + counterparty streams present (mixed available). */
+  kind: "dual" | "single" | "none";
+  /** Map from source key to its audio URL (only entries the meeting has). */
+  sources: {
+    mixed?: string;
+    me?: string;
+    counterparty?: string;
+  };
+  /** Default source the mini-player mounts on first render. */
+  defaultSource: SourceKey;
+}
+
+/**
+ * Resolve the URL set the source-toggle UI should expose per design D5 + D11.
+ *
+ * - Both me + counterparty rows → `kind: "dual"`, defaultSource `"mixed"`,
+ *   sources includes mixed/me/counterparty URLs (the mixed URL hits the
+ *   slice-25 mixed endpoint, me/counterparty hit the per-recording endpoint).
+ * - Exactly one row → `kind: "single"`, defaultSource `"me"`, only the
+ *   single recording's URL is exposed (no toggle UI rendered).
+ * - Zero rows → `kind: "none"`, empty `sources`.
+ */
+export function pickPlaybackSources(meetingId: string, recordings: Recording[]): PlaybackSources {
+  if (recordings.length === 0) {
+    return { kind: "none", sources: {}, defaultSource: "me" };
+  }
+  const meRow = recordings.find((r) => r.stream === "me");
+  const cpRow = recordings.find((r) => r.stream === "counterparty");
+  if (meRow && cpRow) {
+    return {
+      kind: "dual",
+      sources: {
+        mixed: mixedAudioUrl(meetingId),
+        me: recordingAudioUrl(meetingId, meRow.id),
+        counterparty: recordingAudioUrl(meetingId, cpRow.id),
+      },
+      defaultSource: "mixed",
+    };
+  }
+  const onlyRow = meRow ?? cpRow ?? recordings[0];
+  if (!onlyRow) {
+    return { kind: "none", sources: {}, defaultSource: "me" };
+  }
+  return {
+    kind: "single",
+    sources: { me: recordingAudioUrl(meetingId, onlyRow.id) },
+    defaultSource: "me",
+  };
+}

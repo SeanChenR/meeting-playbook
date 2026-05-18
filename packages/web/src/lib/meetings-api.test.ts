@@ -11,7 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { patchMeeting } from "./meetings-api";
+import { mixedAudioUrl, patchMeeting, recordingAudioUrl } from "./meetings-api";
 
 const _originalFetch = globalThis.fetch;
 
@@ -86,5 +86,29 @@ describe("patchMeeting", () => {
     expect(thrown).toBeTruthy();
     const err = thrown as { errorCode?: string };
     expect(err.errorCode).toBe("meeting.invalid_time_range");
+  });
+});
+
+// ─── slice-25 task 3.1 — audio URL helpers ────────────────────────────
+
+describe("mixedAudioUrl + recordingAudioUrl", () => {
+  test("mixedAudioUrl returns base url without query when no params", () => {
+    expect(mixedAudioUrl("m_abc")).toBe("/api/meetings/m_abc/recordings/mixed/audio");
+  });
+
+  test("mixedAudioUrl encodes meeting id and includes start + end", () => {
+    expect(mixedAudioUrl("m abc/with weird chars", { start: 1.5, end: 12.75 })).toBe(
+      "/api/meetings/m%20abc%2Fwith%20weird%20chars/recordings/mixed/audio?start=1.5&end=12.75",
+    );
+  });
+
+  test("recordingAudioUrl returns the per-recording endpoint", () => {
+    expect(recordingAudioUrl("m_x", "r_y")).toBe("/api/meetings/m_x/recordings/r_y/audio");
+  });
+
+  test("recordingAudioUrl appends start + end query params", () => {
+    expect(recordingAudioUrl("m_x", "r_y", { start: 0, end: 60 })).toBe(
+      "/api/meetings/m_x/recordings/r_y/audio?start=0&end=60",
+    );
   });
 });

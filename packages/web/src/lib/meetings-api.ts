@@ -276,3 +276,45 @@ export function usePatchMeetingMutation(id: string) {
     },
   });
 }
+
+// ─── Audio playback URL helpers — slice-25 task 3.1 ─────────────────────
+
+export interface AudioUrlParams {
+  /** Seconds (epoch-relative) chunk start; appended as ?start=. */
+  start?: number;
+  /** Seconds (epoch-relative) chunk end; appended as ?end=. */
+  end?: number;
+}
+
+function _appendStartEnd(url: string, params: AudioUrlParams | undefined): string {
+  if (!params) return url;
+  const q = new URLSearchParams();
+  if (params.start !== undefined) q.set("start", String(params.start));
+  if (params.end !== undefined) q.set("end", String(params.end));
+  const qs = q.toString();
+  return qs ? `${url}?${qs}` : url;
+}
+
+/**
+ * URL for a single per-recording audio stream (existing endpoint).
+ * Used for me / counterparty sources in the mini-player source toggle.
+ */
+export function recordingAudioUrl(
+  meetingId: string,
+  recordingId: string,
+  params?: AudioUrlParams,
+): string {
+  const base = `/api/meetings/${encodeURIComponent(meetingId)}/recordings/${encodeURIComponent(
+    recordingId,
+  )}/audio`;
+  return _appendStartEnd(base, params);
+}
+
+/**
+ * URL for the dual-stream mixed playback endpoint — slice-25 design D4.
+ * Server lazy-mixes `me.wav` + `counterparty.wav` on first request.
+ */
+export function mixedAudioUrl(meetingId: string, params?: AudioUrlParams): string {
+  const base = `/api/meetings/${encodeURIComponent(meetingId)}/recordings/mixed/audio`;
+  return _appendStartEnd(base, params);
+}

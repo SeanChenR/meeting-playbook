@@ -682,7 +682,13 @@
         "currentTime": "目前",
         "duration": "總長",
         "chunkExpired": "錄音已過 30 天保留期",
-        "playbackError": "音訊播放錯誤"
+        "playbackError": "音訊播放錯誤",
+        "sourceLabel": "音訊來源",
+        "source": {
+          "mixed": "混音",
+          "me": "我方",
+          "counterparty": "對方"
+        }
       }
     }
   },
@@ -831,6 +837,10 @@
       "duplicate": "這兩個會議已經連結了",
       "self_reference": "不能連結自己",
       "not_found": "找不到此關聯"
+    },
+    "recording": {
+      "mixed_not_applicable": "這場會議不是雙聲道錄音，無法播放混音",
+      "mix_failed": "混音生成失敗，請改聽我方或對方單一聲道"
     }
   },
   "attachments": {

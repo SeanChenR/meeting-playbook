@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const LOCALES = [
   { code: "zh-TW", trigger: "zh-TW", label: "繁中" },
@@ -32,24 +33,29 @@ type LocaleToggleProps = {
 };
 
 export function LocaleToggle({ className }: LocaleToggleProps) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const current = i18n.language as LocaleCode;
   const activeLabel = LOCALES.find((l) => l.code === current)?.trigger ?? current;
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        type="button"
-        data-testid="locale-toggle"
-        aria-label="Language"
-        className={cn(
-          "inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-(--color-foreground) hover:bg-(--color-muted) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-ring)",
-          className,
-        )}
-      >
-        <Languages className="size-4 text-(--color-muted-foreground)" />
-        <span>{activeLabel}</span>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger
+            type="button"
+            data-testid="locale-toggle"
+            aria-label={t("ui.tooltip.localeToggle")}
+            className={cn(
+              "inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-(--color-foreground) hover:bg-(--color-muted) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-ring)",
+              className,
+            )}
+          >
+            <Languages className="size-4 text-(--color-muted-foreground)" />
+            <span>{activeLabel}</span>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{t("ui.tooltip.localeToggle")}</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end" className="min-w-[8rem]">
         {LOCALES.map(({ code, label }) => {
           const isActive = current === code;

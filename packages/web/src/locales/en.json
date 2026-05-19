@@ -918,5 +918,32 @@
       "text": "Text",
       "markdown": "Markdown"
     }
+  },
+  "ui": {
+    "toast": {
+      "info": { "label": "Info" },
+      "success": { "label": "Done" },
+      "warning": { "label": "Warning" },
+      "error": { "label": "Error" }
+    },
+    "themeToggle": {
+      "label": "Toggle theme",
+      "toLight": "Switch to light mode",
+      "toDark": "Switch to dark mode"
+    },
+    "calendar": {
+      "openPicker": "Open date picker",
+      "clear": "Clear date",
+      "today": "Today",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month"
+    },
+    "tooltip": {
+      "recording": "Auto-deleted after 30 days",
+      "capture": "Dual-channel capture in progress",
+      "rerun": "Re-run transcription",
+      "themeToggle": "Toggle theme",
+      "localeToggle": "Toggle language"
+    }
   }
 }

@@ -1,8 +1,7 @@
 /**
- * Minimal Dialog — shadcn-shaped API (no Radix dep) used for inline
- * meeting edit modal (slice-15 task 8.1).
+ * Dialog — animate-ui motion + Aura surface tokens (ui-overhaul-primitive-upgrade task 2).
  *
- * Compositional pieces:
+ * Shadcn-shape API preserved:
  *   <Dialog open onOpenChange>
  *     <DialogContent>
  *       <DialogHeader>
@@ -13,10 +12,14 @@
  *     </DialogContent>
  *   </Dialog>
  *
- * Closes on Escape key + backdrop click. ARIA: role="dialog",
- * aria-modal="true", aria-labelledby auto-wires the title id.
+ * Motion: backdrop fade + 8px blur; content scale 0.96 -> 1 + fade.
+ * Respects prefers-reduced-motion via motion/react's useReducedMotion
+ * (returns instant variants).
+ *
+ * Source motif: https://animate-ui.com/docs/components/base/dialog (CC0).
  */
 
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   createContext,
   useCallback,
@@ -72,18 +75,26 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, onOpenChange]);
 
-  if (!open) return null;
-
-  return <_DialogContext.Provider value={ctxValue}>{children}</_DialogContext.Provider>;
+  return (
+    <_DialogContext.Provider value={ctxValue}>
+      <AnimatePresence>{open ? children : null}</AnimatePresence>
+    </_DialogContext.Provider>
+  );
 }
 
 export interface DialogContentProps {
   children: ReactNode;
   className?: string;
+  "data-testid"?: string;
 }
 
-export function DialogContent({ children, className }: DialogContentProps) {
+export function DialogContent({
+  children,
+  className,
+  "data-testid": dataTestId,
+}: DialogContentProps) {
   const { onOpenChange, titleId, descriptionId } = _useDialogContext();
+  const prefersReducedMotion = useReducedMotion();
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -94,25 +105,47 @@ export function DialogContent({ children, className }: DialogContentProps) {
     [onOpenChange],
   );
 
+  const backdropVariants = prefersReducedMotion
+    ? { hidden: { opacity: 1 }, visible: { opacity: 1 } }
+    : { hidden: { opacity: 0 }, visible: { opacity: 1 } };
+
+  const contentVariants = prefersReducedMotion
+    ? { hidden: { opacity: 1, scale: 1 }, visible: { opacity: 1, scale: 1 } }
+    : {
+        hidden: { opacity: 0, scale: 0.96 },
+        visible: { opacity: 1, scale: 1 },
+      };
+
   return (
-    <div
+    <motion.div
       role="presentation"
       onClick={handleBackdropClick}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      variants={backdropVariants}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
     >
-      <div
+      <motion.div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
+        data-testid={dataTestId}
+        initial="hidden"
+        animate="visible"
+        exit="hidden"
+        variants={contentVariants}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         className={cn(
-          "w-full max-w-md rounded-lg border border-(--color-border) bg-(--color-card) p-6 shadow-lg",
+          "w-full max-w-md rounded-(--radius-lg) border border-(--color-border) bg-(--color-surface) p-6 shadow-(--shadow-lg)",
           className,
         )}
       >
         {children}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

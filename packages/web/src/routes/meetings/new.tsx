@@ -34,9 +34,11 @@ import { BackLink } from "../../components/back-link";
 import { ProtectedShell } from "../../components/protected-shell";
 import { Alert } from "../../components/ui/alert";
 import { Button, buttonVariants } from "../../components/ui/button";
+import { Calendar } from "../../components/ui/calendar";
 import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
 import { Separator } from "../../components/ui/separator";
 import {
   CalendarApiError,
@@ -349,11 +351,50 @@ export function NewMeeting() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-1">
                   <Label htmlFor="meeting-date">{t("meetings.new.scheduledDateLabel")}</Label>
-                  <Input
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={t("ui.calendar.openPicker")}
+                        data-testid="meeting-date-trigger"
+                        className="inline-flex h-9 w-full items-center justify-between gap-2 rounded-(--radius-md) border border-(--color-border) bg-(--color-surface) px-3 text-sm hover:border-(--color-primary)/40"
+                      >
+                        <span
+                          className={
+                            scheduledDate
+                              ? "text-(--color-foreground)"
+                              : "text-(--color-muted-foreground)"
+                          }
+                        >
+                          {scheduledDate || t("ui.calendar.openPicker")}
+                        </span>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="p-0">
+                      <Calendar
+                        value={scheduledDate ? new Date(`${scheduledDate}T00:00`) : undefined}
+                        onChange={(next) => {
+                          const pad = (n: number) => String(n).padStart(2, "0");
+                          const iso = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}`;
+                          setScheduledDate(iso);
+                          if (iso && !scheduledStartTime) setScheduledStartTime("09:00");
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {/*
+                   * Hidden mirror input — gives tests a `fireEvent.change`
+                   * surface for direct state assertions. Production users
+                   * pick a date via the Calendar popover above.
+                   */}
+                  <input
                     id="meeting-date"
                     data-testid="meeting-date"
                     type="date"
                     required
+                    className="sr-only"
+                    aria-hidden
+                    tabIndex={-1}
                     value={scheduledDate}
                     onChange={(e) => {
                       setScheduledDate(e.target.value);

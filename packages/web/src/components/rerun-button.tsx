@@ -19,6 +19,7 @@ import { localizedErrorMessage } from "../lib/i18n-errors";
 import type { MeetingDetail } from "../lib/meetings-api";
 import { type RerunApiError, startRerun } from "../lib/rerun-api";
 import { Button } from "./ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface RerunButtonProps {
   meeting: Pick<MeetingDetail, "id" | "status" | "recordings_available" | "rerun_asr_pending">;
@@ -56,16 +57,21 @@ export function RerunButton({ meeting }: RerunButtonProps) {
 
   return (
     <div className="flex flex-col gap-1">
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        data-testid="rerun-button"
-        onClick={() => mutation.mutate()}
-        disabled={mutation.isPending}
-      >
-        {t("meetings.detail.rerunButton")}
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            data-testid="rerun-button"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending}
+          >
+            {t("meetings.detail.rerunButton")}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{t("ui.tooltip.rerun")}</TooltipContent>
+      </Tooltip>
       {errorMessage ? (
         <span className="text-xs text-(--color-destructive)">{errorMessage}</span>
       ) : null}

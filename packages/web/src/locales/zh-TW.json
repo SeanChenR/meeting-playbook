@@ -918,5 +918,32 @@
       "text": "文字檔",
       "markdown": "Markdown"
     }
+  },
+  "ui": {
+    "toast": {
+      "info": { "label": "資訊" },
+      "success": { "label": "完成" },
+      "warning": { "label": "注意" },
+      "error": { "label": "錯誤" }
+    },
+    "themeToggle": {
+      "label": "切換主題",
+      "toLight": "切到淺色",
+      "toDark": "切到深色"
+    },
+    "calendar": {
+      "openPicker": "開啟日期選擇器",
+      "clear": "清除日期",
+      "today": "今天",
+      "prevMonth": "上個月",
+      "nextMonth": "下個月"
+    },
+    "tooltip": {
+      "recording": "30 天後自動刪除",
+      "capture": "雙聲道擷取中",
+      "rerun": "重新轉錄",
+      "themeToggle": "切換主題",
+      "localeToggle": "切換語言"
+    }
   }
 }

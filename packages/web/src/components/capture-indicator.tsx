@@ -24,7 +24,7 @@
  * `meetings.session.barVisualizer.<state>` (omitted when `off`).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Stream, TranscriptChunkMessage } from "../lib/session-ws";
 import { BarVisualizer, type BarVisualizerTone } from "./ui/bar-visualizer";
@@ -62,13 +62,18 @@ function _toneFor(stream: Stream): BarVisualizerTone {
 function _deriveLastChunkAtFromChunks(
   chunks: ReadonlyArray<TranscriptChunkMessage>,
 ): Record<Stream, number | null> {
+  // Chunks are chronological; iterate backwards and bail out once both
+  // speakers have a latest timestamp. Reduces avg complexity from O(N) to
+  // O(1) on long meetings — gemini PR #50 MEDIUM (capture-indicator.tsx:74).
   const out: Record<Stream, number | null> = { me: null, counterparty: null };
-  for (const c of chunks) {
+  for (let i = chunks.length - 1; i >= 0; i -= 1) {
+    const c = chunks[i];
+    if (!c) continue;
+    if (out.me !== null && out.counterparty !== null) break;
     if (c.speaker !== "me" && c.speaker !== "counterparty") continue;
+    if (out[c.speaker] !== null) continue;
     const ts = new Date(c.started_at).getTime();
-    if (!Number.isFinite(ts)) continue;
-    const prev = out[c.speaker];
-    if (prev === null || ts > prev) out[c.speaker] = ts;
+    if (Number.isFinite(ts)) out[c.speaker] = ts;
   }
   return out;
 }
@@ -108,47 +113,61 @@ export function CaptureIndicator({
   nowMs,
 }: CaptureIndicatorProps) {
   const { t } = useTranslation();
-  const startedRef = useRef<Record<Stream, number | null>>({ me: null, counterparty: null });
+  // Track first time each stream becomes active. Stored as state so the
+  // first render after a stream activates already sees the timestamp — a
+  // ref would lag one render and emit `listening` before `connecting`.
+  // Gemini PR #50 MEDIUM (capture-indicator.tsx:145 #1).
+  const [startedAt, setStartedAt] = useState<Record<Stream, number | null>>({
+    me: null,
+    counterparty: null,
+  });
 
-  // Track first time each stream becomes active. Component-managed so the
-  // calling site stays unchanged from slice-7 era.
   useEffect(() => {
     if (streamStatus === null) {
-      startedRef.current = { me: null, counterparty: null };
+      setStartedAt({ me: null, counterparty: null });
       return;
     }
-    const now = Date.now();
-    const next = { ...startedRef.current };
-    let changed = false;
-    for (const s of STREAM_ORDER) {
-      if (streamStatus[s] === "active" && next[s] === null) {
-        next[s] = now;
-        changed = true;
+    setStartedAt((prev) => {
+      const now = Date.now();
+      let changed = false;
+      const next = { ...prev };
+      for (const s of STREAM_ORDER) {
+        if (streamStatus[s] === "active" && next[s] === null) {
+          next[s] = now;
+          changed = true;
+        }
+        if (streamStatus[s] === "stopped" && next[s] !== null) {
+          next[s] = null;
+          changed = true;
+        }
       }
-      if (streamStatus[s] === "stopped" && next[s] !== null) {
-        next[s] = null;
-        changed = true;
-      }
-    }
-    if (changed) startedRef.current = next;
+      return changed ? next : prev;
+    });
   }, [streamStatus]);
 
-  // Trigger a re-render after 8s so a stream that has been active without
-  // any chunks flips from `connecting` to `listening`.
+  // Stable 1s tick while any stream is active so `connecting → listening`
+  // transitions at the right time. A `setTimeout` reset on every
+  // `streamStatus` update would push the deadline forward indefinitely
+  // under chunk-heavy WS traffic — gemini PR #50 MEDIUM (line 145 #2).
   const [, setTick] = useState(0);
+  const anyActive =
+    streamStatus !== null && Object.values(streamStatus).some((s) => s === "active");
   useEffect(() => {
-    if (streamStatus === null) return;
-    const anyActive = Object.values(streamStatus).some((s) => s === "active");
     if (!anyActive) return;
-    const id = window.setTimeout(() => setTick((n) => n + 1), CONNECTING_WINDOW_MS);
-    return () => window.clearTimeout(id);
-  }, [streamStatus]);
+    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [anyActive]);
+
+  // Memoize the chunks-derived map so big transcripts don't recompute on
+  // every render — gemini PR #50 MEDIUM (capture-indicator.tsx:151).
+  const derivedLastChunkAt = useMemo(
+    () => (lastChunkAt === undefined ? _deriveLastChunkAtFromChunks(chunks) : null),
+    [lastChunkAt, chunks],
+  );
 
   if (streamStatus === null) return null;
 
   const now = nowMs ?? Date.now();
-  const derivedLastChunkAt =
-    lastChunkAt === undefined ? _deriveLastChunkAtFromChunks(chunks) : null;
 
   function _resolveLastChunkAt(stream: Stream): number | null {
     if (lastChunkAt !== undefined) {
@@ -161,7 +180,7 @@ export function CaptureIndicator({
     if (streamStartedAt !== undefined) {
       return streamStartedAt[stream] ?? null;
     }
-    return startedRef.current[stream];
+    return startedAt[stream];
   }
 
   return (

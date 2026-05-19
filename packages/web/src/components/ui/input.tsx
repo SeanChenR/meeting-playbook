@@ -37,11 +37,15 @@ interface _CurvyInputProps extends InputHTMLAttributes<HTMLInputElement> {
 const CurvyInput = forwardRef<HTMLInputElement, _CurvyInputProps>(
   ({ className, type, label, onFocus, onBlur, value, defaultValue, ...props }, ref) => {
     const [focused, setFocused] = useState(false);
-    const [hasValue, setHasValue] = useState(() => {
-      if (typeof value === "string") return value.length > 0;
-      if (typeof defaultValue === "string") return defaultValue.length > 0;
-      return false;
-    });
+    // Track uncontrolled value so the floating label reacts to user input
+    // without making `value` mandatory. For controlled mode, derive from prop
+    // directly so external updates (parent reset, autofill) sync correctly —
+    // gemini PR #50 HIGH (input.tsx:44 / :78).
+    const [internalValue, setInternalValue] = useState<string>(() =>
+      typeof defaultValue === "string" ? defaultValue : "",
+    );
+    const currentValue = value !== undefined ? String(value) : internalValue;
+    const hasValue = currentValue.length > 0;
     const float = focused || hasValue;
 
     return (
@@ -73,7 +77,7 @@ const CurvyInput = forwardRef<HTMLInputElement, _CurvyInputProps>(
             onBlur?.(e);
           }}
           onChange={(e) => {
-            setHasValue(e.currentTarget.value.length > 0);
+            setInternalValue(e.currentTarget.value);
             props.onChange?.(e);
           }}
           {...props}

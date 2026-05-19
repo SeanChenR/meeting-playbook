@@ -380,6 +380,30 @@
   }
 }
 
+/* Popover / Dialog entry + exit. Used by Radix-attribute-driven utility
+ * classes like `data-[state=open]:animate-[mp-pop-in_180ms_...]`. */
+@keyframes mp-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes mp-pop-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
 /* Loading dot pulse — ui-overhaul-primitive-upgrade task 6.
  * Source: https://uiverse.io/gustavofusco/rare-pug-90 (CC0). */
 @keyframes mp-loading-pulse {

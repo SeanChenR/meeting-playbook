@@ -20,7 +20,7 @@ import { useMemo } from "react";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion";
 import { useTheme } from "../../../lib/theme-provider";
 
-const STAR_COUNT = 60;
+const STAR_COUNT = 120;
 
 export interface StarsProps {
   /** Defaults to "protected"; public routes (login/signup) pass "public". */
@@ -42,10 +42,10 @@ function _seededStars(count: number): _Star[] {
   for (let i = 0; i < count; i++) {
     const x = (i * 137.5) % 100;
     const y = (i * 53.7 + i * i * 0.3) % 100;
-    const size = 1 + (i % 3) * 0.5;
+    const size = 1.5 + (i % 4) * 0.6;
     const delay = (i * 0.17) % 5;
     const duration = 3 + (i % 4);
-    const tone: _Star["tone"] = i % 5 === 0 ? "foreground" : "muted";
+    const tone: _Star["tone"] = i % 4 === 0 ? "foreground" : "muted";
     stars.push({ id: i, x, y, size, delay, duration, tone });
   }
   return stars;
@@ -64,7 +64,10 @@ export function Stars({ route = "protected" }: StarsProps) {
     <div
       aria-hidden
       data-testid="stars-layer"
-      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+      // z-0 sits above the parent's bg-(--color-background) but below the
+      // sticky navbar (z-30) and any card content. Previously -z-10 hid the
+      // layer entirely behind the protected-shell bg.
+      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
     >
       {stars.map((s) => {
         const color =
@@ -80,7 +83,8 @@ export function Stars({ route = "protected" }: StarsProps) {
               width: `${s.size}px`,
               height: `${s.size}px`,
               background: color,
-              opacity: 0.25,
+              opacity: 0.55,
+              boxShadow: `0 0 ${s.size * 2}px ${color}`,
               animation: `mp-star-twinkle ${s.duration}s ease-in-out ${s.delay}s infinite`,
             }}
           />
@@ -88,8 +92,8 @@ export function Stars({ route = "protected" }: StarsProps) {
       })}
       <style>{`
         @keyframes mp-star-twinkle {
-          0%, 100% { opacity: 0.15; }
-          50% { opacity: 0.55; }
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 0.85; }
         }
       `}</style>
     </div>

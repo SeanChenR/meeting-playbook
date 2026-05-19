@@ -136,7 +136,7 @@ describe("MeetingsList route", () => {
 
     const card = await screen.findByTestId("meeting-card");
     expect(card.className).toContain("transition-");
-    expect(card.className).toContain("hover:shadow-md");
+    expect(card.className).toContain("hover:shadow-lg");
   });
 
   test("(c) empty state copy contains no emoji glyphs", async () => {

@@ -317,6 +317,7 @@ export function NewMeeting() {
                 <Input
                   id="meeting-title"
                   required
+                  variant="curvy"
                   value={title}
                   placeholder={t("meetings.new.titlePlaceholder")}
                   onChange={(e) => setTitle(e.target.value)}
@@ -331,6 +332,7 @@ export function NewMeeting() {
                   <Input
                     id="meeting-counterparty"
                     required
+                    variant="curvy"
                     value={counterparty}
                     placeholder={t("meetings.new.counterpartyPlaceholder")}
                     onChange={(e) => setCounterparty(e.target.value)}
@@ -341,6 +343,7 @@ export function NewMeeting() {
                   <Input
                     id="meeting-me"
                     required
+                    variant="curvy"
                     value={me}
                     placeholder={t("meetings.new.mePlaceholder")}
                     onChange={(e) => setMe(e.target.value)}

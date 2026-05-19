@@ -36,7 +36,7 @@ describe("HoverGlowCard", () => {
     render(<HoverGlowCard>x</HoverGlowCard>);
     const root = screen.getByTestId("hover-glow-card");
     expect(root.className).toContain("transition");
-    expect(root.className).toContain("hover:-translate-y-0.5");
+    expect(root.className).toContain("hover:-translate-y-1");
     expect(root.className).toContain("hover:border-(--color-primary)");
   });
 
@@ -57,7 +57,7 @@ describe("HoverGlowCard", () => {
     render(<HoverGlowCard>x</HoverGlowCard>);
     const root = screen.getByTestId("hover-glow-card");
     expect(root.getAttribute("data-reduced-motion")).toBe("true");
-    expect(root.className).not.toContain("hover:-translate-y-0.5");
+    expect(root.className).not.toContain("hover:-translate-y-1");
   });
 
   test("asChild merges classes onto the single child (preserves tagName + child data-testid)", () => {
@@ -70,7 +70,7 @@ describe("HoverGlowCard", () => {
     );
     const anchor = screen.getByTestId("anchor");
     expect(anchor.tagName).toBe("A");
-    expect(anchor.className).toContain("hover:-translate-y-0.5");
+    expect(anchor.className).toContain("hover:-translate-y-1");
     expect(anchor.getAttribute("data-hover-glow-card")).toBe("true");
   });
 });

@@ -66,7 +66,7 @@ describe("MeetingCard upload shortcut (slice-15 task 8.4)", () => {
     });
     const cardLink = screen.getByTestId("meeting-card");
     expect(cardLink.getAttribute("data-hover-glow-card")).toBe("true");
-    expect(cardLink.className).toContain("hover:-translate-y-0.5");
+    expect(cardLink.className).toContain("hover:-translate-y-1");
     expect(cardLink.className).toContain("hover:border-(--color-primary)");
   });
 

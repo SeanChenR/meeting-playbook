@@ -15,8 +15,7 @@
  * component is presentation-only for the row body + menu trigger.
  */
 
-import { Pencil } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { localizedErrorMessage } from "../lib/i18n-errors";
@@ -58,7 +57,6 @@ export function TranscriptChunkRow({
   onRenameCommit,
 }: TranscriptChunkRowProps) {
   const { t } = useTranslation();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(initialText);
@@ -66,7 +64,6 @@ export function TranscriptChunkRow({
   const [text, setText] = useState(initialText);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   function _cancelEdit() {
     setDraft(text);
@@ -191,21 +188,7 @@ export function TranscriptChunkRow({
           <p className="flex-1 whitespace-pre-wrap text-sm leading-relaxed text-(--color-foreground)">
             {text}
           </p>
-          <button
-            ref={triggerRef}
-            type="button"
-            data-testid="chunk-action-menu-trigger"
-            onClick={() => setMenuOpen((v) => !v)}
-            title={t("transcript.chunk.actions.open")}
-            aria-label={t("transcript.chunk.actions.open")}
-            className="shrink-0 rounded-md border border-(--color-border) p-1 text-(--color-muted-foreground) transition-colors hover:text-(--color-foreground)"
-          >
-            <Pencil className="size-3.5" aria-hidden />
-          </button>
           <ChunkActionMenu
-            open={menuOpen}
-            onOpenChange={setMenuOpen}
-            anchorRef={triggerRef}
             clusterN={clusterN}
             recordingExpired={recordingExpired}
             onPlay={() => onPlay?.(chunkId)}

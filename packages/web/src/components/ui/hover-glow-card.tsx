@@ -22,10 +22,12 @@ import { cn } from "../../lib/utils";
 
 const _BASE_CLS =
   "rounded-lg border border-(--color-border) bg-(--color-card) shadow-sm " +
-  "transition-[box-shadow,border-color,transform] duration-150 " +
-  "hover:border-(--color-primary)/40 hover:shadow-md";
+  // Longer + cubic-bezier easing so the lift + glow feels gradual, not a
+  // 150ms snap. Border tint at 60% opacity reads more clearly than 40%.
+  "transition-[box-shadow,border-color,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] " +
+  "hover:border-(--color-primary)/60 hover:shadow-lg";
 
-const _MOTION_CLS = "hover:-translate-y-0.5";
+const _MOTION_CLS = "hover:-translate-y-1 hover:scale-[1.015]";
 
 export interface HoverGlowCardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;

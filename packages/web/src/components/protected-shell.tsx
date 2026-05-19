@@ -3,7 +3,6 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { authClient } from "../lib/auth-client";
-import { Stars } from "./animate-ui/backgrounds/stars";
 import { LocaleToggle } from "./locale-toggle";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
@@ -56,7 +55,6 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
 
   return (
     <div className="relative flex min-h-dvh flex-col bg-(--color-background)">
-      <Stars route="protected" />
       <header
         data-testid="navbar"
         className="sticky top-0 z-30 flex h-14 shrink-0 items-center border-b border-(--color-border) bg-(--color-card)/95 backdrop-blur supports-[backdrop-filter]:bg-(--color-card)/85"

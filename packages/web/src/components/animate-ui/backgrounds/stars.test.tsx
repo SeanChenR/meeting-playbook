@@ -73,7 +73,7 @@ describe("Stars background", () => {
     expect(screen.queryByTestId("stars-layer")).toBeNull();
   });
 
-  test("renders at most 60 star elements", () => {
+  test("renders a bounded star count (≤ 200)", () => {
     render(
       <ThemeProvider initialTheme="dark">
         <Stars />
@@ -81,8 +81,10 @@ describe("Stars background", () => {
     );
     const layer = screen.getByTestId("stars-layer");
     const stars = layer.querySelectorAll('[data-testid="star"]');
+    // Density bumped from 60 to 120 during UI overhaul follow-up so the
+    // layer reads on a 1080p+ canvas; cap stays defensive to bound paint cost.
     expect(stars.length).toBeGreaterThan(0);
-    expect(stars.length).toBeLessThanOrEqual(60);
+    expect(stars.length).toBeLessThanOrEqual(200);
   });
 
   test("uses Aura tokens (no raw hex literals)", () => {

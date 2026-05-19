@@ -4,11 +4,14 @@ import { cn } from "../../lib/utils";
 export type InputVariant = "default" | "curvy";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-  /** Pick between baseline `<input>` and the ported curvy-earwig-22 variant.
-   * Default keeps the slice-7 contract exactly. */
+  /** Pick between baseline `<input>` and the curvy variant.
+   * Default keeps the slice-7 contract exactly. Curvy adds a focus border
+   * that sweeps from left → right across the input perimeter; pass `label`
+   * to additionally enable the floating-label animation. */
   variant?: InputVariant;
-  /** Curvy variant only — label text. The floating motion is driven by the
-   * label so a labelless curvy input falls back to default rendering. */
+  /** Curvy variant only — label text. When supplied the wrapper renders a
+   * floating-label spring; when omitted curvy still applies the sweep
+   * border, leaving label ownership to the consumer. */
   label?: string;
 }
 
@@ -20,9 +23,19 @@ const _BASE_INPUT_CLS = cn(
   "disabled:cursor-not-allowed disabled:opacity-50",
 );
 
+// Curvy variant uses a slimmer 1px border + suppresses the default
+// focus-visible outline (the sweep overlay is the focus affordance).
+const _CURVY_INPUT_CLS = cn(
+  "flex h-10 w-full rounded-md border border-(--color-input) bg-(--color-card) px-3 py-2 text-sm",
+  "placeholder:text-(--color-muted-foreground)",
+  "transition-[border-color] duration-150 focus:border-transparent",
+  "focus-visible:outline-none",
+  "disabled:cursor-not-allowed disabled:opacity-50",
+);
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, variant = "default", label, ...props }, ref) => {
-    if (variant === "curvy" && label) {
+    if (variant === "curvy") {
       return <CurvyInput ref={ref} className={className} type={type} label={label} {...props} />;
     }
     return <input type={type} ref={ref} className={cn(_BASE_INPUT_CLS, className)} {...props} />;
@@ -31,7 +44,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 Input.displayName = "Input";
 
 interface _CurvyInputProps extends InputHTMLAttributes<HTMLInputElement> {
-  label: string;
+  label?: string;
 }
 
 const CurvyInput = forwardRef<HTMLInputElement, _CurvyInputProps>(
@@ -53,21 +66,20 @@ const CurvyInput = forwardRef<HTMLInputElement, _CurvyInputProps>(
         data-testid="curvy-wrap"
         data-focused={focused ? "true" : "false"}
         data-floating={float ? "true" : "false"}
-        className={cn(
-          "relative isolate",
-          // Aura-token gradient underline that fades in on focus.
-          "after:absolute after:bottom-0 after:left-0 after:h-px after:w-full",
-          "after:bg-gradient-to-r after:from-(--color-primary) after:via-(--color-accent) after:to-(--color-primary)",
-          "after:scale-x-0 after:origin-left after:transition-transform after:duration-200",
-          "focus-within:after:scale-x-100 motion-reduce:after:transition-none",
-        )}
+        className="relative isolate"
       >
         <input
           ref={ref}
           type={type}
           value={value}
           defaultValue={defaultValue}
-          className={cn(_BASE_INPUT_CLS, "peer pt-4", className)}
+          className={cn(
+            _CURVY_INPUT_CLS,
+            "peer",
+            // Reserve top padding only when a floating label is rendered.
+            label ? "pt-4" : null,
+            className,
+          )}
           onFocus={(e) => {
             setFocused(true);
             onFocus?.(e);
@@ -82,18 +94,34 @@ const CurvyInput = forwardRef<HTMLInputElement, _CurvyInputProps>(
           }}
           {...props}
         />
+        {/* Sweep border overlay — fully revealed on focus via clip-path
+         * left → right. clip-path is animatable in modern browsers; the
+         * fallback under prefers-reduced-motion is an instant reveal. */}
         <span
-          data-testid="curvy-label"
           aria-hidden
+          data-testid="curvy-sweep"
           className={cn(
-            "pointer-events-none absolute left-3 origin-left text-(--color-muted-foreground)",
-            "transition-[transform,color,font-size] duration-200 ease-out",
-            "motion-reduce:transition-none",
-            float ? "top-1 scale-75 text-(--color-primary)" : "top-1/2 -translate-y-1/2 text-sm",
+            "pointer-events-none absolute inset-0 rounded-md border border-(--color-primary)",
+            "transition-[clip-path] duration-500 ease-out motion-reduce:transition-none",
           )}
-        >
-          {label}
-        </span>
+          style={{
+            clipPath: focused ? "inset(0 0 0 0)" : "inset(0 100% 0 0)",
+          }}
+        />
+        {label ? (
+          <span
+            data-testid="curvy-label"
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute left-3 origin-left text-(--color-muted-foreground)",
+              "transition-[transform,color,font-size] duration-200 ease-out",
+              "motion-reduce:transition-none",
+              float ? "top-1 scale-75 text-(--color-primary)" : "top-1/2 -translate-y-1/2 text-sm",
+            )}
+          >
+            {label}
+          </span>
+        ) : null}
       </div>
     );
   },

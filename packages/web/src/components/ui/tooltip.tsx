@@ -46,9 +46,9 @@ export const TooltipContent = forwardRef<
       className={cn(
         "z-50 overflow-hidden rounded-(--radius-sm) border border-(--color-border-strong)",
         "bg-(--color-foreground) px-2.5 py-1.5 text-xs text-(--color-background) shadow-(--shadow-md)",
-        "data-[state=delayed-open]:animate-in data-[state=closed]:animate-out",
-        "data-[state=closed]:fade-out-0 data-[state=delayed-open]:fade-in-0",
-        "data-[state=closed]:zoom-out-95 data-[state=delayed-open]:zoom-in-95",
+        "data-[state=delayed-open]:animate-[mp-pop-in_140ms_cubic-bezier(0.16,1,0.3,1)]",
+        "data-[state=closed]:animate-[mp-pop-out_100ms_ease-in]",
+        "motion-reduce:animate-none",
         className,
       )}
       {...props}

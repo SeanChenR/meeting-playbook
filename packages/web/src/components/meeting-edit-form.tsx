@@ -152,7 +152,7 @@ export function MeetingEditForm({ meeting, onSaved, onCancel }: MeetingEditFormP
     <form data-testid="meeting-edit-form" onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1">
         <Label htmlFor="meeting-edit-title">{t("meetings.edit.title")}</Label>
-        <Input id="meeting-edit-title" type="text" {...form.register("title")} />
+        <Input id="meeting-edit-title" type="text" variant="curvy" {...form.register("title")} />
         {form.formState.errors.title ? (
           <p className="text-xs text-(--color-destructive)">
             {localizedErrorMessage("meeting.title.required", t)}
@@ -206,12 +206,18 @@ export function MeetingEditForm({ meeting, onSaved, onCancel }: MeetingEditFormP
           <Input
             id="meeting-edit-counterparty"
             type="text"
+            variant="curvy"
             {...form.register("counterparty_display_name")}
           />
         </div>
         <div className="space-y-1">
           <Label htmlFor="meeting-edit-me">{t("meetings.edit.meDisplayName")}</Label>
-          <Input id="meeting-edit-me" type="text" {...form.register("me_display_name")} />
+          <Input
+            id="meeting-edit-me"
+            type="text"
+            variant="curvy"
+            {...form.register("me_display_name")}
+          />
         </div>
       </div>
 

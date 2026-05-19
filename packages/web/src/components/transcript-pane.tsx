@@ -39,6 +39,7 @@ import { useClusterSpeakerLabels } from "../hooks/use-cluster-speaker-labels";
 import { miniPlayerStore } from "../hooks/use-mini-player";
 import { useTranscriptColorPref } from "../hooks/use-transcript-color-pref";
 import { cn } from "../lib/utils";
+import { AnimatedList, AnimatedListItem } from "./magicui/animated-list";
 import { NumberTicker } from "./magicui/number-ticker";
 import { Pane } from "./pane";
 import { SpeakerColorPopover } from "./speaker-color-popover";
@@ -165,7 +166,7 @@ export function TranscriptPane({
             {t("meetings.session.transcriptEmpty")}
           </div>
         ) : (
-          <ol className="flex flex-col gap-2.5">
+          <AnimatedList as="ol" className="flex flex-col gap-2.5">
             {chunks.map((chunk, idx) => (
               <TranscriptChunkRow
                 key={`${chunk.started_at}-${idx}`}
@@ -175,7 +176,7 @@ export function TranscriptPane({
                 meetingId={meetingId}
               />
             ))}
-          </ol>
+          </AnimatedList>
         )}
       </div>
     </Pane>
@@ -222,9 +223,11 @@ function TranscriptChunkRow({
   const hasDbId = typeof chunk.id === "string" && chunk.id.length > 0;
 
   return (
-    <li
-      data-testid="transcript-chunk"
-      data-speaker={chunk.speaker}
+    <AnimatedListItem
+      className={cn(
+        "rounded-r-md bg-(--chunk-bg) px-3 py-2.5 text-sm",
+        isMe ? "border-l-(--color-muted-foreground)" : "border-l-(--color-primary)",
+      )}
       style={
         {
           borderLeftStyle: "solid",
@@ -233,10 +236,10 @@ function TranscriptChunkRow({
           "--chunk-bg": background,
         } as React.CSSProperties
       }
-      className={cn(
-        "rounded-r-md bg-(--chunk-bg) px-3 py-2.5 text-sm",
-        isMe ? "border-l-(--color-muted-foreground)" : "border-l-(--color-primary)",
-      )}
+      itemProps={{
+        "data-testid": "transcript-chunk",
+        "data-speaker": chunk.speaker,
+      }}
     >
       <div className="mb-1 flex items-center gap-2">
         <span
@@ -274,7 +277,7 @@ function TranscriptChunkRow({
         onEditColor={() => setColorPopoverOpen(true)}
         onRenameCommit={(n, label) => setLabel(n, label)}
       />
-    </li>
+    </AnimatedListItem>
   );
 }
 

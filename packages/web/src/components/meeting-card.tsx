@@ -13,6 +13,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Calendar as CalendarIcon, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "./ui/badge";
+import { HoverGlowCard } from "./ui/hover-glow-card";
 import { TagChip } from "./tags/tag-chip";
 import { TagPicker } from "./tags/tag-picker";
 import type { Meeting, MeetingStatus } from "../lib/meetings-api";
@@ -67,53 +68,55 @@ export function MeetingCard({ meeting, showUploadShortcut = false }: MeetingCard
   const timeText = _formatTime(meeting.scheduled_start_at, i18n.language);
 
   const cardLink = (
-    <Link
-      {...({ to: `/meetings/${meeting.id}` } as { to: "/meetings/$id"; params: { id: string } })}
-      data-testid="meeting-card"
-      className="group relative block shrink-0 overflow-hidden rounded-lg border border-(--color-border) bg-(--color-card) p-5 shadow-sm transition-[box-shadow,border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-(--color-primary)/40 hover:shadow-md"
-    >
-      <span
-        aria-hidden
-        className="absolute left-0 top-0 h-full w-[3px]"
-        style={{ background: color }}
-      />
-      <div className="flex items-center justify-between gap-2">
-        <Badge variant={badgeVariant} className="gap-1.5">
-          <span aria-hidden className="size-1.5 rounded-full" style={{ background: color }} />
-          {t(`meetings.list.status.${meeting.status}`)}
-        </Badge>
-      </div>
-      <h2
-        data-testid="meeting-list-item-title"
-        className="mt-3 text-lg font-semibold leading-snug tracking-tight text-(--color-foreground)"
+    <HoverGlowCard asChild>
+      <Link
+        {...({ to: `/meetings/${meeting.id}` } as { to: "/meetings/$id"; params: { id: string } })}
+        data-testid="meeting-card"
+        className="group relative block shrink-0 overflow-hidden p-5"
       >
-        {meeting.title}
-      </h2>
-      <p className="mt-2 text-sm text-(--color-muted-foreground)">
-        <span className="font-medium text-(--color-foreground)">
-          {meeting.counterparty_display_name}
-        </span>{" "}
-        · {meeting.me_display_name}
-      </p>
-      {(meeting.tags?.length ?? 0) > 0 && (
-        <div data-testid="meeting-card-tags" className="mt-2 flex flex-wrap gap-1">
-          {(meeting.tags ?? []).map((tag) => (
-            <TagChip key={tag.id} name={tag.name} color={tag.color} />
-          ))}
+        <span
+          aria-hidden
+          className="absolute left-0 top-0 h-full w-[3px]"
+          style={{ background: color }}
+        />
+        <div className="flex items-center justify-between gap-2">
+          <Badge variant={badgeVariant} className="gap-1.5">
+            <span aria-hidden className="size-1.5 rounded-full" style={{ background: color }} />
+            {t(`meetings.list.status.${meeting.status}`)}
+          </Badge>
         </div>
-      )}
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-(--color-muted-foreground)">
-        <span className="inline-flex items-center gap-1">
-          <CalendarIcon className="size-3" aria-hidden />
-          {timeText}
-        </span>
-        {duration !== null && (
-          <span>
-            · {duration} {t("meetings.list.minutesShort")}
-          </span>
+        <h2
+          data-testid="meeting-list-item-title"
+          className="mt-3 text-lg font-semibold leading-snug tracking-tight text-(--color-foreground)"
+        >
+          {meeting.title}
+        </h2>
+        <p className="mt-2 text-sm text-(--color-muted-foreground)">
+          <span className="font-medium text-(--color-foreground)">
+            {meeting.counterparty_display_name}
+          </span>{" "}
+          · {meeting.me_display_name}
+        </p>
+        {(meeting.tags?.length ?? 0) > 0 && (
+          <div data-testid="meeting-card-tags" className="mt-2 flex flex-wrap gap-1">
+            {(meeting.tags ?? []).map((tag) => (
+              <TagChip key={tag.id} name={tag.name} color={tag.color} />
+            ))}
+          </div>
         )}
-      </div>
-    </Link>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-(--color-muted-foreground)">
+          <span className="inline-flex items-center gap-1">
+            <CalendarIcon className="size-3" aria-hidden />
+            {timeText}
+          </span>
+          {duration !== null && (
+            <span>
+              · {duration} {t("meetings.list.minutesShort")}
+            </span>
+          )}
+        </div>
+      </Link>
+    </HoverGlowCard>
   );
 
   // Slice-17: every card carries a hover-only "+ tag" picker so the

@@ -58,6 +58,26 @@ describe("MeetingCard upload shortcut (slice-15 task 8.4)", () => {
     expect(screen.queryByTestId("meeting-card-upload-shortcut")).toBeNull();
   });
 
+  // ─── ui-overhaul-animated-surfaces task 6.2 ─────────────────────
+  test("card link is wrapped by HoverGlowCard (lift + border glow)", async () => {
+    await renderWithRouter(<MeetingCard meeting={_meeting()} />, {
+      initialEntries: ["/meetings"],
+      path: "/meetings",
+    });
+    const cardLink = screen.getByTestId("meeting-card");
+    expect(cardLink.getAttribute("data-hover-glow-card")).toBe("true");
+    expect(cardLink.className).toContain("hover:-translate-y-0.5");
+    expect(cardLink.className).toContain("hover:border-(--color-primary)");
+  });
+
+  test("tag-picker shortcut stays visible alongside HoverGlowCard wrapper", async () => {
+    await renderWithRouter(<MeetingCard meeting={_meeting()} />, {
+      initialEntries: ["/meetings"],
+      path: "/meetings",
+    });
+    expect(screen.getByTestId("meeting-card-tag-shortcut")).toBeDefined();
+  });
+
   test("(c) click on shortcut navigates with ?action=upload", async () => {
     const user = userEvent.setup();
     // The synthetic router only mounts a wildcard `/meetings/*`-style stub

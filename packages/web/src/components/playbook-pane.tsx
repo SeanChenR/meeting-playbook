@@ -32,6 +32,7 @@ import { Alert } from "./ui/alert";
 import { AlertDialog } from "./ui/alert-dialog";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { SpicyReveal } from "./ui/spicy-reveal";
 import { cn } from "../lib/utils";
 
 interface PlaybookPaneProps {
@@ -242,7 +243,7 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
       }
       bodyClassName="px-3.5 py-3.5"
     >
-      <div className="space-y-4">
+      <SpicyReveal revealKey={meetingId} className="space-y-4">
         {query.isLoading && (
           <p className="text-sm text-(--color-muted-foreground)">{t("playbook.loading")}</p>
         )}
@@ -319,7 +320,7 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
             </Button>
           </div>
         )}
-      </div>
+      </SpicyReveal>
 
       <AlertDialog
         open={showRegenerateDialog}

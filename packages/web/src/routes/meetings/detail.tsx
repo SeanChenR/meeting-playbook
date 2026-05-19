@@ -264,6 +264,7 @@ export function MeetingDetail() {
                 meDisplayName={meeting.me_display_name}
                 counterpartyDisplayName={meeting.counterparty_display_name}
                 ending={session.state.phase === "ending"}
+                chunks={liveChunks}
               />
             }
             rerunSlot={<RerunButton meeting={meeting} />}

@@ -302,6 +302,21 @@ describe("MeetingAudioMiniPlayer", () => {
     }
   });
 
+  // ─── ui-overhaul-animated-surfaces task 5.2 ─────────────────────
+  test("mini-player chrome is a GlassDock wrapper", () => {
+    act(() => {
+      miniPlayerStore.setContext({
+        meeting_id: "m1",
+        chunks: _chunks,
+        recordings: [_recordingMe, _recordingC],
+      });
+    });
+    render(<MeetingAudioMiniPlayer meetingId="m1" />);
+    const player = screen.getByTestId("meeting-audio-mini-player");
+    expect(player.className).toContain("backdrop-blur");
+    expect(player.className).toContain("rounded-lg");
+  });
+
   test("(l) persisted source 'me' is honored across mount", () => {
     window.localStorage.setItem("miniPlayerSource", "me");
     act(() => {

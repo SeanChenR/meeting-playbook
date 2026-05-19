@@ -422,11 +422,14 @@ describe("MeetingDetail slice-06 session UI", () => {
     const ws = _MockSessionWS.instances[0]!;
     await waitFor(() => {
       ws.simulateMessage({ type: "meeting_started", meeting_id: "m_abc" });
-      // Slice-7: two pills (me + counterparty); both should be in `active` state.
+      // ui-overhaul-animated-surfaces: capture-indicator now exposes
+      // `connecting | listening | speaking | off`. Right after
+      // meeting_started, both streams are active with no chunks yet —
+      // within the first 8s heuristic window → `connecting`.
       const pills = screen.getAllByTestId("capture-indicator");
       expect(pills).toHaveLength(2);
       for (const pill of pills) {
-        expect(pill.dataset.state).toBe("active");
+        expect(["connecting", "listening", "speaking"]).toContain(pill.dataset.state ?? "");
       }
     });
 
@@ -457,11 +460,11 @@ describe("MeetingDetail slice-06 session UI", () => {
     const ws = _MockSessionWS.instances[0]!;
     await waitFor(() => {
       ws.simulateMessage({ type: "meeting_started", meeting_id: "m_abc" });
-      // Slice-7: two pills (me + counterparty); both should be in `active` state.
+      // ui-overhaul-animated-surfaces: capture-indicator three-state map.
       const pills = screen.getAllByTestId("capture-indicator");
       expect(pills).toHaveLength(2);
       for (const pill of pills) {
-        expect(pill.dataset.state).toBe("active");
+        expect(["connecting", "listening", "speaking"]).toContain(pill.dataset.state ?? "");
       }
     });
 

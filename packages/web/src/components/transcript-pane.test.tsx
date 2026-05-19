@@ -221,4 +221,38 @@ describe("TranscriptPane", () => {
     const item = screen.getByTestId("transcript-chunk");
     expect(item.getAttribute("data-speaker")).toBe("speaker_cluster_3");
   });
+
+  // ─── ui-overhaul-animated-surfaces task 4.2 ──────────────────────
+  test("chunks render through the animated-list pattern (fade-in variant in motion mode)", () => {
+    // Default motion mode: no reduced-motion match.
+    // @ts-expect-error happy-dom override
+    window.matchMedia = (q: string) => ({
+      matches: false,
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    });
+    const chunks = [_chunk("hi", "me")];
+    _render(
+      <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
+    );
+    const item = screen.getByTestId("transcript-chunk");
+    expect(item.getAttribute("data-reduced-motion")).toBe("false");
+  });
+
+  test("under reduced motion, chunks skip the entry animation (data-reduced-motion=true)", () => {
+    // @ts-expect-error happy-dom override
+    window.matchMedia = (q: string) => ({
+      matches: q.includes("reduced-motion"),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    });
+    const chunks = [_chunk("hi", "me")];
+    _render(
+      <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
+    );
+    const item = screen.getByTestId("transcript-chunk");
+    expect(item.getAttribute("data-reduced-motion")).toBe("true");
+  });
 });

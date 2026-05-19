@@ -30,6 +30,7 @@ import { localizedErrorMessage } from "../lib/i18n-errors";
 import { Alert } from "./ui/alert";
 import { buttonVariants } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
+import { SuccessResult } from "./ui/success-result";
 
 export interface AttachmentDropzoneApi {
   listAttachments: (meetingId: string) => Promise<Attachment[]>;
@@ -68,6 +69,10 @@ export function AttachmentDropzone({ meetingId, api = _DEFAULT_API }: Attachment
   const [progress, setProgress] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  // ui-overhaul-animated-surfaces task 6.5 — show the SuccessResult
+  // micro-interaction briefly after each successful upload. The flag is
+  // cleared by the SuccessResult component's `onAnimationComplete`.
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const listQuery = useQuery({
     queryKey: ["meeting-attachments", meetingId],
@@ -95,6 +100,7 @@ export function AttachmentDropzone({ meetingId, api = _DEFAULT_API }: Attachment
       _refreshGeneratedArtifacts();
       setProgress(null);
       setErrorMessage(null);
+      setSuccessMessage(t("attachments.uploadSuccess", { name: newRow.filename }));
     },
     onError: (err) => {
       const code = err instanceof AttachmentApiError ? err.errorCode : undefined;
@@ -191,6 +197,14 @@ export function AttachmentDropzone({ meetingId, api = _DEFAULT_API }: Attachment
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {successMessage && (
+        <SuccessResult
+          message={successMessage}
+          onAnimationComplete={() => setSuccessMessage(null)}
+          className="attachment-success"
+        />
       )}
 
       {errorMessage && (

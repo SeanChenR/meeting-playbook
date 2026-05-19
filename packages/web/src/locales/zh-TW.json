@@ -332,6 +332,11 @@
       "speaker": {
         "cluster": "與會者 {{n}}",
         "cluster_unknown": "與會者（未辨識）"
+      },
+      "barVisualizer": {
+        "connecting": "連接中…",
+        "listening": "聆聽中",
+        "speaking": "說話中"
       }
     },
     "links": {
@@ -911,6 +916,7 @@
     "deleteButton": "刪除",
     "deleteConfirm": "確定要刪除此附件？此操作無法復原",
     "uploadingLabel": "上傳中… {{percent}}%",
+    "uploadSuccess": "已上傳 {{name}}",
     "kind": {
       "image": "圖片",
       "pdf": "PDF",

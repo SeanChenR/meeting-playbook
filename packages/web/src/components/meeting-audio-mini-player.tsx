@@ -28,6 +28,7 @@ import {
 } from "../hooks/use-mini-player";
 import { localizedErrorMessage } from "../lib/i18n-errors";
 import { Alert } from "./ui/alert";
+import { GlassDock } from "./ui/glass-dock";
 
 export interface MeetingAudioMiniPlayerProps {
   meetingId: string;
@@ -173,9 +174,9 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
   ];
 
   return (
-    <div
+    <GlassDock
       data-testid="meeting-audio-mini-player"
-      className="sticky bottom-0 z-30 flex flex-col gap-2 border-t border-(--color-border) bg-(--color-card)/95 px-4 py-2 backdrop-blur"
+      className="sticky bottom-0 z-30 flex flex-col gap-2 border-t px-4 py-2"
     >
       {mixErrorCode && (
         <Alert data-testid="mini-player-mix-error" variant="destructive">
@@ -317,6 +318,6 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
           </select>
         </label>
       </div>
-    </div>
+    </GlassDock>
   );
 }

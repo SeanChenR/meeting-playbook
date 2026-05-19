@@ -31,7 +31,7 @@ let fetchHandler: (url: string, init?: RequestInit) => Promise<Response> = async
   new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
 const originalFetch = globalThis.fetch;
 
-import { MeetingsCalendar } from "./calendar";
+import { MeetingsCalendarPanel } from "./calendar";
 
 const TODAY = new Date();
 const tomorrow = new Date(TODAY);
@@ -86,9 +86,9 @@ describe("MeetingsCalendar route", () => {
     fetchHandler = async () =>
       new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
 
-    await renderWithRouter(<MeetingsCalendar />, {
-      initialEntries: ["/meetings/calendar"],
-      path: "/meetings/calendar",
+    await renderWithRouter(<MeetingsCalendarPanel />, {
+      initialEntries: ["/meetings?view=calendar"],
+      path: "/meetings",
     });
 
     const header = await screen.findByTestId("calendar-header");
@@ -96,18 +96,19 @@ describe("MeetingsCalendar route", () => {
     expect(header.textContent ?? "").toMatch(/(週|Week)/);
   });
 
-  test("(3.2 calendar) MeetingsViewTabs mounted with calendar active", async () => {
+  test("(refactor-meetings-tabs-unified 2.2) panel renders without MeetingsViewTabs", async () => {
+    // The view tab bar now lives in the /meetings wrapper, not inside the
+    // panel. Mounting the panel directly MUST NOT render meetings-view-tabs.
     fetchHandler = async () =>
       new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
-    await renderWithRouter(<MeetingsCalendar />, {
-      initialEntries: ["/meetings/calendar"],
-      path: "/meetings/calendar",
+    await renderWithRouter(<MeetingsCalendarPanel />, {
+      initialEntries: ["/meetings?view=calendar"],
+      path: "/meetings",
     });
-    const tabs = await screen.findByTestId("meetings-view-tabs");
-    expect(tabs).toBeDefined();
-    expect(screen.getByTestId("meetings-view-tab-calendar").getAttribute("data-state")).toBe(
-      "active",
-    );
+    expect(screen.queryByTestId("meetings-view-tabs")).toBeNull();
+    expect(screen.queryByTestId("calendar-tab-month")).toBeDefined();
+    expect(screen.queryByTestId("calendar-tab-week")).toBeDefined();
+    expect(screen.queryByTestId("meetings-calendar-unscheduled")).toBeDefined();
   });
 
   test("(b) clicking 月 tab activates month view", async () => {
@@ -115,9 +116,9 @@ describe("MeetingsCalendar route", () => {
       new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
 
     const user = userEvent.setup();
-    await renderWithRouter(<MeetingsCalendar />, {
-      initialEntries: ["/meetings/calendar"],
-      path: "/meetings/calendar",
+    await renderWithRouter(<MeetingsCalendarPanel />, {
+      initialEntries: ["/meetings?view=calendar"],
+      path: "/meetings",
     });
 
     const monthTab = await screen.findByTestId("calendar-tab-month");
@@ -136,9 +137,9 @@ describe("MeetingsCalendar route", () => {
       });
 
     const user = userEvent.setup();
-    await renderWithRouter(<MeetingsCalendar />, {
-      initialEntries: ["/meetings/calendar"],
-      path: "/meetings/calendar",
+    await renderWithRouter(<MeetingsCalendarPanel />, {
+      initialEntries: ["/meetings?view=calendar"],
+      path: "/meetings",
     });
 
     // Switch to month view: week view positions events via measured
@@ -166,9 +167,9 @@ describe("MeetingsCalendar route", () => {
         headers: { "content-type": "application/json" },
       });
 
-    await renderWithRouter(<MeetingsCalendar />, {
-      initialEntries: ["/meetings/calendar"],
-      path: "/meetings/calendar",
+    await renderWithRouter(<MeetingsCalendarPanel />, {
+      initialEntries: ["/meetings?view=calendar"],
+      path: "/meetings",
     });
 
     const row = await screen.findByTestId("unscheduled-row-m_unscheduled");
@@ -182,9 +183,9 @@ describe("MeetingsCalendar route", () => {
         headers: { "content-type": "application/json" },
       });
 
-    await renderWithRouter(<MeetingsCalendar />, {
-      initialEntries: ["/meetings/calendar"],
-      path: "/meetings/calendar",
+    await renderWithRouter(<MeetingsCalendarPanel />, {
+      initialEntries: ["/meetings?view=calendar"],
+      path: "/meetings",
     });
 
     const row = await screen.findByTestId("unscheduled-row-m_unscheduled");
@@ -196,9 +197,9 @@ describe("MeetingsCalendar route", () => {
     fetchHandler = async () =>
       new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
 
-    await renderWithRouter(<MeetingsCalendar />, {
-      initialEntries: ["/meetings/calendar"],
-      path: "/meetings/calendar",
+    await renderWithRouter(<MeetingsCalendarPanel />, {
+      initialEntries: ["/meetings?view=calendar"],
+      path: "/meetings",
     });
     const trigger = await screen.findByTestId("tag-filter-trigger");
     expect(trigger).toBeDefined();
@@ -208,9 +209,9 @@ describe("MeetingsCalendar route", () => {
     fetchHandler = async () =>
       new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
 
-    await renderWithRouter(<MeetingsCalendar />, {
-      initialEntries: ["/meetings/calendar"],
-      path: "/meetings/calendar",
+    await renderWithRouter(<MeetingsCalendarPanel />, {
+      initialEntries: ["/meetings?view=calendar"],
+      path: "/meetings",
     });
 
     // The header's "新會議" link is rendered via TanStack Router with

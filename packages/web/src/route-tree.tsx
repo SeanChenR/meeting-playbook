@@ -11,7 +11,6 @@ import { SettingsLayout } from "./components/settings/layout";
 import { DashboardPage } from "./routes/DashboardPage";
 import { Login } from "./routes/login";
 import { MeetingDetail } from "./routes/meetings/detail";
-import { MeetingsCalendar } from "./routes/meetings/calendar";
 import { MeetingsList } from "./routes/meetings/list";
 import { NewMeeting } from "./routes/meetings/new";
 import { RecordingsIndex } from "./routes/recordings";
@@ -74,12 +73,6 @@ const meetingsNewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/meetings/new",
   component: NewMeeting,
-});
-
-const meetingsCalendarRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/meetings/calendar",
-  component: MeetingsCalendar,
 });
 
 const meetingDetailRoute = createRoute({
@@ -171,7 +164,6 @@ export const routeTree = rootRoute.addChildren([
   dashboardRoute,
   meetingsListRoute,
   meetingsNewRoute,
-  meetingsCalendarRoute,
   meetingDetailRoute,
   recordingsRoute,
   settingsLayoutRoute,

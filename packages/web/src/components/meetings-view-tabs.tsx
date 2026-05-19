@@ -1,14 +1,13 @@
 /**
- * MeetingsViewTabs — slice meetings-ux-revamp tasks 3.1 + 3.2.
+ * MeetingsViewTabs — refactor-meetings-tabs-unified.
  *
- * Shared tab bar mounted on both /meetings (Kanban) and
- * /meetings/calendar (行事曆). The component is fully controlled — the
- * parent passes its current `value` and onValueChange triggers a
- * router navigation. URL is the single source of truth for which tab
- * is active.
+ * Shared tab bar mounted once by the /meetings wrapper. Switching toggles
+ * the `?view` search param on the same route (no pathname change), so the
+ * pill animates smoothly without remounting and other search params (e.g.
+ * `tag_ids`) are preserved.
  */
 
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
@@ -21,24 +20,16 @@ export interface MeetingsViewTabsProps {
 export function MeetingsViewTabs({ value }: MeetingsViewTabsProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const handleChange = (next: string) => {
     if (next === value) return;
-    // Slice-17: preserve cross-view search params (notably `?tag_ids=`) so
-    // the TagFilter selection survives a tab switch. Re-parse from the raw
-    // searchStr so TanStack Router doesn't strip unknown keys via the
-    // route's search validator (the meetings list / calendar routes have
-    // no strict schema yet).
-    // `URLSearchParams` strips a leading `?` itself, no need to slice.
-    const params = new URLSearchParams(location.searchStr ?? "");
-    const searchObj: Record<string, string> = {};
-    params.forEach((v, k) => {
-      searchObj[k] = v;
-    });
+    const nextView = next === "calendar" ? "calendar" : undefined;
     navigate({
-      to: next === "calendar" ? "/meetings/calendar" : "/meetings",
-      search: () => searchObj,
+      to: "/meetings",
+      search: (prev: Record<string, unknown> | undefined) => ({
+        ...(prev ?? {}),
+        view: nextView,
+      }),
     } as never);
   };
 

@@ -44,12 +44,9 @@ async function renderInRouter(initialEntry = "/meetings/new") {
     path: "/meetings",
     component: () => <div data-testid="redirected-list">on list</div>,
   });
-  const calendarRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/meetings/calendar",
-    component: () => <div data-testid="redirected-calendar">on calendar</div>,
-  });
-  const routeTree = rootRoute.addChildren([newRoute, detailRoute, listRoute, calendarRoute]);
+  // refactor-meetings-tabs-unified: /meetings/calendar route is gone; the
+  // calendar view is now /meetings?view=calendar.
+  const routeTree = rootRoute.addChildren([newRoute, detailRoute, listRoute]);
   const history = createMemoryHistory({ initialEntries: [initialEntry] });
   const router = createRouter({ routeTree, history });
   await router.load();
@@ -172,7 +169,7 @@ describe("NewMeeting form", () => {
 
   // ─── Slice meetings-ux-revamp task 4.1 — ?from=calendar redirect ───
 
-  test("(4.1) ?from=calendar → submit redirects to /meetings/calendar", async () => {
+  test("(refactor 5.1) ?from=calendar → submit redirects to /meetings?view=calendar", async () => {
     const user = userEvent.setup();
     fetchHandler = async (_url, init) => {
       if (init?.method === "POST") {
@@ -207,15 +204,17 @@ describe("NewMeeting form", () => {
     await user.click(screen.getByRole("button", { name: /建立$/ }));
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/meetings/calendar");
+      expect(router.state.location.pathname).toBe("/meetings");
+      const search = router.state.location.search as { view?: string };
+      expect(search.view).toBe("calendar");
     });
   });
 
-  test("(4.1) ?from=calendar → cancel link points to /meetings/calendar", async () => {
+  test("(refactor 5.1) ?from=calendar → cancel link points to /meetings?view=calendar", async () => {
     fetchHandler = async () => new Response("[]", { status: 200 });
     await renderInRouter("/meetings/new?from=calendar");
     const cancelLink = screen.getByRole("link", { name: /取消/ });
-    expect(cancelLink.getAttribute("href")).toBe("/meetings/calendar");
+    expect(cancelLink.getAttribute("href")).toBe("/meetings?view=calendar");
   });
 
   test("(4.1) no from param → cancel link points to /meetings (default)", async () => {

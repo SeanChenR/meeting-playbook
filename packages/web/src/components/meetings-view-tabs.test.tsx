@@ -1,14 +1,10 @@
 /**
- * MeetingsViewTabs — slice meetings-ux-revamp task 3.1.
+ * MeetingsViewTabs — refactor-meetings-tabs-unified task 1.1.
  *
- * Asserts the controlled Tabs contract: rendered active state matches
- * the `value` prop, and clicking the inactive trigger fires a router
- * navigate to the corresponding meetings route.
- *
- * Uses an inline 2-route memory router so navigation between
- * /meetings and /meetings/calendar resolves correctly. The shared
- * `renderWithRouter` fixture only registers one synthetic route per
- * call, so we wire both here.
+ * Asserts the controlled Tabs contract: rendered active state matches the
+ * `value` prop, and clicking the inactive trigger updates the `?view`
+ * search parameter on `/meetings` (pathname never changes; the legacy
+ * `/meetings/calendar` route does not exist).
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -31,18 +27,14 @@ afterEach(cleanup);
 
 async function _renderTabs(initialValue: MeetingsView) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  // Single /meetings route — view is derived from ?view search param.
   const listRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/meetings",
-    component: () => <MeetingsViewTabs value="kanban" />,
+    component: () => <MeetingsViewTabs value={initialValue} />,
   });
-  const calendarRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/meetings/calendar",
-    component: () => <MeetingsViewTabs value="calendar" />,
-  });
-  const routeTree = rootRoute.addChildren([listRoute, calendarRoute]);
-  const initialEntry = initialValue === "kanban" ? "/meetings" : "/meetings/calendar";
+  const routeTree = rootRoute.addChildren([listRoute]);
+  const initialEntry = initialValue === "kanban" ? "/meetings" : "/meetings?view=calendar";
   const history = createMemoryHistory({ initialEntries: [initialEntry] });
   const router = createRouter({ routeTree, history });
   await router.load();
@@ -62,7 +54,7 @@ async function _renderTabs(initialValue: MeetingsView) {
 }
 
 describe("MeetingsViewTabs", () => {
-  test("(3.1a) value='kanban' renders Kanban as active", async () => {
+  test("(1.1a) value='kanban' renders Kanban as active", async () => {
     await _renderTabs("kanban");
     const kanban = screen.getByTestId("meetings-view-tab-kanban");
     const calendar = screen.getByTestId("meetings-view-tab-calendar");
@@ -70,21 +62,25 @@ describe("MeetingsViewTabs", () => {
     expect(calendar.getAttribute("data-state")).toBe("inactive");
   });
 
-  test("(3.1b) clicking calendar trigger navigates to /meetings/calendar", async () => {
+  test("(1.1b) clicking calendar trigger sets ?view=calendar; pathname stays /meetings", async () => {
     const user = userEvent.setup();
     const router = await _renderTabs("kanban");
     await user.click(screen.getByTestId("meetings-view-tab-calendar"));
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/meetings/calendar");
+      expect(router.state.location.pathname).toBe("/meetings");
+      const search = router.state.location.search as { view?: string };
+      expect(search.view).toBe("calendar");
     });
   });
 
-  test("(3.1c) clicking kanban trigger from calendar navigates to /meetings", async () => {
+  test("(1.1c) clicking kanban trigger from calendar removes ?view; pathname stays /meetings", async () => {
     const user = userEvent.setup();
     const router = await _renderTabs("calendar");
     await user.click(screen.getByTestId("meetings-view-tab-kanban"));
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/meetings");
+      const search = router.state.location.search as { view?: string };
+      expect(search.view).toBeUndefined();
     });
   });
 });

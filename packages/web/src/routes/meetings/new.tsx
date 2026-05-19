@@ -120,8 +120,8 @@ export function NewMeeting() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   // Slice-7: pre-fill scheduled date from `?date=YYYY-MM-DD`.
-  // Slice meetings-ux-revamp Decision 4: `?from=calendar` reroutes
-  // submit/cancel back to /meetings/calendar instead of /meetings.
+  // refactor-meetings-tabs-unified: `?from=calendar` reroutes submit/cancel
+  // back to /meetings?view=calendar (legacy /meetings/calendar removed).
   // Slice-20b: `?from_calendar=<event_id>` triggers calendar-event pre-fill.
   const search = useSearch({ strict: false }) as {
     date?: string;
@@ -129,7 +129,7 @@ export function NewMeeting() {
     from_calendar?: string;
   };
   const cameFromCalendar = search.from === "calendar";
-  const cancelHref = cameFromCalendar ? "/meetings/calendar" : "/meetings";
+  const cancelHref = cameFromCalendar ? "/meetings?view=calendar" : "/meetings";
   const fromCalendarEventId = search.from_calendar;
 
   const [title, setTitle] = useState("");
@@ -251,7 +251,11 @@ export function NewMeeting() {
       }
       const meeting = await mutation.mutateAsync(payload);
       if (cameFromCalendar) {
-        navigate({ to: "/meetings/calendar", replace: true });
+        navigate({
+          to: "/meetings",
+          search: { view: "calendar" },
+          replace: true,
+        } as never);
       } else {
         navigate({
           to: "/meetings/$id",

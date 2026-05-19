@@ -46,15 +46,16 @@ describe("Tag filter survives view-tab switching", () => {
       initialEntries: ["/meetings?tag_ids=t_a"],
     });
 
-    // The shared MeetingsViewTabs renders calendar as a Link; clicking it
-    // should keep the filter param in the URL.
+    // The shared MeetingsViewTabs toggles the `?view` search param on the
+    // same /meetings route; clicking calendar must preserve `?tag_ids`.
     const calendarTab = await screen.findByTestId("meetings-view-tab-calendar");
     const user = userEvent.setup();
     await user.click(calendarTab);
 
     await waitFor(() => {
-      expect(router.history.location.pathname).toBe("/meetings/calendar");
+      expect(router.history.location.pathname).toBe("/meetings");
       expect(router.history.location.search).toContain("tag_ids=t_a");
+      expect(router.history.location.search).toContain("view=calendar");
     });
   });
 });

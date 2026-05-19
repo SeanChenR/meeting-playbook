@@ -30,6 +30,9 @@ let fetchHandler: (url: string, init?: RequestInit) => Promise<Response> = async
 const originalFetch = globalThis.fetch;
 
 import { MeetingsList } from "./list";
+import { MeetingsKanbanPanel } from "./kanban-panel";
+import { renderAppRoutes } from "../../test/fixtures/router";
+import { routeTree } from "../../route-tree";
 
 const SAMPLE_MEETING = {
   id: "m_one",
@@ -184,6 +187,82 @@ describe("MeetingsList route", () => {
     const importBtn = await screen.findByTestId("meetings-list-import-calendar");
     expect(importBtn.tagName).toBe("A");
     expect(importBtn.getAttribute("href")).toBe("/settings/integrations");
+  });
+
+  // ─── refactor-meetings-tabs-unified ───────────────────────────────
+
+  test("(refactor 3.1a) wrapper mounts MeetingsViewTabs once at /meetings (kanban default)", async () => {
+    fetchHandler = async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+
+    await renderWithRouter(<MeetingsList />, { initialEntries: ["/meetings"], path: "/meetings" });
+    const tabs = await screen.findByTestId("meetings-view-tabs");
+    expect(tabs).toBeDefined();
+    expect(screen.getByTestId("meetings-view-tab-kanban").getAttribute("data-state")).toBe(
+      "active",
+    );
+    expect(screen.queryByTestId("meetings-calendar")).toBeNull();
+  });
+
+  test("(refactor 3.1b) ?view=calendar renders the calendar panel", async () => {
+    fetchHandler = async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+
+    await renderWithRouter(<MeetingsList />, {
+      initialEntries: ["/meetings?view=calendar"],
+      path: "/meetings",
+    });
+    expect(await screen.findByTestId("meetings-view-tabs")).toBeDefined();
+    expect(screen.getByTestId("meetings-view-tab-calendar").getAttribute("data-state")).toBe(
+      "active",
+    );
+    expect(await screen.findByTestId("meetings-calendar")).toBeDefined();
+  });
+
+  test("(refactor 3.1c) ?view=foo falls back to Kanban", async () => {
+    fetchHandler = async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+
+    await renderWithRouter(<MeetingsList />, {
+      initialEntries: ["/meetings?view=foo"],
+      path: "/meetings",
+    });
+    expect(screen.getByTestId("meetings-view-tab-kanban").getAttribute("data-state")).toBe(
+      "active",
+    );
+    expect(screen.queryByTestId("meetings-calendar")).toBeNull();
+  });
+
+  test("(refactor 4.1) legacy /meetings/calendar path is no longer registered", async () => {
+    fetchHandler = async () =>
+      new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+
+    const { router } = await renderAppRoutes(routeTree, {
+      initialEntries: ["/meetings/calendar"],
+    });
+
+    // The legacy path SHALL NOT resolve to a real route component; either
+    // matches is empty or a not-found marker appears.
+    const matchedPaths = router.state.matches.map((m) => m.routeId);
+    expect(matchedPaths).not.toContain("/meetings/calendar");
+  });
+
+  test("(refactor 2.1) MeetingsKanbanPanel renders meta but no view tabs", async () => {
+    // The view tab bar now lives in the /meetings wrapper, not inside the
+    // panel. Mounting the panel directly MUST NOT render meetings-view-tabs.
+    fetchHandler = async () =>
+      new Response(JSON.stringify([SAMPLE_MEETING]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+
+    await renderWithRouter(<MeetingsKanbanPanel />, {
+      initialEntries: ["/meetings"],
+      path: "/meetings",
+    });
+
+    expect(await screen.findByTestId("meetings-list-meta")).toBeDefined();
+    expect(screen.queryByTestId("meetings-view-tabs")).toBeNull();
   });
 
   test("(slice-17) meeting card shows tag chips when tags are attached", async () => {

@@ -32,7 +32,6 @@ from meeting_playbook.attachments.staging_router import (
     router as attachments_staging_router,
 )
 from meeting_playbook.audio_playback.router import router as audio_playback_router
-from meeting_playbook.transcript_edit.router import router as transcript_edit_router
 from meeting_playbook.calendar.router import router as calendar_router
 from meeting_playbook.chat.router import router as chat_router
 from meeting_playbook.config import get_settings
@@ -40,15 +39,18 @@ from meeting_playbook.dashboard_stats.router import router as dashboard_stats_ro
 from meeting_playbook.export.router import router as export_router
 from meeting_playbook.meeting_links.router import router as meeting_links_router
 from meeting_playbook.meetings.router import router as meetings_router
-from meeting_playbook.offline_ingest import pipeline as _offline_ingest_pipeline  # noqa: F401 — auto-registers tus completion handler
+from meeting_playbook.offline_ingest import (
+    pipeline as _offline_ingest_pipeline,  # noqa: F401 — auto-registers tus completion handler
+)
 from meeting_playbook.offline_ingest.router import router as offline_ingest_router
 from meeting_playbook.playbooks.router import router as playbooks_router
 from meeting_playbook.recordings.router import router as recordings_router
 from meeting_playbook.retention import runtime as retention_runtime
 from meeting_playbook.sessions.router import router as sessions_router
-from meeting_playbook.tags.router import router as tags_router
-from meeting_playbook.voice_enrollment.router import router as voice_enrollment_router
 from meeting_playbook.summarization.router import router as summary_router
+from meeting_playbook.tags.router import router as tags_router
+from meeting_playbook.transcript_edit.router import router as transcript_edit_router
+from meeting_playbook.voice_enrollment.router import router as voice_enrollment_router
 
 logger = logging.getLogger(__name__)
 

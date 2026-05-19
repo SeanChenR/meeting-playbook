@@ -24,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from meeting_playbook.meetings.dependencies import get_session_dependency
 from meeting_playbook.server import create_app
 
-
 PALETTE_PRIMARY = "#DDD6FE"
 PALETTE_SECONDARY = "#7C2D12"
 

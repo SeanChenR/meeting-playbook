@@ -117,7 +117,7 @@ class MultimodalContextBuilder:
         # Spec scenario "empty set → canonical empty-set hash" requires the
         # digest to fall back to SHA-256('') when there are no processable
         # attachments, regardless of text changes.
-        pairs = [(att_id, pa.sha256) for att_id, pa in zip(processed_ids, processed)]
+        pairs = [(att_id, pa.sha256) for att_id, pa in zip(processed_ids, processed, strict=True)]
         snapshot_hash = (
             EMPTY_SET_SNAPSHOT_HASH
             if not pairs

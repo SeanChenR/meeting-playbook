@@ -37,7 +37,6 @@ from meeting_playbook.voice_enrollment.embedding import (
 )
 from meeting_playbook.voice_enrollment.repository import VoiceEnrollmentRepository
 
-
 logger = logging.getLogger(__name__)
 router = APIRouter()
 

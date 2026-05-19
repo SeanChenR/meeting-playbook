@@ -32,7 +32,6 @@ from meeting_playbook.tags.repository import (
     TagRepository,
 )
 
-
 PALETTE_PRIMARY = "#DDD6FE"
 PALETTE_SECONDARY = "#7C2D12"
 

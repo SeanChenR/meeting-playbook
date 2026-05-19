@@ -19,8 +19,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 
+from alembic import op
 
 revision: str = "0006_create_summary"
 down_revision: str | None = "0005_create_chat_message"

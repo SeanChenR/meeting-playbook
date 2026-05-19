@@ -95,7 +95,8 @@ def ensure_mixed_wav(meeting_id: str, recordings_dir: Path) -> Path:
     counterparty_pcm, counterparty_rate = _read_pcm_data(counterparty_path)
     if frame_rate != counterparty_rate:
         raise MixerError(
-            f"Meeting {meeting_id}: sample rate mismatch (me={frame_rate}Hz, counterparty={counterparty_rate}Hz)",
+            f"Meeting {meeting_id}: sample rate mismatch "
+            f"(me={frame_rate}Hz, counterparty={counterparty_rate}Hz)",
         )
 
     target_len = max(len(me_pcm), len(counterparty_pcm))

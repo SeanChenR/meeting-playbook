@@ -19,7 +19,6 @@ from meeting_playbook.meetings.dependencies import get_session_dependency
 from meeting_playbook.server import create_app
 from meeting_playbook.tags.models import MeetingTag
 
-
 PALETTE_PRIMARY = "#DDD6FE"
 PALETTE_SECONDARY = "#7C2D12"
 

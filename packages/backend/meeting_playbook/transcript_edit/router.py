@@ -53,7 +53,7 @@ async def patch_transcript_chunk(
     """Update only `transcript_chunk.text`; reject any other field."""
     # Reject any unknown / immutable field BEFORE checking ownership so
     # the client gets the precise reason without burning a DB lookup.
-    immutable_present = [k for k in body.keys() if k in _IMMUTABLE_FIELDS]
+    immutable_present = [k for k in body if k in _IMMUTABLE_FIELDS]
     if immutable_present:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -63,7 +63,7 @@ async def patch_transcript_chunk(
                 + ", ".join(immutable_present),
             ),
         )
-    unknown = [k for k in body.keys() if k not in _ALLOWED_FIELDS]
+    unknown = [k for k in body if k not in _ALLOWED_FIELDS]
     if unknown:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

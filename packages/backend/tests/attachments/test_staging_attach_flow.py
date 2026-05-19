@@ -36,9 +36,9 @@ class _StubCalendarClient:
         return []
 
     async def get_event(self, _user_id: str, event_id: str):
-        from meeting_playbook.calendar.client import CalendarEvent
-
         from datetime import UTC, datetime, timedelta
+
+        from meeting_playbook.calendar.client import CalendarEvent
 
         return CalendarEvent(
             id=event_id,

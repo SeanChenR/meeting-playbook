@@ -41,6 +41,21 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "RUF", "SIM", "C4"]
+# Project is intentionally bilingual — Chinese characters live in many
+# comments, docstrings, and user-facing string literals. Ruff's
+# RUF001 / RUF002 / RUF003 ambiguous-unicode rules treat CJK as noise;
+# disable them globally to avoid drowning in false positives.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic version scripts are auto-generated; revision-id comments and
+# table-name signatures often run past 100 columns. Keeping them strict
+# would force noise edits on every migration.
+"alembic/versions/*.py" = ["E501"]
+# Test files frequently embed long URLs, mock fixtures, fully-qualified
+# error messages, and bilingual assertion strings. Forcing every line
+# under 100 columns hurts readability without catching real bugs.
+"tests/**/*.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

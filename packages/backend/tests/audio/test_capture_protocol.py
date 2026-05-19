@@ -11,6 +11,7 @@ so this file runs everywhere (CI included).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import wave
 from collections.abc import Callable
 from pathlib import Path
@@ -154,10 +155,8 @@ async def test_capture_emits_silence_warning_after_threshold(tmp_path: Path):
                     if len(events) >= 8:
                         return
 
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(_drain(), timeout=5.0)
-        except TimeoutError:
-            pass
 
     warnings = [e for e in events if isinstance(e, SilenceWarning)]
     assert len(warnings) == 1, (

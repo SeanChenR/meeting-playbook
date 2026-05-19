@@ -9,6 +9,7 @@ Apple Speech) get their own test files with real fixtures.
 
 from __future__ import annotations
 
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -57,7 +58,7 @@ def test_segments_returned_sorted_and_non_overlapping() -> None:
     result = provider.diarize(Path("/dev/null"))
 
     assert result, "non-empty"
-    for current, next_segment in zip(result, result[1:]):
+    for current, next_segment in pairwise(result):
         assert current.start_ms < current.end_ms
         assert current.end_ms <= next_segment.start_ms
         assert current.start_ms <= next_segment.start_ms

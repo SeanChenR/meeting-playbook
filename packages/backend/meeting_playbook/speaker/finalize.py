@@ -32,7 +32,6 @@ from meeting_playbook.speaker.strategy import (
 from meeting_playbook.voice_enrollment.matcher import VoiceEnrollmentMatcher
 from meeting_playbook.voice_enrollment.repository import VoiceEnrollmentRepository
 
-
 logger = logging.getLogger(__name__)
 
 # A 16kHz mono 16-bit WAV stores 32_000 bytes per second of audio. Recordings
@@ -134,7 +133,7 @@ async def apply_speaker_attribution(
 
     updates: list[tuple[str, str]] = [
         (new.id, new.speaker)
-        for original, new in zip(chunks, reassigned)
+        for original, new in zip(chunks, reassigned, strict=True)
         if original.speaker != new.speaker
     ]
     rows_changed = await repo.update_chunk_speakers(updates)

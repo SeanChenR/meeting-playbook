@@ -13,9 +13,8 @@ The repository is faked in-memory so these tests run without a DB.
 
 from __future__ import annotations
 
-import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -28,8 +27,7 @@ from meeting_playbook.speaker.finalize import (
 )
 from meeting_playbook.speaker.strategy import InvalidSpeakerConfiguration
 
-
-_BASE_TS = datetime(2026, 5, 14, 10, 0, 0, tzinfo=timezone.utc)
+_BASE_TS = datetime(2026, 5, 14, 10, 0, 0, tzinfo=UTC)
 
 
 # ───── Fakes ───────────────────────────────────────────────────────────

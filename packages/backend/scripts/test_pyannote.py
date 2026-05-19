@@ -33,9 +33,9 @@ from pathlib import Path
 # `uv run python scripts/test_pyannote.py …` from `packages/backend/`.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from meeting_playbook.config import get_settings  # noqa: E402
-from meeting_playbook.speaker.diarization import DiarizationProviderUnavailable  # noqa: E402
-from meeting_playbook.speaker.pyannote_provider import PyannoteProvider  # noqa: E402
+from meeting_playbook.config import get_settings
+from meeting_playbook.speaker.diarization import DiarizationProviderUnavailable
+from meeting_playbook.speaker.pyannote_provider import PyannoteProvider
 
 
 def main() -> int:
@@ -54,7 +54,7 @@ def main() -> int:
         print("❌ PYANNOTE_AUTH_TOKEN is empty in your .env")
         return 1
 
-    print(f"▶ Loading pyannote pipeline (first time may download ~300MB)…")
+    print("▶ Loading pyannote pipeline (first time may download ~300MB)…")
     t0 = time.monotonic()
     try:
         provider = PyannoteProvider(token=token)
@@ -66,7 +66,7 @@ def main() -> int:
             "huggingface.co/pyannote/speaker-diarization-3.1 + segmentation-3.0"
         )
         return 1
-    except Exception as exc:  # noqa: BLE001 — surface anything we did not anticipate
+    except Exception as exc:
         print(f"❌ Diarization failed: {type(exc).__name__}: {exc}")
         return 1
     elapsed = time.monotonic() - t0

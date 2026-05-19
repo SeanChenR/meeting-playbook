@@ -13,8 +13,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-import pytest
-
 from meeting_playbook.export.markdown import (
     playbook_to_markdown,
     summary_to_markdown,

@@ -51,7 +51,7 @@ def _run_alembic(action: str, target: str, database_url: str) -> None:
         "GOOGLE_OAUTH_CLIENT_ID": "test-client-id",
         "GOOGLE_OAUTH_CLIENT_SECRET": "test-client-secret",
     }
-    proc = subprocess.run(  # noqa: S603 - alembic CLI, hard-coded args
+    proc = subprocess.run(
         [sys.executable, "-m", "alembic", action, target],
         cwd=str(_BACKEND_DIR),
         env=env,

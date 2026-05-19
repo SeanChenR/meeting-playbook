@@ -37,7 +37,6 @@ from meeting_playbook.sessions.models import Recording, TranscriptChunk
 from meeting_playbook.sessions.repository import SessionRepository
 from meeting_playbook.speaker.finalize import apply_speaker_attribution
 
-
 _FIXTURE = Path(__file__).parent.parent / "speaker" / "fixtures" / "multi_speakers_zh.wav"
 
 

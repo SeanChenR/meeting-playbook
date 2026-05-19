@@ -16,10 +16,10 @@ can pipe it out without buffering the whole 30-minute WAV in memory.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Iterator
 
 from meeting_playbook.audio_playback.wav_header import parse_wav_header
 

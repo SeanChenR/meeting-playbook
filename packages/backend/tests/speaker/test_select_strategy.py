@@ -10,7 +10,7 @@ Verifies the four scenarios from spec requirement
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -35,7 +35,7 @@ def _recording(stream: str, *, id_: str | None = None) -> Recording:
         stream=stream,
         file_path=f"/tmp/{stream}.wav",
         bytes=0,
-        created_at=datetime(2026, 5, 14, 10, 0, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 5, 14, 10, 0, 0, tzinfo=UTC),
     )
 
 

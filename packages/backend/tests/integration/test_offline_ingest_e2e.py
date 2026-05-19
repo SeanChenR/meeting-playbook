@@ -40,7 +40,6 @@ from meeting_playbook.offline_ingest import pipeline, runtime
 from meeting_playbook.server import create_app
 from meeting_playbook.sessions.models import Recording, TranscriptChunk
 
-
 _FIXTURE_WAV = Path(__file__).parent.parent / "speaker" / "fixtures" / "multi_speakers_zh.wav"
 
 

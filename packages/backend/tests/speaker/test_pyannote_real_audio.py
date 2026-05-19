@@ -30,7 +30,6 @@ import pytest
 from meeting_playbook.speaker.diarization import DiarizationSegment
 from meeting_playbook.speaker.pyannote_provider import PyannoteProvider
 
-
 _FIXTURE = Path(__file__).parent / "fixtures" / "multi_speakers_zh.wav"
 _LATENCY_REPORT = Path(__file__).parent / "fixtures" / "compare_diarization.md"
 

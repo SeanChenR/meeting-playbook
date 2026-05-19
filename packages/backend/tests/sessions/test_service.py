@@ -106,7 +106,7 @@ async def test_each_audio_chunk_results_in_asr_then_db_then_outbound_frame():
     transcript_frames = [f for f in sent_frames if f["type"] == "transcript_chunk"]
     assert len(transcript_frames) == 2
     # Ordering: every transcript frame's text matches a corresponding repo insert.
-    for frame, persisted in zip(transcript_frames, repo.chunks):
+    for frame, persisted in zip(transcript_frames, repo.chunks, strict=True):
         assert frame["text"] == persisted["text_content"]
         assert frame["meeting_id"] == "m_t"
         assert frame["speaker"] == "me"

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import numpy as np
 
-
 # Float32 (= 4 bytes) is the storage format for embeddings written by
 # `compute_enrollment_embedding` (`numpy.ndarray.tobytes()`).
 _ENROLLMENT_DTYPE = np.float32

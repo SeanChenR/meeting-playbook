@@ -20,7 +20,6 @@ import struct
 import wave
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine

@@ -21,8 +21,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 
+from alembic import op
 
 revision: str = "0003_create_session_tables"
 down_revision: str | None = "0002_create_playbook"

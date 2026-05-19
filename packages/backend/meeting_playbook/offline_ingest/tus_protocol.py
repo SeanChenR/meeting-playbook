@@ -115,7 +115,10 @@ def drop_session(upload_id: str) -> None:
 # as a module-level callable (vs a hard import) so tus_protocol stays
 # import-clean for the unit-test layer that should not pull in pipeline /
 # ASR machinery.
-from collections.abc import Awaitable, Callable
+from collections.abc import (  # noqa: E402 — intentional late import, see comment above
+    Awaitable,
+    Callable,
+)
 
 CompletionHandler = Callable[[TusSession], Awaitable[None]]
 

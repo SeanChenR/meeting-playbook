@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from meeting_playbook.speaker.diarization import (
-    DiarizationProvider,
     DiarizationProviderUnavailable,
     DiarizationSegment,
 )
@@ -112,7 +111,6 @@ class PyannoteProvider:
         index matching the alphabetical order of speaker labels in the
         annotation — which is how pyannote 4.x lays out the array.
         """
-        import numpy as np  # local import keeps module-load fast
 
         if self.last_diarize_output is None or self._label_to_cluster_id is None:
             return None

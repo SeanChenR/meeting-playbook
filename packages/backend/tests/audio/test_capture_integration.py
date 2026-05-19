@@ -10,6 +10,7 @@ Skipped automatically when no input device is available (CI, headless).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 
 import pytest
@@ -55,10 +56,8 @@ async def test_real_device_emits_at_least_one_chunk_and_writes_wav(
                     if len(chunks) >= 1:
                         return
 
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(_drain(), timeout=4.0)
-        except TimeoutError:
-            pass
 
     wav_path = tmp_path / "m_real" / "me.wav"
     assert wav_path.exists(), f"WAV not written at {wav_path}"
@@ -128,10 +127,8 @@ async def test_dual_stream_writes_two_files(tmp_path: Path):
                     if len(cp_chunks) >= 1:
                         return
 
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(asyncio.gather(_drain_me(), _drain_cp()), timeout=4.0)
-        except TimeoutError:
-            pass
 
     me_wav = tmp_path / "m_dual" / "me.wav"
     cp_wav = tmp_path / "m_dual" / "counterparty.wav"

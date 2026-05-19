@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import hashlib
 import io
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutureTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as _FutureTimeoutError
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal

@@ -258,9 +258,11 @@ def test_unauthenticated_ws_is_rejected_before_upgrade(_migrated_db_url, tmp_pat
         monkeypatch,
         capture_factory_override=_make_capture_factory(tmp_path),
     )
-    with pytest.raises(WebSocketDisconnect) as exc_info:
-        with client.websocket_connect("/api/meetings/m_a/session"):
-            pass
+    with (
+        pytest.raises(WebSocketDisconnect) as exc_info,
+        client.websocket_connect("/api/meetings/m_a/session"),
+    ):
+        pass
     assert exc_info.value.code == 4401
     assert "auth.gateway_bypass" in (exc_info.value.reason or "")
 

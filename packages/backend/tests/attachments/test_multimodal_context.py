@@ -52,7 +52,7 @@ def test_empty_set_snapshot_hash_matches_sha256_of_empty_string() -> None:
     Tests that compare snapshots against the constant catch any future
     accidental change to the constant.
     """
-    assert EMPTY_SET_SNAPSHOT_HASH == hashlib.sha256(b"").hexdigest()
+    assert hashlib.sha256(b"").hexdigest() == EMPTY_SET_SNAPSHOT_HASH
 
 
 def test_no_attachments_returns_canonical_empty_set_hash(tmp_path: Path) -> None:

@@ -85,7 +85,7 @@ def test_client_message_round_trips_through_discriminated_union(model_cls, kwarg
 
 def test_unknown_client_message_type_is_rejected():
     raw = '{"type": "noop", "meeting_id": "m_t"}'
-    with pytest.raises(Exception):  # ValidationError or ValueError
+    with pytest.raises(Exception):  # noqa: B017 — intentional, ValidationError or ValueError
         parse_client_message(raw)
 
 
@@ -130,7 +130,7 @@ def test_start_meeting_mode_dual_explicit_accepted():
 )
 def test_start_meeting_mode_invalid_rejected(raw: str):
     """非 "dual" / "single" 的值（含 null、空字串）必須被 Pydantic 拒絕。"""
-    with pytest.raises(Exception):  # pydantic ValidationError
+    with pytest.raises(Exception):  # noqa: B017 — intentional, pydantic ValidationError
         parse_client_message(raw)
 
 
@@ -183,7 +183,7 @@ def test_stream_stopped_rejects_invalid_stream_value():
     """Slice-07: stream is Literal['me','counterparty'] — anything else fails."""
     from meeting_playbook.sessions.messages import StreamStoppedMessage
 
-    with pytest.raises(Exception):  # ValidationError
+    with pytest.raises(Exception):  # noqa: B017 — intentional, ValidationError
         StreamStoppedMessage(meeting_id="m_t", stream="other", reason="x")
 
 
@@ -205,7 +205,7 @@ def test_silence_warning_includes_stream():
     legacy = (
         '{"type": "silence_warning", "meeting_id": "m_t", "since": "2026-05-10T10:00:00+00:00"}'
     )
-    with pytest.raises(Exception):  # ValidationError
+    with pytest.raises(Exception):  # noqa: B017 — intentional, ValidationError
         parse_server_message(legacy)
 
 
@@ -241,7 +241,7 @@ def test_request_advice_rejects_invalid_locale():
     """Slice-08: locale is Literal['zh-TW','en']; anything else is a 400."""
     from meeting_playbook.sessions.messages import RequestAdviceMessage
 
-    with pytest.raises(Exception):  # ValidationError
+    with pytest.raises(Exception):  # noqa: B017 — intentional, ValidationError
         RequestAdviceMessage(request_id="req_a", locale="ja-JP")
 
 
@@ -258,7 +258,7 @@ def test_chat_message_frame_validates():
     assert reparsed.locale == "zh-TW"
 
     # Empty content MUST fail validation.
-    with pytest.raises(Exception):  # ValidationError
+    with pytest.raises(Exception):  # noqa: B017 — intentional, ValidationError
         parse_client_message(
             '{"type": "chat_message", "request_id": "r1", "content": "", "locale": "zh-TW"}'
         )
@@ -350,7 +350,7 @@ def test_transcript_chunk_rejects_invalid_speaker_values(speaker: str) -> None:
     """Per slice-12 spec, speaker values outside the agreed set are a
     contract violation rejected at construction time.
     """
-    with pytest.raises(Exception):  # pydantic ValidationError
+    with pytest.raises(Exception):  # noqa: B017 — intentional, pydantic ValidationError
         TranscriptChunkMessage(
             meeting_id="m_t",
             speaker=speaker,

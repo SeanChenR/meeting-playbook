@@ -10,7 +10,7 @@ Covers the new public surface:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -21,7 +21,7 @@ from meeting_playbook.dashboard_stats.clock import FixedClock
 from meeting_playbook.dashboard_stats.queries import DashboardStatsQuery
 
 # 2026-05-15 14:00 UTC == 2026-05-15 22:00 Asia/Taipei.
-_NOW = datetime(2026, 5, 15, 14, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 5, 15, 14, 0, 0, tzinfo=UTC)
 
 
 @pytest_asyncio.fixture

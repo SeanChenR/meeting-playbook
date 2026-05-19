@@ -150,10 +150,7 @@ class DashboardStatsQuery:
 
     async def execute(self, user_id: str, month: str | None = None) -> DashboardStats:
         """Return the dashboard for `user_id` in `month` (default: current month)."""
-        if month is None:
-            month_start = _start_of_month(self._clock.now())
-        else:
-            month_start = _parse_month(month)
+        month_start = _start_of_month(self._clock.now()) if month is None else _parse_month(month)
         month_end = _add_months(month_start, 1)
         prev_month_start = _add_months(month_start, -1)
 

@@ -40,7 +40,6 @@ from meeting_playbook.tags.repository import (
     TagWithMeta,
 )
 
-
 router = APIRouter(tags=["tags"])
 
 

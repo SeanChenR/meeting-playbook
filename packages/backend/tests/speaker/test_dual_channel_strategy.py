@@ -10,7 +10,7 @@ the dual-channel ASR pipeline":
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -22,7 +22,7 @@ from meeting_playbook.speaker.strategy import (
 
 
 def _make_chunk(idx: int, *, speaker: str) -> TranscriptChunk:
-    base = datetime(2026, 5, 14, 10, 0, idx, tzinfo=timezone.utc)
+    base = datetime(2026, 5, 14, 10, 0, idx, tzinfo=UTC)
     return TranscriptChunk(
         id=f"chunk_{idx}",
         meeting_id="m_test",
@@ -43,7 +43,7 @@ def _make_recording(stream: str) -> Recording:
         stream=stream,
         file_path=f"/tmp/{stream}.wav",
         bytes=0,
-        created_at=datetime(2026, 5, 14, 10, 0, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 5, 14, 10, 0, 0, tzinfo=UTC),
     )
 
 

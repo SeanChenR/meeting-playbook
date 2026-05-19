@@ -16,7 +16,6 @@ import base64
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine

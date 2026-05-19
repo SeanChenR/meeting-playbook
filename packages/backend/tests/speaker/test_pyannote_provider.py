@@ -29,7 +29,6 @@ from meeting_playbook.speaker.pyannote_provider import (
     _annotation_to_segments,
 )
 
-
 # ───── Fake pyannote Annotation / Segment ──────────────────────────────
 
 

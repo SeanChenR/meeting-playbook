@@ -302,5 +302,5 @@ async def test_e2e_unenrolled_user_single_channel_meeting_keeps_cluster_labels(
     speakers = await _read_chunk_speakers(_async_url(_migrated_db_url), meeting_id)
 
     # Every chunk keeps its cluster label — no `me` substitution anywhere.
-    assert {sp for sp in speakers.values()} == {"speaker_cluster_1", "speaker_cluster_2"}
+    assert set(speakers.values()) == {"speaker_cluster_1", "speaker_cluster_2"}
     assert "me" not in speakers.values()

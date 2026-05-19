@@ -17,7 +17,6 @@ from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, TypedDict
 
 from meeting_playbook.attachments.multimodal_context import (
-    EMPTY_SET_SNAPSHOT_HASH,
     AttachmentRef,
     MultimodalContextBuilder,
 )
@@ -223,7 +222,11 @@ class PlaybookGenerator:
             merged[field] = (
                 EMPTY_FIELD_SENTINEL
                 if field != "free_form_markdown"
-                else f"{EMPTY_FIELD_SENTINEL}\n\n（the model could not produce content for this section）\n（請於編輯器補上）"
+                else (
+                    f"{EMPTY_FIELD_SENTINEL}"
+                    "\n\n（the model could not produce content for this section）"
+                    "\n（請於編輯器補上）"
+                )
             )
 
         return PlaybookDraft(**merged)  # type: ignore[arg-type]

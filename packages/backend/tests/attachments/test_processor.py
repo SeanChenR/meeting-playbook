@@ -35,7 +35,7 @@ def _real_pdf_bytes(text: str = "Q3 briefing") -> bytes:
     page = writer.add_blank_page(width=612, height=792)
     # Inject a `BT ... ET` text-showing operator so PdfReader.extract_text returns it.
     content = ContentStream(None, writer)
-    content.operations = [([], "BT"), ([f"({text}) Tj"], "")] + list(content.operations)
+    content.operations = [([], "BT"), ([f"({text}) Tj"], ""), *content.operations]
     page[NameObject("/Contents")] = DecodedStreamObject()
     page[NameObject("/Contents")].set_data(
         f"BT /F1 12 Tf 100 700 Td ({text}) Tj ET".encode("latin-1")

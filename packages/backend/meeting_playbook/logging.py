@@ -28,11 +28,9 @@ def setup_logging(level: str = "INFO") -> None:
         structlog.processors.TimeStamper(fmt="iso", utc=True),
     ]
 
-    renderer: object
-    if is_tty:
-        renderer = structlog.dev.ConsoleRenderer()
-    else:
-        renderer = structlog.processors.JSONRenderer()
+    renderer: object = (
+        structlog.dev.ConsoleRenderer() if is_tty else structlog.processors.JSONRenderer()
+    )
 
     numeric_level = getattr(stdlib_logging, level.upper(), stdlib_logging.INFO)
 

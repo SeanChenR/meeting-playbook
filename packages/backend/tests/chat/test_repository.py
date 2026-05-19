@@ -6,6 +6,8 @@ per-meeting conversation history" — pin the repository contract here.
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,7 +93,7 @@ async def test_list_for_meeting_returns_chronological_order(db_session):
     listed = await repo.list_for_meeting("m_order")
     assert [m.content for m in listed] == ["Q1", "A1", "Q2", "A2", "Q3", "A3"]
     # Strictly non-decreasing created_at.
-    for prev, nxt in zip(listed, listed[1:], strict=False):
+    for prev, nxt in pairwise(listed):
         assert prev.created_at <= nxt.created_at
 
 

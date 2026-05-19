@@ -11,7 +11,7 @@ strategy_protocol test file, reproduced here with the concrete impl.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -23,8 +23,7 @@ from meeting_playbook.speaker.strategy import (
     SingleChannelStrategy,
 )
 
-
-_RECORDING_START = datetime(2026, 5, 14, 10, 0, 0, tzinfo=timezone.utc)
+_RECORDING_START = datetime(2026, 5, 14, 10, 0, 0, tzinfo=UTC)
 
 
 def _recording_at(*, file_path: str = "/tmp/single.wav") -> Recording:

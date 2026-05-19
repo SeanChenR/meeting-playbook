@@ -11,11 +11,11 @@ from __future__ import annotations
 import logging
 import secrets
 import wave
-from collections.abc import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from meeting_playbook.offline_ingest import runtime
 from meeting_playbook.offline_ingest.transcode import (
@@ -254,7 +254,7 @@ async def run(session: TusSession) -> None:
 
     try:
         await transcode_to_canonical_wav(staging_path=session.staging_path, output_path=output_path)
-    except OfflineIngestTranscodeError as exc:
+    except OfflineIngestTranscodeError:
         logger.exception("offline_ingest_transcode_failed meeting=%s", meeting_id)
         runtime.set_error(meeting_id, "offline_ingest.transcode_failed")
         drop_session(session.upload_id)

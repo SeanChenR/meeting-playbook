@@ -13,7 +13,6 @@ from pathlib import Path
 
 from meeting_playbook.tags.colors import TAG_PALETTE_HEX
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _FRONTEND_PALETTE_FILE = _REPO_ROOT / "packages/web/src/lib/tag-palette.ts"
 

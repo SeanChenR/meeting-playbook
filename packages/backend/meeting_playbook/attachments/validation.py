@@ -214,12 +214,12 @@ def validate_staging_upload(
 
 
 __all__ = [
-    "AttachmentKind",
-    "AttachmentValidationError",
     "MAX_ATTACHMENTS_PER_MEETING",
     "MAX_BYTES_PER_MEETING",
     "MAX_STAGED_ATTACHMENTS_PER_USER",
     "MAX_STAGED_BYTES_PER_USER",
+    "AttachmentKind",
+    "AttachmentValidationError",
     "canonical_extension",
     "infer_kind",
     "validate_staging_upload",

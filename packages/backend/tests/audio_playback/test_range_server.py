@@ -18,7 +18,6 @@ from meeting_playbook.audio_playback.range_server import (
     parse_range_header,
 )
 
-
 # ---------------------------------------------------------------------------
 # parse_range_header
 # ---------------------------------------------------------------------------
@@ -111,7 +110,7 @@ def test_serve_with_range_returns_206_and_byte_aligned_slice(tmp_path: Path) -> 
         recording_started_at=started_at,
         chunk_start=chunk_start,
         chunk_end=chunk_end,
-        range_header=f"bytes=160044-480043",
+        range_header="bytes=160044-480043",
         max_bytes=10 * 1024 * 1024,
     )
     assert resp.status_code == 206

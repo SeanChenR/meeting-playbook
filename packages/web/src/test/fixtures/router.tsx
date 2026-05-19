@@ -25,6 +25,8 @@ interface Options {
   /** When the test only renders one component, a wrapper route is enough; the
    * test does not need the full app route tree. */
   path?: string;
+  /** Override the ThemeProvider initial theme (defaults to "light"). */
+  initialTheme?: "light" | "dark" | "system";
 }
 
 function makeQueryClient() {
@@ -42,7 +44,7 @@ function makeQueryClient() {
  */
 export async function renderWithRouter(
   element: ReactElement,
-  { initialEntries = ["/"], path = "/" }: Options = {},
+  { initialEntries = ["/"], path = "/", initialTheme = "light" }: Options = {},
 ): Promise<RenderResult & { router: ReturnType<typeof createRouter> }> {
   const rootRoute = createRootRoute({
     component: () => <Outlet />,
@@ -60,7 +62,7 @@ export async function renderWithRouter(
   const queryClient = makeQueryClient();
 
   const utils = render(
-    <ThemeProvider initialTheme="light">
+    <ThemeProvider initialTheme={initialTheme}>
       <QueryClientProvider client={queryClient}>
         {/* Cast through unknown — TanStack Router's typed Register can't be
             narrowed to the synthetic test routes; the runtime is identical. */}

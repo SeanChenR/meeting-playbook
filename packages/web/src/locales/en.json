@@ -332,6 +332,11 @@
       "speaker": {
         "cluster": "Speaker {{n}}",
         "cluster_unknown": "Speaker (unidentified)"
+      },
+      "barVisualizer": {
+        "connecting": "Connecting…",
+        "listening": "Listening",
+        "speaking": "Speaking"
       }
     },
     "links": {
@@ -911,6 +916,7 @@
     "deleteButton": "Delete",
     "deleteConfirm": "Delete this attachment? This action cannot be undone.",
     "uploadingLabel": "Uploading… {{percent}}%",
+    "uploadSuccess": "Uploaded {{name}}",
     "kind": {
       "image": "Image",
       "pdf": "PDF",

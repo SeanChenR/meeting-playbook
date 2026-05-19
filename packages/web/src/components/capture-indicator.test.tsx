@@ -1,22 +1,47 @@
 /**
- * CaptureIndicator tests — slice ui-overhaul-claude-design task 5.3.
+ * CaptureIndicator tests — ui-overhaul-animated-surfaces task 3.2 + 3.3.
  *
- * The bar-sparkline rewrite replaces the slice-7 pill design, so the
- * structural contract changes:
- *   - One row per stream (`me` + `counterparty`), `data-stream` set
- *   - Each row contains 10 sparkline bars
- *   - `recording=false` (status `stopped` or `ending=true`) collapses
- *     the dot to muted foreground colour and shrinks bars to 1px.
- *   - `streamStatus === null` still renders nothing (idle / not in_progress)
- *   - `ending=true` overrides every row to a muted state
+ * The component now emits exactly one of four discrete `data-state` values
+ * per stream — `connecting | listening | speaking | off` — driven by:
+ *
+ *   - `streamStatus[s]` (`active` / `silence` / `stopped`)
+ *   - `ending` flag (forces `off`)
+ *   - `lastChunkAt[s]` (most recent transcript_chunk timestamp per stream)
+ *   - `streamStartedAt[s]` (first time the stream was observed active)
+ *
+ * State derivation (from spec table):
+ *   active + no chunk within first 8s        → connecting
+ *   active + recent chunk (≤2s)              → speaking
+ *   active otherwise                         → listening
+ *   silence                                  → listening
+ *   stopped OR ending                        → off
+ *
+ * Structural contract:
+ *   - 1 row per stream (`me`, `counterparty`)
+ *   - `data-testid="capture-indicator"` per row
+ *   - `data-stream` ∈ {`me`,`counterparty`}, `data-state` ∈ {`connecting`,`listening`,`speaking`,`off`}
+ *   - 10 bars per row (`data-testid="bar-visualizer-bar"`)
+ *   - Visible label resolves from `meetings.session.barVisualizer.<state>`
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen, within } from "@testing-library/react";
 
 import { CaptureIndicator } from "./capture-indicator";
 
+beforeEach(() => {
+  // @ts-expect-error happy-dom override
+  window.matchMedia = (q: string) => ({
+    matches: false,
+    media: q,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  });
+});
+
 afterEach(cleanup);
+
+const NOW = new Date("2026-05-18T12:00:00Z").getTime();
 
 describe("CaptureIndicator", () => {
   test("null streamStatus renders nothing (idle / not in_progress)", () => {
@@ -30,35 +55,88 @@ describe("CaptureIndicator", () => {
     expect(screen.queryByTestId("capture-indicator-group")).toBeNull();
   });
 
-  test("(a) recording=true renders 2 rows, one per stream", () => {
+  test("active streams with no chunks yet within 8s → both rows connecting", () => {
     render(
       <CaptureIndicator
         streamStatus={{ me: "active", counterparty: "active" }}
+        streamStartedAt={{ me: NOW - 3_000, counterparty: NOW - 3_000 }}
+        lastChunkAt={{ me: null, counterparty: null }}
+        nowMs={NOW}
         meDisplayName="Sean"
         counterpartyDisplayName="林經理"
       />,
     );
     const rows = screen.getAllByTestId("capture-indicator");
     expect(rows).toHaveLength(2);
-    expect(rows.map((r) => r.dataset.stream)).toEqual(["me", "counterparty"]);
+    for (const row of rows) {
+      expect(row.dataset.state).toBe("connecting");
+    }
+    // Visible label resolves to barVisualizer.connecting (zh-TW default)
+    expect(screen.getAllByText("連接中…").length).toBeGreaterThanOrEqual(1);
   });
 
-  test("(b) each row contains 10 sparkline bars", () => {
+  test("active stream past 8s with no chunks → listening", () => {
     render(
       <CaptureIndicator
         streamStatus={{ me: "active", counterparty: "active" }}
+        streamStartedAt={{ me: NOW - 12_000, counterparty: NOW - 12_000 }}
+        lastChunkAt={{ me: null, counterparty: null }}
+        nowMs={NOW}
         meDisplayName="Sean"
         counterpartyDisplayName="林經理"
       />,
     );
-    const rows = screen.getAllByTestId("capture-indicator");
-    for (const row of rows) {
-      const bars = within(row).getAllByTestId("capture-indicator-bar");
-      expect(bars).toHaveLength(10);
+    for (const row of screen.getAllByTestId("capture-indicator")) {
+      expect(row.dataset.state).toBe("listening");
     }
   });
 
-  test("(c) recording=false (stopped) — dot uses muted token and bars shrink to 1px", () => {
+  test("active stream with recent chunk (≤2s) → speaking", () => {
+    render(
+      <CaptureIndicator
+        streamStatus={{ me: "active", counterparty: "active" }}
+        streamStartedAt={{ me: NOW - 30_000, counterparty: NOW - 30_000 }}
+        lastChunkAt={{ me: NOW - 500, counterparty: NOW - 500 }}
+        nowMs={NOW}
+        meDisplayName="Sean"
+        counterpartyDisplayName="林經理"
+      />,
+    );
+    for (const row of screen.getAllByTestId("capture-indicator")) {
+      expect(row.dataset.state).toBe("speaking");
+    }
+  });
+
+  test("active stream with stale chunk (>2s) → listening", () => {
+    render(
+      <CaptureIndicator
+        streamStatus={{ me: "active", counterparty: "active" }}
+        streamStartedAt={{ me: NOW - 30_000, counterparty: NOW - 30_000 }}
+        lastChunkAt={{ me: NOW - 5_000, counterparty: NOW - 5_000 }}
+        nowMs={NOW}
+        meDisplayName="Sean"
+        counterpartyDisplayName="林經理"
+      />,
+    );
+    for (const row of screen.getAllByTestId("capture-indicator")) {
+      expect(row.dataset.state).toBe("listening");
+    }
+  });
+
+  test("silence → listening", () => {
+    render(
+      <CaptureIndicator
+        streamStatus={{ me: "silence", counterparty: "silence" }}
+        meDisplayName="Sean"
+        counterpartyDisplayName="林經理"
+      />,
+    );
+    for (const row of screen.getAllByTestId("capture-indicator")) {
+      expect(row.dataset.state).toBe("listening");
+    }
+  });
+
+  test("stopped → off", () => {
     render(
       <CaptureIndicator
         streamStatus={{ me: "stopped", counterparty: "stopped" }}
@@ -66,22 +144,35 @@ describe("CaptureIndicator", () => {
         counterpartyDisplayName="林經理"
       />,
     );
-    const rows = screen.getAllByTestId("capture-indicator");
-    for (const row of rows) {
-      expect(row.dataset.state).toBe("stopped");
-      const dot = row.querySelector("span[aria-hidden]");
-      expect(dot?.className ?? "").toContain("bg-(--color-muted-foreground)");
-      const bars = within(row).getAllByTestId("capture-indicator-bar");
-      for (const bar of bars) {
-        expect((bar as HTMLElement).style.height).toBe("1px");
-      }
+    for (const row of screen.getAllByTestId("capture-indicator")) {
+      expect(row.dataset.state).toBe("off");
     }
   });
 
-  test("silence on counterparty: only counterparty row marked silence; me row stays active", () => {
+  test("ending=true forces off on every row", () => {
+    render(
+      <CaptureIndicator
+        streamStatus={{ me: "active", counterparty: "active" }}
+        streamStartedAt={{ me: NOW - 30_000, counterparty: NOW - 30_000 }}
+        lastChunkAt={{ me: NOW - 100, counterparty: NOW - 100 }}
+        nowMs={NOW}
+        meDisplayName="Sean"
+        counterpartyDisplayName="林經理"
+        ending
+      />,
+    );
+    for (const row of screen.getAllByTestId("capture-indicator")) {
+      expect(row.dataset.state).toBe("off");
+    }
+  });
+
+  test("mixed: me active+recent chunk speaking, counterparty silence listening", () => {
     render(
       <CaptureIndicator
         streamStatus={{ me: "active", counterparty: "silence" }}
+        streamStartedAt={{ me: NOW - 30_000, counterparty: NOW - 30_000 }}
+        lastChunkAt={{ me: NOW - 800, counterparty: null }}
+        nowMs={NOW}
         meDisplayName="Sean"
         counterpartyDisplayName="林經理"
       />,
@@ -89,26 +180,43 @@ describe("CaptureIndicator", () => {
     const rows = screen.getAllByTestId("capture-indicator");
     const me = rows.find((r) => r.dataset.stream === "me")!;
     const cp = rows.find((r) => r.dataset.stream === "counterparty")!;
-    expect(me.dataset.state).toBe("active");
-    expect(cp.dataset.state).toBe("silence");
+    expect(me.dataset.state).toBe("speaking");
+    expect(cp.dataset.state).toBe("listening");
   });
 
-  test("ending=true overrides every row to a muted 'ending' look", () => {
+  test("each row renders 10 visualizer bars", () => {
     render(
       <CaptureIndicator
         streamStatus={{ me: "active", counterparty: "active" }}
+        streamStartedAt={{ me: NOW - 30_000, counterparty: NOW - 30_000 }}
+        lastChunkAt={{ me: NOW - 500, counterparty: NOW - 500 }}
+        nowMs={NOW}
         meDisplayName="Sean"
         counterpartyDisplayName="林經理"
-        ending
+      />,
+    );
+    for (const row of screen.getAllByTestId("capture-indicator")) {
+      expect(within(row).getAllByTestId("bar-visualizer-bar")).toHaveLength(10);
+    }
+  });
+
+  test("me row uses --color-me tone, counterparty uses --color-them", () => {
+    render(
+      <CaptureIndicator
+        streamStatus={{ me: "active", counterparty: "active" }}
+        streamStartedAt={{ me: NOW - 30_000, counterparty: NOW - 30_000 }}
+        lastChunkAt={{ me: NOW - 500, counterparty: NOW - 500 }}
+        nowMs={NOW}
+        meDisplayName="Sean"
+        counterpartyDisplayName="林經理"
       />,
     );
     const rows = screen.getAllByTestId("capture-indicator");
-    for (const row of rows) {
-      expect(row.dataset.state).toBe("ending");
-      const bars = within(row).getAllByTestId("capture-indicator-bar");
-      for (const bar of bars) {
-        expect((bar as HTMLElement).style.height).toBe("1px");
-      }
-    }
+    const me = rows.find((r) => r.dataset.stream === "me")!;
+    const cp = rows.find((r) => r.dataset.stream === "counterparty")!;
+    const meBar = within(me).getAllByTestId("bar-visualizer-bar")[0]!;
+    const cpBar = within(cp).getAllByTestId("bar-visualizer-bar")[0]!;
+    expect(meBar.style.background).toContain("var(--color-me)");
+    expect(cpBar.style.background).toContain("var(--color-them)");
   });
 });

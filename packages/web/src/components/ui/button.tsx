@@ -62,10 +62,30 @@ export const buttonVariants = cva(
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
   VariantProps<typeof buttonVariants>;
 
+// ui-overhaul-animated-surfaces task 6.3: pink-chicken-70 sweep on hover
+// for primary CTAs. Triggered via `data-cta="primary"` so the existing
+// `<Button>` API doesn't grow another variant. Motion only; colors stay
+// Aura purple. Disabled buttons inherit the pointer-events-none + 0.5
+// opacity from the base cva block so the sweep never engages.
+const _CTA_SWEEP_CLS =
+  "mp-cta-sweep relative isolate overflow-hidden " +
+  "before:pointer-events-none before:absolute before:inset-0 before:-translate-x-full " +
+  "before:bg-gradient-to-r before:from-transparent before:via-(--color-primary-foreground)/20 before:to-transparent " +
+  "before:transition-transform before:duration-500 before:ease-out " +
+  "hover:before:translate-x-full motion-reduce:before:transition-none motion-reduce:hover:before:translate-x-full";
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, ...props }, ref) => {
+    const isPrimaryCta = (props as Record<string, unknown>)["data-cta"] === "primary";
     return (
-      <button ref={ref} className={cn(buttonVariants({ variant, size, className }))} {...props} />
+      <button
+        ref={ref}
+        className={cn(
+          buttonVariants({ variant, size, className }),
+          isPrimaryCta ? _CTA_SWEEP_CLS : null,
+        )}
+        {...props}
+      />
     );
   },
 );

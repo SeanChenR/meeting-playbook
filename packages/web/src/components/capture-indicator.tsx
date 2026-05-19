@@ -1,84 +1,186 @@
 /**
- * CaptureIndicator — slice ui-overhaul-claude-design task 5.3.
+ * CaptureIndicator — ui-overhaul-animated-surfaces task 3.2 + 3.3.
  *
- * Re-skinned to match the design bundle's bar-sparkline pattern:
- *   - One row per stream (麥克風/我方 + 系統音訊/對方)
- *   - Each row: pulsing dot + label (min-width 100px) + 10-bar sparkline
- *   - Bar heights animate to a per-tick amplitude when active; collapse
- *     to 1px when the stream is muted/stopped/ending.
- *   - Container is a 10px-padded, bordered surface-2 box that can sit
- *     side-by-side with the ASR Select inside MetadataCard.
+ * Three-state bar visualizer per stream (replacing the random-amplitude
+ * sparkline). Each row emits exactly one of four discrete `data-state`
+ * values:
  *
- * Drives 10 random amplitude bars per row at 200ms cadence so the user
- * sees motion even before we feed real audio frames. Tests assert the
- * structural contract (row count, bar count, recording=false dot state)
- * — they do NOT rely on the random amplitudes.
+ *   - `connecting` — capture is active but no transcript_chunk has
+ *     arrived within the first 8 seconds since the stream became active.
+ *     Tone = `warning` (orange), slow pulse.
+ *   - `speaking`   — capture is active AND a transcript_chunk arrived
+ *     within the last ~2 seconds. Tone = `me` / `them` per stream.
+ *   - `listening`  — capture is active but stale (no recent chunk)
+ *     OR backend reports `silence`. Tone = `me` / `them` per stream.
+ *   - `off`        — backend reports `stopped` OR `ending=true`.
+ *     Muted baseline.
  *
- * Behavioural contract preserved from slice-7:
- *   - `streamStatus === null` → renders nothing (idle / not in_progress)
- *   - `ending=true` mutes both rows regardless of stream status
- *   - `data-testid="capture-indicator"` per row, with `data-stream` +
- *     `data-state` attributes for state-aware assertions.
+ * Backend message contract unchanged (per design.md): we layer the
+ * heuristic on top of existing `streamStatus` + the `chunks` array
+ * already exposed to the detail page. Callers MAY override
+ * `streamStartedAt` / `lastChunkAt` / `nowMs` for deterministic tests.
+ *
+ * Visible label per row resolves from
+ * `meetings.session.barVisualizer.<state>` (omitted when `off`).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Stream } from "../lib/session-ws";
-import { cn } from "../lib/utils";
+import type { Stream, TranscriptChunkMessage } from "../lib/session-ws";
+import { BarVisualizer, type BarVisualizerTone } from "./ui/bar-visualizer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export type StreamPillState = "active" | "silence" | "stopped";
+export type CaptureIndicatorState = "connecting" | "listening" | "speaking" | "off";
 
 export interface CaptureIndicatorProps {
   streamStatus: Record<Stream, StreamPillState> | null;
   meDisplayName: string;
   counterpartyDisplayName: string;
   ending?: boolean;
+  /** Optional: live transcript chunks. Used to derive `lastChunkAt` when
+   * the caller does not pass one explicitly. */
+  chunks?: ReadonlyArray<TranscriptChunkMessage>;
+  /** Per-stream timestamp (ms) of the most recent transcript_chunk. Test-
+   * injectable; defaults to derivation from `chunks`. */
+  lastChunkAt?: Partial<Record<Stream, number | null>>;
+  /** Per-stream timestamp (ms) when the stream first became active. Test-
+   * injectable; defaults to internal tracking. */
+  streamStartedAt?: Partial<Record<Stream, number | null>>;
+  /** Override `Date.now()` for deterministic tests. */
+  nowMs?: number;
 }
 
 const STREAM_ORDER: Stream[] = ["me", "counterparty"];
-const BAR_COUNT = 10;
+const CONNECTING_WINDOW_MS = 8_000;
+const SPEAKING_WINDOW_MS = 2_000;
 
-function _randomBars(): number[] {
-  // Bars in [2..6]; matches the design bundle's amplitude range.
-  return Array.from({ length: BAR_COUNT }, () => 2 + Math.floor(Math.random() * 5));
+function _toneFor(stream: Stream): BarVisualizerTone {
+  return stream === "me" ? "me" : "them";
 }
 
-const _INITIAL_BARS = Array.from({ length: BAR_COUNT }, (_, i) => 2 + ((i * 3) % 5));
+function _deriveLastChunkAtFromChunks(
+  chunks: ReadonlyArray<TranscriptChunkMessage>,
+): Record<Stream, number | null> {
+  // Chunks are chronological; iterate backwards and bail out once both
+  // speakers have a latest timestamp. Reduces avg complexity from O(N) to
+  // O(1) on long meetings — gemini PR #50 MEDIUM (capture-indicator.tsx:74).
+  const out: Record<Stream, number | null> = { me: null, counterparty: null };
+  for (let i = chunks.length - 1; i >= 0; i -= 1) {
+    const c = chunks[i];
+    if (!c) continue;
+    if (out.me !== null && out.counterparty !== null) break;
+    if (c.speaker !== "me" && c.speaker !== "counterparty") continue;
+    if (out[c.speaker] !== null) continue;
+    const ts = new Date(c.started_at).getTime();
+    if (Number.isFinite(ts)) out[c.speaker] = ts;
+  }
+  return out;
+}
+
+function _deriveState(args: {
+  stream: Stream;
+  status: StreamPillState;
+  ending: boolean;
+  streamStartedAt: number | null;
+  lastChunkAt: number | null;
+  now: number;
+}): CaptureIndicatorState {
+  const { status, ending, streamStartedAt, lastChunkAt, now } = args;
+  if (ending) return "off";
+  if (status === "stopped") return "off";
+  if (status === "silence") return "listening";
+  // status === "active"
+  if (lastChunkAt !== null && now - lastChunkAt <= SPEAKING_WINDOW_MS) return "speaking";
+  if (
+    lastChunkAt === null &&
+    streamStartedAt !== null &&
+    now - streamStartedAt < CONNECTING_WINDOW_MS
+  ) {
+    return "connecting";
+  }
+  return "listening";
+}
 
 export function CaptureIndicator({
   streamStatus,
-  meDisplayName,
-  counterpartyDisplayName,
+  meDisplayName: _me,
+  counterpartyDisplayName: _cp,
   ending = false,
+  chunks = [],
+  lastChunkAt,
+  streamStartedAt,
+  nowMs,
 }: CaptureIndicatorProps) {
   const { t } = useTranslation();
-  const [bars, setBars] = useState<{ me: number[]; counterparty: number[] }>({
-    me: _INITIAL_BARS,
-    counterparty: _INITIAL_BARS,
+  // Track first time each stream becomes active. Stored as state so the
+  // first render after a stream activates already sees the timestamp — a
+  // ref would lag one render and emit `listening` before `connecting`.
+  // Gemini PR #50 MEDIUM (capture-indicator.tsx:145 #1).
+  const [startedAt, setStartedAt] = useState<Record<Stream, number | null>>({
+    me: null,
+    counterparty: null,
   });
 
-  // Tick bar amplitudes while at least one stream is active. Skip the
-  // interval entirely when nothing is moving so happy-dom + reduced-motion
-  // users don't pay for it.
-  const anyActive =
-    !ending && streamStatus !== null && Object.values(streamStatus).some((s) => s === "active");
+  useEffect(() => {
+    if (streamStatus === null) {
+      setStartedAt({ me: null, counterparty: null });
+      return;
+    }
+    setStartedAt((prev) => {
+      const now = Date.now();
+      let changed = false;
+      const next = { ...prev };
+      for (const s of STREAM_ORDER) {
+        if (streamStatus[s] === "active" && next[s] === null) {
+          next[s] = now;
+          changed = true;
+        }
+        if (streamStatus[s] === "stopped" && next[s] !== null) {
+          next[s] = null;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [streamStatus]);
 
+  // Stable 1s tick while any stream is active so `connecting → listening`
+  // transitions at the right time. A `setTimeout` reset on every
+  // `streamStatus` update would push the deadline forward indefinitely
+  // under chunk-heavy WS traffic — gemini PR #50 MEDIUM (line 145 #2).
+  const [, setTick] = useState(0);
+  const anyActive =
+    streamStatus !== null && Object.values(streamStatus).some((s) => s === "active");
   useEffect(() => {
     if (!anyActive) return;
-    const id = window.setInterval(() => {
-      setBars({ me: _randomBars(), counterparty: _randomBars() });
-    }, 220);
+    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
     return () => window.clearInterval(id);
   }, [anyActive]);
 
+  // Memoize the chunks-derived map so big transcripts don't recompute on
+  // every render — gemini PR #50 MEDIUM (capture-indicator.tsx:151).
+  const derivedLastChunkAt = useMemo(
+    () => (lastChunkAt === undefined ? _deriveLastChunkAtFromChunks(chunks) : null),
+    [lastChunkAt, chunks],
+  );
+
   if (streamStatus === null) return null;
 
-  function _label(stream: Stream): string {
-    if (stream === "me") {
-      return t("meetings.session.captureLabelMe", { name: meDisplayName });
+  const now = nowMs ?? Date.now();
+
+  function _resolveLastChunkAt(stream: Stream): number | null {
+    if (lastChunkAt !== undefined) {
+      return lastChunkAt[stream] ?? null;
     }
-    return t("meetings.session.captureLabelCounterparty", { name: counterpartyDisplayName });
+    return derivedLastChunkAt?.[stream] ?? null;
+  }
+
+  function _resolveStartedAt(stream: Stream): number | null {
+    if (streamStartedAt !== undefined) {
+      return streamStartedAt[stream] ?? null;
+    }
+    return startedAt[stream];
   }
 
   return (
@@ -88,11 +190,17 @@ export function CaptureIndicator({
     >
       {STREAM_ORDER.map((stream) => {
         const status = streamStatus[stream];
-        const isActive = !ending && status === "active";
-        const isMuted = ending || status === "stopped";
-        const isWarning = !ending && status === "silence";
-        const state = ending ? "ending" : status;
-        const rowBars = bars[stream];
+        const state = _deriveState({
+          stream,
+          status,
+          ending,
+          streamStartedAt: _resolveStartedAt(stream),
+          lastChunkAt: _resolveLastChunkAt(stream),
+          now,
+        });
+        const tone: BarVisualizerTone = state === "connecting" ? "warning" : _toneFor(stream);
+        const label = state === "off" ? "" : t(`meetings.session.barVisualizer.${state}` as const);
+        const visualizerAriaLabel = label || t("meetings.session.captureLabelMe", { name: stream });
 
         return (
           <Tooltip key={stream}>
@@ -103,41 +211,15 @@ export function CaptureIndicator({
                 data-state={state}
                 className="flex items-center gap-2"
               >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "inline-block size-2 rounded-full",
-                    isActive
-                      ? "bg-(--color-destructive) animate-pulse"
-                      : isWarning
-                        ? "bg-(--color-destructive)"
-                        : "bg-(--color-muted-foreground)",
-                  )}
-                />
-                <span className="min-w-[100px] text-xs text-(--color-foreground)">
-                  {_label(stream)}
-                </span>
-                <div className="flex h-3 flex-1 items-end gap-0.5">
-                  {rowBars.map((b, i) => (
-                    <span
-                      key={i}
-                      aria-hidden
-                      data-testid="capture-indicator-bar"
-                      className={cn(
-                        "w-0.5 rounded-[1px] transition-[height,opacity] duration-200",
-                        isActive
-                          ? "bg-(--color-destructive)"
-                          : isMuted
-                            ? "bg-(--color-border)"
-                            : "bg-(--color-destructive)/60",
-                      )}
-                      style={{
-                        height: isActive ? `${b * 1.6}px` : "1px",
-                        opacity: isActive ? 0.55 + b / 12 : 1,
-                      }}
-                    />
-                  ))}
-                </div>
+                <BarVisualizer state={state} tone={tone} ariaLabel={visualizerAriaLabel} />
+                {label ? (
+                  <span
+                    data-testid="capture-indicator-label"
+                    className="text-xs text-(--color-foreground)"
+                  >
+                    {label}
+                  </span>
+                ) : null}
               </div>
             </TooltipTrigger>
             <TooltipContent>{t("ui.tooltip.capture")}</TooltipContent>

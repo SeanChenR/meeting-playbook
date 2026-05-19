@@ -103,6 +103,27 @@ describe("ProtectedShell NavBar", () => {
     expect(screen.getByTestId("user-avatar")).toBeDefined();
   });
 
+  test("mounts the Stars layer in dark mode with motion allowed", async () => {
+    // happy-dom default matchMedia stub returns matches:false (motion allowed).
+    await renderWithRouter(
+      <ProtectedShell>
+        <div />
+      </ProtectedShell>,
+      { initialEntries: ["/x"], path: "/x", initialTheme: "dark" },
+    );
+    expect(screen.getByTestId("stars-layer")).toBeDefined();
+  });
+
+  test("does not mount Stars in light mode", async () => {
+    await renderWithRouter(
+      <ProtectedShell>
+        <div />
+      </ProtectedShell>,
+      { initialEntries: ["/x"], path: "/x", initialTheme: "light" },
+    );
+    expect(screen.queryByTestId("stars-layer")).toBeNull();
+  });
+
   test("exposes the three top-level destinations as nav links", async () => {
     // P4 IA refactor: Recordings (`/recordings`) sits between Meetings and
     // Dashboard. Verifies the destination set + their DOM order.

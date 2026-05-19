@@ -10,7 +10,7 @@
  */
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 
@@ -48,6 +48,12 @@ function _isOutOfRange(d: Date, min?: Date, max?: Date): boolean {
 export function Calendar({ value, onChange, min, max, className }: CalendarPickerProps) {
   const { t, i18n } = useTranslation();
   const [cursor, setCursor] = useState<Date>(() => _startOfMonth(value ?? new Date()));
+  // Sync the displayed month when the controlled `value` prop changes from
+  // outside (e.g. parent picks a different date). Without this the calendar
+  // pane stays on the initial month — gemini PR #49 MEDIUM.
+  useEffect(() => {
+    if (value) setCursor(_startOfMonth(value));
+  }, [value]);
   const locale = i18n.language || "default";
 
   const monthLabel = useMemo(

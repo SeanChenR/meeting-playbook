@@ -404,6 +404,16 @@
   }
 }
 
+/* Progress bar shimmer — white-alpha highlight slides across the fill. */
+@keyframes mp-progress-shimmer {
+  0% {
+    transform: translateX(-100%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(400%) skewX(-12deg);
+  }
+}
+
 /* Loading dot pulse — ui-overhaul-primitive-upgrade task 6.
  * Source: https://uiverse.io/gustavofusco/rare-pug-90 (CC0). */
 @keyframes mp-loading-pulse {

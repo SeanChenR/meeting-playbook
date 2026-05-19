@@ -71,6 +71,7 @@ import {
   MeetingApiError,
   useDeleteMeetingMutation,
 } from "../../lib/meetings-api";
+import { resolveMeetingBucket } from "../../lib/meetings-bucket";
 import { rowToMessage, transcriptChunksQueryOptions } from "../../lib/transcripts-api";
 
 export function MeetingDetail() {
@@ -180,9 +181,14 @@ export function MeetingDetail() {
   }, [meetingId, meeting, sessionChunks]);
   const sessionError =
     session.state.phase === "error" ? localizedErrorMessage(session.state.errorCode, t) : null;
+  const bucket = meeting ? resolveMeetingBucket(meeting) : null;
+  // Live capture is only meaningful for a meeting whose scheduled time is in
+  // the future (`upcoming`). 待補錄 (`needs_recording`) means the slot
+  // already passed — the user補錄 via the upload audio dialog instead. 已結束
+  // disables Start outright.
   const startDisabled =
     !meeting ||
-    meeting.status !== "scheduled" ||
+    bucket !== "upcoming" ||
     session.state.phase === "connecting" ||
     session.state.phase === "in_progress" ||
     session.state.phase === "ending";
@@ -270,17 +276,23 @@ export function MeetingDetail() {
             rerunSlot={<RerunButton meeting={meeting} />}
             uploadSlot={
               <>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={meeting.status === "completed" ? "secondary" : "outline"}
-                  disabled={meeting.status === "in_progress"}
-                  onClick={() => setOfflineIngestOpen(true)}
-                  data-testid="metadata-upload-audio"
-                >
-                  <Upload className="size-3.5" />
-                  {t("meetings.session.uploadAudio")}
-                </Button>
+                {/* Upload audio entry is only meaningful for `needs_recording`
+                    (scheduled meeting whose time already passed — the user
+                    補錄 by uploading offline audio). Hidden in `upcoming`
+                    (live capture is the path) and `completed` (already
+                    has a recording or chose to leave it empty). */}
+                {bucket === "needs_recording" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setOfflineIngestOpen(true)}
+                    data-testid="metadata-upload-audio"
+                  >
+                    <Upload className="size-3.5" />
+                    {t("meetings.session.uploadAudio")}
+                  </Button>
+                ) : null}
                 {/* slice-22 export bundle: visible for every status so the
                     user can download whatever artefacts already exist.
                     Failure (e.g. 404 race) is handled by a localized

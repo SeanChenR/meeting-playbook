@@ -17,7 +17,9 @@
  * user can pick a different file / retry without re-recording.
  */
 
-import { UploadCloud, X } from "lucide-react";
+import { X } from "lucide-react";
+
+import { CloudUpload } from "@/components/animate-ui/icons/cloud-upload";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,6 +28,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Loading } from "@/components/ui/loading";
+import { Progress } from "@/components/ui/progress";
 import { localizedErrorMessage } from "@/lib/i18n-errors";
 import { type OfflineIngestProgress, getOfflineIngestProgress } from "@/lib/offline-ingest-api";
 import {
@@ -226,7 +230,11 @@ export function UploadDialog({
                   className="sr-only"
                   onChange={(e) => handleFiles(e.target.files)}
                 />
-                <UploadCloud className="mx-auto h-8 w-8 text-(--color-muted-foreground) mb-2" />
+                <CloudUpload
+                  animateOnHover
+                  className="mx-auto size-8 text-(--color-muted-foreground) mb-2"
+                  aria-hidden
+                />
                 <p className="text-sm font-medium text-(--color-foreground)">
                   {isDragActive
                     ? t("offline_ingest.dialog.dropzoneActive")
@@ -290,27 +298,52 @@ export function UploadDialog({
             <p className="text-sm">
               {t("offline_ingest.dialog.uploading", { percent: state.percent })}
             </p>
-            <div className="h-2 w-full overflow-hidden rounded bg-(--color-muted)">
-              <div
-                className="h-full bg-(--color-primary) transition-[width] duration-150"
-                style={{ width: `${state.percent}%` }}
-              />
-            </div>
+            <Progress
+              value={state.percent}
+              aria-label={t("offline_ingest.dialog.uploading", { percent: state.percent })}
+            />
           </div>
         ) : null}
 
         {state.kind === "polling" ? (
-          <div data-testid="ingest-progress" className="space-y-1 text-sm">
+          <div data-testid="ingest-progress" className="space-y-2 text-sm">
             {state.progress.state === "transcoding" ? (
-              <p>{t("offline_ingest.dialog.transcoding")}</p>
+              <div className="flex items-center gap-2">
+                <Loading size="sm" aria-label={t("offline_ingest.dialog.transcoding")} />
+                <p>{t("offline_ingest.dialog.transcoding")}</p>
+              </div>
             ) : null}
             {state.progress.state === "asr_running" ? (
-              <p>
-                {t("offline_ingest.dialog.asrRunning", {
-                  processed: state.progress.chunks_processed ?? 0,
-                  total: state.progress.chunks_total ?? 0,
-                })}
-              </p>
+              <div className="space-y-1.5">
+                <p>
+                  {t("offline_ingest.dialog.asrRunning", {
+                    processed: state.progress.chunks_processed ?? 0,
+                    total: state.progress.chunks_total ?? 0,
+                  })}
+                </p>
+                {(() => {
+                  const done = state.progress.chunks_processed ?? 0;
+                  const total = state.progress.chunks_total ?? 0;
+                  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                  return total > 0 ? (
+                    <Progress
+                      value={pct}
+                      aria-label={t("offline_ingest.dialog.asrRunning", {
+                        processed: done,
+                        total,
+                      })}
+                    />
+                  ) : (
+                    <Loading
+                      size="sm"
+                      aria-label={t("offline_ingest.dialog.asrRunning", {
+                        processed: done,
+                        total,
+                      })}
+                    />
+                  );
+                })()}
+              </div>
             ) : null}
             {state.progress.state === "failed" ? (
               <p role="alert" className="text-(--color-destructive)">

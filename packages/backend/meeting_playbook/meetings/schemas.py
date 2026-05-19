@@ -10,12 +10,44 @@ Per design.md (slice-03-meeting-crud):
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 MeetingStatus = Literal["scheduled", "in_progress", "completed"]
+
+# Derived lifecycle bucket exposed in every meeting response. Frontend renders
+# this directly as the card chip + the Kanban column key (replacing the prior
+# frontend-side getMeetingDateBucket time math). Status alone could not
+# express "scheduled meeting whose scheduled_start_at is in the past" without
+# a wall-clock comparison the client can't trust to be synchronized.
+MeetingBucket = Literal["upcoming", "needs_recording", "completed"]
+
+
+def _compute_bucket(status: str, scheduled_start_at: datetime, now: datetime) -> MeetingBucket:
+    """Map a meeting row to its lifecycle bucket.
+
+    Rules (locked with frontend `meetings-bucket.ts` for parity):
+      - in_progress | completed → 'completed'
+      - scheduled with future scheduled_start_at → 'upcoming'
+      - scheduled with past scheduled_start_at  → 'needs_recording'
+    """
+    if status in ("in_progress", "completed"):
+        return "completed"
+    # Defensive: scheduled_start_at may be tz-naive on legacy rows. Treat as
+    # UTC so the comparison with `now` (also UTC) doesn't raise.
+    anchor = scheduled_start_at
+    if anchor.tzinfo is None:
+        anchor = anchor.replace(tzinfo=UTC)
+    return "upcoming" if anchor >= now else "needs_recording"
 
 
 class MeetingCreate(BaseModel):
@@ -97,6 +129,19 @@ class MeetingRead(BaseModel):
     tags: list[TagSummary] = []
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def bucket(self) -> MeetingBucket:
+        """Lifecycle bucket — `upcoming` / `needs_recording` / `completed`.
+
+        Computed at serialization time from `status` + `scheduled_start_at`
+        compared against the current UTC wall clock. Tests that need
+        deterministic bucket values can construct MeetingRead via
+        `model_validate` with a fixture meeting + freeze time, or build
+        the response dict by hand and call `MeetingRead.model_validate`.
+        """
+        return _compute_bucket(self.status, self.scheduled_start_at, datetime.now(UTC))
 
 
 class MeetingPatch(BaseModel):

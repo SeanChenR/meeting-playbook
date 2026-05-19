@@ -61,7 +61,8 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
       >
         <div
           data-testid="navbar-inner"
-          className="mx-auto flex w-full max-w-[1600px] items-center px-6"
+          className="mx-auto grid w-full max-w-[1600px] items-center px-6"
+          style={{ gridTemplateColumns: "1fr auto 1fr" }}
         >
           <Link
             to="/"
@@ -70,33 +71,41 @@ export function ProtectedShell({ children, fullBleed = false }: ProtectedShellPr
             <img src="/logo.png" alt="" aria-hidden className="size-7 object-contain" />
             {t("auth.home.topNavTitle")}
           </Link>
-          <nav className="ml-6 hidden items-center gap-1 sm:flex">
+          {/* Active link uses the Aura primary tint instead of the prior
+              muted-gray bg which read as "disabled". */}
+          <nav className="hidden items-center justify-center gap-1 sm:flex">
             <Link
               to="/meetings"
               data-testid="navbar-meetings-link"
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"
-              activeProps={{ className: "bg-(--color-muted) text-(--color-foreground)" }}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-primary-soft) hover:text-(--color-foreground)"
+              activeProps={{
+                className: "bg-(--color-primary-soft) text-(--color-primary)",
+              }}
             >
               {t("nav.meetings")}
             </Link>
             <Link
               to="/recordings"
               data-testid="navbar-recordings-link"
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"
-              activeProps={{ className: "bg-(--color-muted) text-(--color-foreground)" }}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-primary-soft) hover:text-(--color-foreground)"
+              activeProps={{
+                className: "bg-(--color-primary-soft) text-(--color-primary)",
+              }}
             >
               {t("nav.recordings")}
             </Link>
             <Link
               to="/dashboard"
               data-testid="navbar-dashboard-link"
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-muted) hover:text-(--color-foreground)"
-              activeProps={{ className: "bg-(--color-muted) text-(--color-foreground)" }}
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-(--color-muted-foreground) transition-colors hover:bg-(--color-primary-soft) hover:text-(--color-foreground)"
+              activeProps={{
+                className: "bg-(--color-primary-soft) text-(--color-primary)",
+              }}
             >
               {t("nav.dashboard")}
             </Link>
           </nav>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="flex items-center justify-end gap-1">
             <LocaleToggle />
             <ThemeToggle />
             <span className="mx-1.5 h-5 w-px bg-(--color-border)" aria-hidden />

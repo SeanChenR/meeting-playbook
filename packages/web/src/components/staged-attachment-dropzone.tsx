@@ -38,9 +38,14 @@ import {
   uploadStagedAttachment as _uploadStagedAttachment,
 } from "../lib/attachments-api";
 import { localizedErrorMessage } from "../lib/i18n-errors";
+import { CloudUpload } from "./animate-ui/icons/cloud-upload";
 import { Alert } from "./ui/alert";
 import { buttonVariants } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
+import { Progress } from "./ui/progress";
+
+/** Mirror of attachment-dropzone — keep fast uploads visually perceptible. */
+const _MIN_PROGRESS_HOLD_MS = 600;
 
 export interface StagedAttachmentDropzoneApi {
   listPendingAttachments: () => Promise<PendingAttachment[]>;
@@ -175,8 +180,9 @@ export function StagedAttachmentDropzone({
         };
         return prev ? [...prev, next] : [next];
       });
-      setProgress(null);
+      setProgress(100);
       setErrorMessage(null);
+      window.setTimeout(() => setProgress(null), _MIN_PROGRESS_HOLD_MS);
     },
     onError: (err) => {
       const code = err instanceof AttachmentApiError ? err.errorCode : undefined;
@@ -268,17 +274,15 @@ export function StagedAttachmentDropzone({
 
       {progress !== null && (
         <Card data-testid="staged-progress-card">
-          <CardContent className="space-y-1.5 p-3">
+          <CardContent className="space-y-2 p-3">
             <p className="text-xs text-(--color-muted-foreground)">
               {t("meetings.new.staging.uploading_label", { percent: progress })}
             </p>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-(--color-muted)">
-              <div
-                data-testid="staged-progress-bar"
-                className="h-full bg-(--color-primary) transition-[width]"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+            <Progress
+              value={progress}
+              aria-label={t("meetings.new.staging.uploading_label", { percent: progress })}
+              data-testid="staged-progress-bar"
+            />
           </CardContent>
         </Card>
       )}
@@ -331,11 +335,18 @@ export function StagedAttachmentDropzone({
               {t("meetings.new.staging.at_limit")}
             </p>
           ) : (
-            <p className="text-sm text-(--color-muted-foreground)">
-              {rows.length === 0
-                ? t("meetings.new.staging.empty_hint")
-                : t("meetings.new.staging.dropzone_label")}
-            </p>
+            <>
+              <CloudUpload
+                animateOnHover
+                className="size-8 text-(--color-muted-foreground)"
+                aria-hidden
+              />
+              <p className="text-sm text-(--color-muted-foreground)">
+                {rows.length === 0
+                  ? t("meetings.new.staging.empty_hint")
+                  : t("meetings.new.staging.dropzone_label")}
+              </p>
+            </>
           )}
           <input
             ref={inputRef}

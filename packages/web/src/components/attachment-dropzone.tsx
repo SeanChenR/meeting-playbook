@@ -27,10 +27,19 @@ import {
   uploadAttachment as _uploadAttachment,
 } from "../lib/attachments-api";
 import { localizedErrorMessage } from "../lib/i18n-errors";
+import { CloudUpload } from "./animate-ui/icons/cloud-upload";
 import { Alert } from "./ui/alert";
 import { buttonVariants } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
+import { Progress } from "./ui/progress";
 import { SuccessResult } from "./ui/success-result";
+
+/**
+ * Local-network uploads can complete in under 100ms, which makes the
+ * progress card flash imperceptibly. Hold the bar at 100% for this many
+ * milliseconds before clearing so users always perceive the animation.
+ */
+const _MIN_PROGRESS_HOLD_MS = 600;
 
 export interface AttachmentDropzoneApi {
   listAttachments: (meetingId: string) => Promise<Attachment[]>;
@@ -98,9 +107,13 @@ export function AttachmentDropzone({ meetingId, api = _DEFAULT_API }: Attachment
         return prev ? [newRow, ...prev] : [newRow];
       });
       _refreshGeneratedArtifacts();
-      setProgress(null);
+      // Pin progress to 100% briefly so fast uploads (local dev / tiny
+      // files) still get a perceptible completion animation before the
+      // bar disappears and SuccessResult takes over.
+      setProgress(100);
       setErrorMessage(null);
       setSuccessMessage(t("attachments.uploadSuccess", { name: newRow.filename }));
+      window.setTimeout(() => setProgress(null), _MIN_PROGRESS_HOLD_MS);
     },
     onError: (err) => {
       const code = err instanceof AttachmentApiError ? err.errorCode : undefined;
@@ -161,6 +174,11 @@ export function AttachmentDropzone({ meetingId, api = _DEFAULT_API }: Attachment
               : "flex flex-col items-center justify-center gap-2 border-2 border-dashed border-(--color-border) p-6 text-center"
           }
         >
+          <CloudUpload
+            animateOnHover
+            className="size-8 text-(--color-muted-foreground)"
+            aria-hidden
+          />
           <p className="text-sm text-(--color-muted-foreground)">
             {t("attachments.dropzoneLabel")}
           </p>
@@ -184,17 +202,15 @@ export function AttachmentDropzone({ meetingId, api = _DEFAULT_API }: Attachment
 
       {progress !== null && (
         <Card data-testid="attachment-progress-card">
-          <CardContent className="space-y-1.5 p-3">
+          <CardContent className="space-y-2 p-3">
             <p className="text-xs text-(--color-muted-foreground)">
               {t("attachments.uploadingLabel", { percent: progress })}
             </p>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-(--color-muted)">
-              <div
-                data-testid="attachment-progress-bar"
-                className="h-full bg-(--color-primary) transition-[width]"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+            <Progress
+              value={progress}
+              aria-label={t("attachments.uploadingLabel", { percent: progress })}
+              data-testid="attachment-progress-bar"
+            />
           </CardContent>
         </Card>
       )}

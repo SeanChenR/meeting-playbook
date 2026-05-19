@@ -25,6 +25,7 @@ import { buttonVariants } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { localizedErrorMessage } from "../../lib/i18n-errors";
 import { meetingsListQueryOptions, MeetingApiError } from "../../lib/meetings-api";
+import { resolveMeetingBucket } from "../../lib/meetings-bucket";
 
 function _parseTagIdsFromSearch(searchStr: string): string[] {
   const params = new URLSearchParams(searchStr.startsWith("?") ? searchStr.slice(1) : searchStr);
@@ -47,8 +48,19 @@ export function MeetingsList() {
       : t("errors.common.unknown")
     : null;
 
+  // Per-bucket counts drive the subtitle so the numbers match what each
+  // Kanban column shows. The prior `m.status !== "completed"` filter
+  // double-counted in_progress meetings under "upcoming" — fixed by
+  // routing through resolveMeetingBucket so the same rule decides both.
   const total = meetings?.length ?? 0;
-  const upcoming = meetings?.filter((m) => m.status !== "completed").length ?? 0;
+  const bucketCounts = (meetings ?? []).reduce(
+    (acc, m) => {
+      acc[resolveMeetingBucket(m)] += 1;
+      return acc;
+    },
+    { upcoming: 0, needs_recording: 0, completed: 0 },
+  );
+  const upcoming = bucketCounts.upcoming + bucketCounts.needs_recording;
 
   return (
     <ProtectedShell>
@@ -62,8 +74,28 @@ export function MeetingsList() {
             {t("meetings.list.heading")}
           </h1>
           {meetings && (
-            <p className="text-sm text-(--color-muted-foreground)">
-              {t("meetings.list.metaSummary", { total, upcoming })}
+            <p
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-(--color-foreground)/75"
+              data-testid="meetings-list-meta"
+            >
+              <span className="font-medium text-(--color-foreground)">
+                {total} {t("meetings.list.metaTotalSuffix")}
+              </span>
+              <span aria-hidden className="text-(--color-border-strong)">
+                ·
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="size-1.5 rounded-full bg-(--color-info)" />
+                {t("meetings.list.metaBucketUpcoming")} {bucketCounts.upcoming}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="size-1.5 rounded-full bg-(--color-warning)" />
+                {t("meetings.list.metaBucketNeedsRecording")} {bucketCounts.needs_recording}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="size-1.5 rounded-full bg-(--color-accent)" />
+                {t("meetings.list.metaBucketCompleted")} {bucketCounts.completed}
+              </span>
             </p>
           )}
         </div>

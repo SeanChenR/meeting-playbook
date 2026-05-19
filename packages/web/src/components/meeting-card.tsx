@@ -16,18 +16,36 @@ import { Badge } from "./ui/badge";
 import { HoverGlowCard } from "./ui/hover-glow-card";
 import { TagChip } from "./tags/tag-chip";
 import { TagPicker } from "./tags/tag-picker";
-import type { Meeting, MeetingStatus } from "../lib/meetings-api";
+import type { Meeting, MeetingBucket } from "../lib/meetings-api";
+import { resolveMeetingBucket } from "../lib/meetings-bucket";
 
-const STATUS_COLOR: Record<MeetingStatus, string> = {
-  scheduled: "var(--color-primary)",
-  in_progress: "var(--color-destructive)",
-  completed: "var(--color-muted-foreground)",
+/**
+ * Chip rendering is now driven by the derived `bucket` field (mirrors the
+ * Kanban column labels) rather than `meeting.status` directly. The
+ * needs_recording case used to fall under "已排程" which misled users on
+ * stale scheduled meetings; the bucket chip surfaces it explicitly.
+ *
+ * No chip variant for `in_progress` because a meeting that is mid-capture
+ * keeps the user on the detail page — the card list view does not need
+ * to broadcast that state. in_progress meetings appear under the
+ * `completed` bucket the same as fully-finalized meetings.
+ */
+const BUCKET_COLOR: Record<MeetingBucket, string> = {
+  upcoming: "var(--color-info)",
+  needs_recording: "var(--color-warning)",
+  completed: "var(--color-accent)",
 };
 
-const STATUS_BADGE: Record<MeetingStatus, "default" | "success" | "outline"> = {
-  scheduled: "outline",
-  in_progress: "success",
-  completed: "default",
+const BUCKET_BADGE: Record<MeetingBucket, "upcoming" | "warning" | "completed"> = {
+  upcoming: "upcoming",
+  needs_recording: "warning",
+  completed: "completed",
+};
+
+const BUCKET_LABEL_KEY: Record<MeetingBucket, string> = {
+  upcoming: "meetings.kanban.bucketUpcoming",
+  needs_recording: "meetings.kanban.bucketNeedsRecording",
+  completed: "meetings.kanban.bucketCompleted",
 };
 
 function _durationMinutes(start: string, end: string | null): number | null {
@@ -62,8 +80,9 @@ export interface MeetingCardProps {
 export function MeetingCard({ meeting, showUploadShortcut = false }: MeetingCardProps) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const color = STATUS_COLOR[meeting.status];
-  const badgeVariant = STATUS_BADGE[meeting.status];
+  const bucket = resolveMeetingBucket(meeting);
+  const color = BUCKET_COLOR[bucket];
+  const badgeVariant = BUCKET_BADGE[bucket];
   const duration = _durationMinutes(meeting.scheduled_start_at, meeting.scheduled_end_at);
   const timeText = _formatTime(meeting.scheduled_start_at, i18n.language);
 
@@ -82,7 +101,7 @@ export function MeetingCard({ meeting, showUploadShortcut = false }: MeetingCard
         <div className="flex items-center justify-between gap-2">
           <Badge variant={badgeVariant} className="gap-1.5">
             <span aria-hidden className="size-1.5 rounded-full" style={{ background: color }} />
-            {t(`meetings.list.status.${meeting.status}`)}
+            {t(BUCKET_LABEL_KEY[bucket])}
           </Badge>
         </div>
         <h2

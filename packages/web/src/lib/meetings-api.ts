@@ -13,6 +13,19 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export type MeetingStatus = "scheduled" | "in_progress" | "completed";
 
+/**
+ * Derived lifecycle bucket — surfaced by the backend on every meeting
+ * response. Drives Kanban column placement + the single card chip.
+ *
+ *   upcoming        — scheduled meeting whose scheduled_start_at >= now
+ *   needs_recording — scheduled meeting whose scheduled_start_at < now
+ *   completed       — any meeting whose status is in_progress or completed
+ *
+ * Computed server-side from `status` + `scheduled_start_at` against the
+ * backend's UTC wall clock, so frontend rendering is single-source.
+ */
+export type MeetingBucket = "upcoming" | "needs_recording" | "completed";
+
 export interface MeetingTagSummary {
   id: string;
   name: string;
@@ -26,6 +39,12 @@ export interface Meeting {
   counterparty_display_name: string;
   me_display_name: string;
   status: MeetingStatus;
+  /** Derived lifecycle bucket — see {@link MeetingBucket}. Backend always
+   * emits this (computed_field on `MeetingRead`), but the TS type leaves
+   * it optional so existing test fixtures don't need backfill — UI code
+   * MUST go through `resolveMeetingBucket(meeting)` which falls back to
+   * the client-side compute when `bucket` is absent. */
+  bucket?: MeetingBucket;
   asr_provider: string;
   calendar_event_id: string | null;
   created_at: string;

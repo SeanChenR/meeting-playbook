@@ -20,8 +20,8 @@
 
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getMeetingDateBucket, type MeetingDateBucket } from "../lib/meetings-bucket";
-import type { Meeting } from "../lib/meetings-api";
+import { resolveMeetingBucket } from "../lib/meetings-bucket";
+import type { Meeting, MeetingBucket } from "../lib/meetings-api";
 import { MeetingCard } from "./meeting-card";
 import { Badge } from "./ui/badge";
 
@@ -29,9 +29,9 @@ export interface MeetingsKanbanProps {
   meetings: Meeting[];
 }
 
-const BUCKET_ORDER: MeetingDateBucket[] = ["needs_recording", "upcoming", "completed"];
+const BUCKET_ORDER: MeetingBucket[] = ["needs_recording", "upcoming", "completed"];
 
-const BUCKET_LABEL_KEY: Record<MeetingDateBucket, string> = {
+const BUCKET_LABEL_KEY: Record<MeetingBucket, string> = {
   needs_recording: "meetings.kanban.bucketNeedsRecording",
   upcoming: "meetings.kanban.bucketUpcoming",
   completed: "meetings.kanban.bucketCompleted",
@@ -48,14 +48,16 @@ export function MeetingsKanban({ meetings }: MeetingsKanbanProps) {
   const [pastExpanded, setPastExpanded] = useState(false);
 
   const grouped = useMemo(() => {
-    const now = new Date();
-    const buckets: Record<MeetingDateBucket, Meeting[]> = {
+    // Backend now emits `bucket` as a computed_field on every meeting
+    // response; `resolveMeetingBucket` falls back to the time-math compute
+    // for legacy test fixtures that don't ship one yet.
+    const buckets: Record<MeetingBucket, Meeting[]> = {
       needs_recording: [],
       upcoming: [],
       completed: [],
     };
     for (const m of meetings) {
-      buckets[getMeetingDateBucket(m, now)].push(m);
+      buckets[resolveMeetingBucket(m)].push(m);
     }
     buckets.completed = _sortCompletedDesc(buckets.completed);
     return buckets;

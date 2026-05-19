@@ -19,9 +19,23 @@
  * gets the user's attention instead of disappearing into completed.
  */
 
-import type { Meeting } from "./meetings-api";
+import type { Meeting, MeetingBucket } from "./meetings-api";
 
-export type MeetingDateBucket = "needs_recording" | "upcoming" | "completed";
+/** Legacy alias kept for callsites that still import the old name. */
+export type MeetingDateBucket = MeetingBucket;
+
+/**
+ * Resolve a meeting's bucket — prefers the backend-supplied `bucket` field
+ * (authoritative since the schema added a `computed_field`), falls back to
+ * the client-side compute for legacy fixtures / responses that pre-date
+ * the bucket field.
+ */
+export function resolveMeetingBucket(
+  m: Pick<Meeting, "status" | "scheduled_start_at" | "bucket">,
+  now: Date = new Date(),
+): MeetingBucket {
+  return m.bucket ?? getMeetingDateBucket(m, now);
+}
 
 export function getMeetingDateBucket(
   m: Pick<Meeting, "status" | "scheduled_start_at">,

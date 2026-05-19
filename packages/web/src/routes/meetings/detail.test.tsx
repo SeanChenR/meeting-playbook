@@ -34,11 +34,16 @@ const SAMPLE_MEETING = {
   counterparty_display_name: "林經理",
   me_display_name: "Sean",
   status: "scheduled",
+  // Bucket gating: tests assert Start Meeting works → fixture is `upcoming`.
+  bucket: "upcoming",
   asr_provider: "whisper",
   calendar_event_id: null,
   created_at: "2026-05-07T10:00:00Z",
   started_at: null,
   ended_at: null,
+  scheduled_start_at: "2099-01-01T10:00:00Z",
+  scheduled_end_at: null,
+  tags: [],
 };
 
 async function renderInRouter(initialEntry = "/meetings/m_abc") {

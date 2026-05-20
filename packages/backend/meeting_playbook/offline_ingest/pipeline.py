@@ -4,10 +4,15 @@
 Task 3.2 lands the duration enforcement helper. Task 4.1 adds the
 surrounding orchestration in `run()`. Both share `_wav_duration_seconds`
 and the `OfflineIngestTooLong` error.
+
+asr-runtime-extraction (task 9.2) adds `_transcribe_with_runtime_retry` —
+each chunk gets up to 3 retries with 2/4/8s exponential backoff when the
+asr-runtime service returns `error_code: asr.runtime_unavailable`.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import wave
@@ -16,6 +21,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from meeting_playbook.asr.base import ASRProvider, TranscriptChunk as _AsrChunk
+from meeting_playbook.asr.remote_runtime_client import AsrRuntimeUnavailableError
 
 from meeting_playbook.offline_ingest import runtime
 from meeting_playbook.offline_ingest.transcode import (
@@ -30,6 +38,56 @@ from meeting_playbook.offline_ingest.tus_protocol import (
 from meeting_playbook.sessions.models import Recording
 
 logger = logging.getLogger(__name__)
+
+
+_ASR_RETRY_BACKOFF_SECONDS: tuple[float, ...] = (2.0, 4.0, 8.0)
+
+
+async def _transcribe_with_runtime_retry(
+    *,
+    provider: ASRProvider,
+    audio_bytes: bytes,
+    sample_rate_hz: int,
+    meeting_id: str,
+    progress: runtime.ChunksProgress,
+) -> _AsrChunk | None:
+    """Wrap a single chunk transcription with bounded retry.
+
+    Per asr-runtime-extraction Decision 7: when the remote runtime returns
+    `error_code: asr.runtime_unavailable`, retry 3 times with 2/4/8 second
+    exponential backoff. If all retries fail, mark the progress row as
+    failed and return None so the caller exits early.
+    """
+    last_error: AsrRuntimeUnavailableError | None = None
+    for attempt in range(len(_ASR_RETRY_BACKOFF_SECONDS) + 1):
+        try:
+            return await provider.transcribe_chunk(
+                audio_bytes=audio_bytes,
+                sample_rate_hz=sample_rate_hz,
+            )
+        except AsrRuntimeUnavailableError as exc:
+            last_error = exc
+            if attempt >= len(_ASR_RETRY_BACKOFF_SECONDS):
+                break
+            backoff = _ASR_RETRY_BACKOFF_SECONDS[attempt]
+            logger.warning(
+                "asr.runtime_unavailable for meeting=%s attempt=%d; retrying in %.1fs",
+                meeting_id,
+                attempt + 1,
+                backoff,
+            )
+            await asyncio.sleep(backoff)
+    # All retries exhausted — record on the runtime state and bail.
+    del progress  # unused (kept in signature for forward compat)
+    error_code = last_error.error_code if last_error else "asr.runtime_unavailable"
+    runtime.set_state(meeting_id, "failed")
+    runtime.set_error(meeting_id, error_code)
+    logger.error(
+        "asr.runtime_unavailable for meeting=%s — exhausted %d retries; failing job",
+        meeting_id,
+        len(_ASR_RETRY_BACKOFF_SECONDS),
+    )
+    return None
 
 
 class OfflineIngestTooLong(RuntimeError):
@@ -175,10 +233,16 @@ def _build_asr_runner() -> Callable[[str], Awaitable[None]]:
                 speaker="me",
                 base_started_at=base_started_at,
             ):
-                result = await provider.transcribe_chunk(
+                result = await _transcribe_with_runtime_retry(
+                    provider=provider,
                     audio_bytes=audio.audio_bytes,
                     sample_rate_hz=audio.sample_rate_hz,
+                    meeting_id=meeting_id,
+                    progress=progress,
                 )
+                if result is None:
+                    # Job-level failure already recorded in progress row.
+                    return
                 progress.processed += 1
                 if not (result.text or "").strip():
                     continue

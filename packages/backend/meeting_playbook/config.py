@@ -66,11 +66,13 @@ class Settings(BaseSettings):
     # is the highest-quality SKU available on Vertex in us-central1.
     vertex_pro_model_id: str = "gemini-2.5-pro"
 
-    # Slice 6 — audio capture + ASR
+    # Slice 6 — audio capture (ASR moved to packages/asr-runtime per ADR-0027)
     recordings_dir: str = "~/MeetingPlaybook/recordings"
-    whisper_model_size: str = "large-v3-turbo"
-    whisper_device: str = "auto"
-    whisper_compute_type: str = "auto"
+
+    # asr-runtime-extraction — backend talks to the standalone ASR runtime
+    # over HTTP. Default points at the local uvicorn instance launched by
+    # the root dev script. See .env.example for the full set.
+    asr_runtime_url: str = "http://127.0.0.1:8100"
 
     # Slice 11 — recording retention. After this many days the cleanup
     # background job unlinks the wav file and stamps `recording.deleted_at`.

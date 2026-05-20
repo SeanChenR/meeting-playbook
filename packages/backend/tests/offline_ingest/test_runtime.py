@@ -104,3 +104,58 @@ async def test_task_exception_transitions_to_failed_with_error_code() -> None:
     state = runtime.get_state("m_bad")
     assert state["state"] == "failed", state
     assert state.get("error_code") == "offline_ingest.transcode_failed", state
+
+
+# ─── asr-runtime-extraction tests (task 9.1) ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_runtime_unavailable_triggers_retry_then_fail(monkeypatch):
+    """When the asr-runtime returns `asr.runtime_unavailable` for every
+    attempt, the chunk-transcribe helper SHALL retry 3 times with
+    exponential backoff (2 / 4 / 8 seconds), then surface the failure
+    through `runtime.set_state(meeting_id, "failed")` + the structured
+    error_code. Per asr-runtime-extraction Decision 7."""
+    from meeting_playbook.asr.remote_runtime_client import AsrRuntimeUnavailableError
+    from meeting_playbook.offline_ingest import pipeline, runtime
+
+    # Capture sleeps without actually waiting.
+    sleeps: list[float] = []
+
+    async def _record_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(pipeline.asyncio, "sleep", _record_sleep)
+
+    class _AlwaysFailingProvider:
+        name = "qwen3"
+        call_count = 0
+
+        async def warmup(self):
+            return None
+
+        async def transcribe_chunk(self, *, audio_bytes, sample_rate_hz, language_hint=None):
+            self.call_count += 1
+            raise AsrRuntimeUnavailableError("stub: runtime down")
+
+    runtime.reset()
+    progress = runtime.get_progress("m_retry_fail")
+
+    provider = _AlwaysFailingProvider()
+    result = await pipeline._transcribe_with_runtime_retry(
+        provider=provider,
+        audio_bytes=bytes(16000 * 2),
+        sample_rate_hz=16000,
+        meeting_id="m_retry_fail",
+        progress=progress,
+    )
+
+    assert result is None
+    # 4 attempts total (initial + 3 retries) — the helper retries after
+    # the first failure, so call_count counts attempts.
+    assert provider.call_count == 4
+    # Backoff sequence is 2 / 4 / 8 — three sleeps between four attempts.
+    assert sleeps == [2.0, 4.0, 8.0]
+    state = runtime.get_state("m_retry_fail")
+    assert state["state"] == "failed", state
+    assert state.get("error_code") == "asr.runtime_unavailable", state

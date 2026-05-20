@@ -16,7 +16,7 @@ import { useTheme, type Theme } from "../../lib/theme-provider";
 import { cn } from "../../lib/utils";
 
 interface AsrProvider {
-  id: "qwen3" | "whisper";
+  id: "qwen3";
   label: string;
   logo: React.ReactNode;
 }
@@ -25,16 +25,12 @@ export function SettingsPreferences() {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
 
+  // Post asr-runtime-extraction (ADR-0027): only Qwen3-ASR is offered.
   const providers: AsrProvider[] = [
     {
       id: "qwen3",
       label: "Qwen3-ASR",
       logo: <img src="/icons/qwen.png" alt="" aria-hidden className="size-7" />,
-    },
-    {
-      id: "whisper",
-      label: "Whisper",
-      logo: <img src="/icons/whisper.png" alt="" aria-hidden className="size-7" />,
     },
   ];
 

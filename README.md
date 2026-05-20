@@ -33,7 +33,7 @@ See `openspec/specs/` for live capability specs (currently 26 capabilities), `op
 - **Backend**: Python 3.12 + FastAPI + SQLAlchemy 2.0 async + Alembic
 - **DB**: PostgreSQL
 - **Audio**: BlackHole 2ch dual-stream capture
-- **ASR**: faster-whisper (local) + Qwen3-ASR (local-first via MPS, cloud fallback)
+- **ASR**: Qwen3-ASR-1.7B in a standalone runtime (`packages/asr-runtime/`) — separate uvicorn process so backend reloads don't reload the 5GB model. See ADR-0027.
 - **LLM**: Vertex AI — Gemini Flash (realtime tactical advisor) + Gemini 2.5 Pro (summary + playbook generation)
 
 ### First-time setup
@@ -200,7 +200,7 @@ Private. Not for redistribution.
 - **後端**：Python 3.12 + FastAPI + SQLAlchemy 2.0 async + Alembic
 - **資料庫**：PostgreSQL
 - **錄音**：BlackHole 2ch 雙聲道擷取
-- **ASR**：faster-whisper（本機）+ Qwen3-ASR（本機優先走 MPS、失敗時回退雲端）
+- **ASR**：Qwen3-ASR-1.7B 跑在獨立 runtime（`packages/asr-runtime/`）— uvicorn 自己一個 process，backend reload 不會重 load 5GB 模型。詳見 ADR-0027。
 - **LLM**：Vertex AI — Gemini Flash（即時 tactical advisor）+ Gemini 2.5 Pro（摘要與 playbook 生成）
 
 ### 初次設定

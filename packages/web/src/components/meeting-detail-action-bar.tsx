@@ -76,7 +76,7 @@ export interface MeetingDetailActionBarProps {
   onRecordingModeChange?: (mode: "dual" | "single") => void;
   /** Fires when user picks a new ASR engine from the dropdown.
    *  Null = read-only. */
-  onAsrProviderChange?: (provider: "whisper" | "qwen3") => void;
+  onAsrProviderChange?: (provider: "qwen3") => void;
 }
 
 /** Coloured count chip — pill with a tinted background per category.
@@ -267,12 +267,11 @@ export function MeetingDetailActionBar(props: MeetingDetailActionBarProps) {
     },
   ];
 
-  const asrOptions: ReadonlyArray<DropdownOption<"whisper" | "qwen3">> = [
-    {
-      value: "whisper",
-      label: "Whisper",
-      icon: <img src="/icons/whisper.png" alt="" aria-hidden className="size-4 rounded-[3px]" />,
-    },
+  // Post asr-runtime-extraction (ADR-0027): only Qwen3-ASR is offered.
+  // Legacy `whisper` rows still load; the backend factory coerces them
+  // server-side, and `asrCurrent` snaps the dropdown to qwen3 here so the
+  // UI never displays a defunct option.
+  const asrOptions: ReadonlyArray<DropdownOption<"qwen3">> = [
     {
       value: "qwen3",
       label: "Qwen3-ASR",
@@ -280,16 +279,7 @@ export function MeetingDetailActionBar(props: MeetingDetailActionBarProps) {
     },
   ];
 
-  // Normalise the current ASR provider key to one of the two known options.
-  // Backend can ship variants like "whisper-large-v3" / "qwen3-asr"; we map
-  // those into the dropdown's canonical bucket so the active item is marked.
-  const asrCurrent: "whisper" | "qwen3" | null = asrProvider
-    ? /whisper/i.test(asrProvider)
-      ? "whisper"
-      : /qwen/i.test(asrProvider)
-        ? "qwen3"
-        : null
-    : null;
+  const asrCurrent: "qwen3" | null = asrProvider ? "qwen3" : null;
 
   return (
     <div

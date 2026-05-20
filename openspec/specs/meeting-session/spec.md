@@ -1046,13 +1046,15 @@ tests:
 ---
 ### Requirement: ASR runs through one ASRProvider instance per stream with parallel warmup
 
-The `SessionService` SHALL maintain a mapping from stream identifier (`me` / `counterparty`) to an `ASRProvider` instance, with a separate `WhisperProvider` instance per stream so model inference for the two streams can proceed concurrently. Each `WhisperProvider` SHALL expose an idempotent `warmup()` async method that loads its underlying model. During the connecting phase the session SHALL invoke both providers' `warmup()` calls in parallel via `asyncio.gather` so the first chunks are available without serial cold-start delay. Each captured `AudioChunk` SHALL be transcribed only by the provider mapped to that chunk's stream label.
+The `SessionService` SHALL maintain a mapping from stream identifier (`me` / `counterparty`) to an `ASRProvider` instance. After the asr-runtime extraction the concrete implementation SHALL be `RemoteAsrRuntimeClient` (one per stream) rather than an in-process model class — each stream owns its own WebSocket connection to the standalone ASR runtime so per-stream inference can proceed concurrently without sharing a single back-pressure queue.
+
+Each `ASRProvider` SHALL expose an idempotent `warmup()` async method. For `RemoteAsrRuntimeClient`, `warmup()` SHALL poll `GET /healthz` against the runtime until `status == "ready"` (with a configurable timeout). During the connecting phase the session SHALL invoke both providers' `warmup()` calls in parallel via `asyncio.gather` so the first chunks are available without serial cold-start delay. Each captured `AudioChunk` SHALL be transcribed only by the provider mapped to that chunk's stream label.
 
 #### Scenario: Warmup runs both providers in parallel
 
-- **GIVEN** the session is starting and both providers report `_model is None` initially
+- **GIVEN** the session is starting and the runtime reports `status: loading` on first poll
 - **WHEN** the session enters the connecting phase
-- **THEN** both `provider.warmup()` calls SHALL be awaited via `asyncio.gather` (concurrently) and each provider SHALL load its model exactly once
+- **THEN** both `provider.warmup()` calls SHALL be awaited via `asyncio.gather` (concurrently) and each provider SHALL stop polling as soon as the runtime reports `status: ready`
 
 #### Scenario: Per-stream chunk routing
 
@@ -1060,100 +1062,66 @@ The `SessionService` SHALL maintain a mapping from stream identifier (`me` / `co
 - **WHEN** the `me` capture emits five chunks and the `counterparty` capture emits five chunks
 - **THEN** provider A SHALL receive exactly the five `me` chunks (and zero `counterparty` chunks) and provider B SHALL receive exactly the five `counterparty` chunks (and zero `me` chunks)
 
-<!-- @trace
-source: slice-07-dualstream-and-ui-bundle
-updated: 2026-05-10
--->
+#### Scenario: Runtime unavailable during connecting phase aborts session start
+
+- **GIVEN** the runtime process is not running (no listener on `ASR_RUNTIME_URL`)
+- **WHEN** the WebSocket handler enters the connecting phase and calls `warmup()` on either provider
+- **THEN** the provider SHALL raise `AsrRuntimeUnavailableError` within its configured warmup timeout
+- **AND** the session handler SHALL emit a final `{"type": "error", "error_code": "asr.runtime_unavailable", ...}` frame and close the WebSocket cleanly
+- **AND** no `transcript_chunk` frames SHALL be sent
+
+#### Scenario: Runtime failure on a single chunk does not tear down the session
+
+- **GIVEN** an active in-progress session with both providers warm
+- **WHEN** the runtime returns `error_code: asr.runtime_unavailable` for one specific chunk (e.g. transient model error)
+- **THEN** the session handler SHALL drop the failing chunk, emit a structlog warning carrying the chunk's `sequence`, and continue accepting subsequent chunks
+- **AND** the WebSocket SHALL remain open
 
 
 <!-- @trace
-source: slice-07-dualstream-and-ui-bundle
-updated: 2026-05-10
+source: asr-runtime-extraction
+updated: 2026-05-20
 code:
-  - packages/web/src/routes/meetings/detail.tsx
-  - packages/backend/meeting_playbook/asr/whisper_provider.py
-  - packages/web/src/components/layout-switcher.tsx
-  - packages/backend/meeting_playbook/sessions/service.py
-  - docs/agents/audio.md
-  - packages/backend/alembic/versions/0004_add_meeting_scheduled_times.py
-  - packages/backend/meeting_playbook/asr/base.py
-  - packages/backend/meeting_playbook/meetings/schemas.py
-  - packages/backend/meeting_playbook/sessions/dependencies.py
-  - packages/backend/meeting_playbook/audio/devices.py
-  - packages/backend/meeting_playbook/calendar/router.py
-  - packages/web/package.json
-  - .env.example
-  - packages/web/src/components/playbook-pane.tsx
-  - packages/backend/meeting_playbook/meetings/models.py
-  - packages/backend/meeting_playbook/audio/capture.py
-  - docs/BLACKHOLE_SETUP.md
-  - packages/web/src/components/ui/alert.tsx
-  - packages/web/src/components/transcript-pane.tsx
-  - packages/web/src/lib/meetings-api.ts
-  - packages/web/src/index.css
-  - docs/agents/sessions.md
-  - packages/backend/meeting_playbook/calendar/client.py
-  - bun.lock
-  - packages/backend/meeting_playbook/meetings/router.py
-  - packages/web/src/components/headphones-hint.tsx
-  - packages/web/src/locales/zh-TW.json
-  - packages/web/src/lib/session-ws.ts
-  - packages/web/src/route-tree.tsx
-  - packages/web/src/routes/meetings/calendar.tsx
+  - packages/web/public/icons/whisper.png
   - packages/backend/meeting_playbook/config.py
-  - packages/web/src/components/protected-shell.tsx
-  - packages/backend/meeting_playbook/meetings/repository.py
-  - packages/web/src/hooks/use-detail-layout.ts
-  - packages/web/src/test-setup.ts
-  - packages/web/src/routes/meetings/new.tsx
-  - packages/backend/meeting_playbook/playbooks/repository.py
-  - packages/web/src/lib/markdown-preview.tsx
-  - packages/web/vite.config.ts
-  - packages/web/src/hooks/use-meeting-session.ts
-  - packages/backend/meeting_playbook/sessions/messages.py
-  - packages/backend/meeting_playbook/sessions/repository.py
-  - packages/web/src/components/capture-indicator.tsx
-  - packages/web/src/lib/meetings-calendar-utils.ts
-  - packages/web/src/locales/en.json
+  - packages/web/src/components/asr-provider-selector.tsx
+  - packages/asr-runtime/meeting_playbook_asr_runtime/server.py
+  - packages/asr-runtime/uv.lock
+  - packages/asr-runtime/meeting_playbook_asr_runtime/__init__.py
+  - packages/backend/meeting_playbook/asr/factory.py
+  - docs/adr/0030-asr-runtime-extraction.md
+  - packages/backend/meeting_playbook/asr/remote_runtime_client.py
+  - packages/web/src/components/meeting-detail-action-bar.tsx
+  - packages/asr-runtime/meeting_playbook_asr_runtime/schemas.py
+  - packages/web/src/routes/settings/preferences.tsx
+  - packages/asr-runtime/pyproject.toml
+  - packages/asr-runtime/meeting_playbook_asr_runtime/errors.py
+  - packages/asr-runtime/meeting_playbook_asr_runtime/routes/transcribe.py
+  - packages/backend/meeting_playbook/asr/qwen3_provider.py
+  - package.json
+  - packages/backend/meeting_playbook/asr/whisper_provider.py
   - packages/backend/meeting_playbook/sessions/router.py
-  - packages/web/src/routes/meetings/list.tsx
-  - packages/backend/meeting_playbook/playbook_generation/generator.py
-  - packages/web/src/routes/calendar/upcoming.tsx
+  - README.md
+  - packages/asr-runtime/meeting_playbook_asr_runtime/qwen3_runner.py
+  - packages/web/src/components/asr-engine-hint.tsx
+  - packages/asr-runtime/meeting_playbook_asr_runtime/routes/__init__.py
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - .env.example
 tests:
-  - packages/backend/tests/meetings/test_endpoints.py
-  - packages/web/src/routes/calendar/upcoming.test.tsx
-  - packages/backend/tests/calendar/test_client.py
-  - packages/backend/tests/audio/test_capture_protocol.py
-  - packages/backend/tests/playbook_generation/test_generator.py
-  - packages/backend/tests/asr/test_whisper_provider.py
-  - packages/backend/tests/asr/fixtures/counterparty_short.wav
-  - packages/backend/tests/calendar/test_pick_counterparty.py
-  - packages/backend/tests/calendar/test_endpoints.py
-  - packages/backend/tests/sessions/test_service.py
-  - packages/web/src/components/layout-switcher.test.tsx
-  - packages/backend/tests/audio/test_devices.py
-  - packages/web/src/components/headphones-hint.test.tsx
-  - packages/backend/tests/asr/fixtures/README.md
-  - packages/backend/tests/sessions/test_repository.py
+  - packages/backend/tests/asr/test_factory.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/asr-runtime/tests/test_transcribe_http.py
+  - packages/backend/tests/asr/test_qwen3_provider.py
   - packages/backend/tests/sessions/test_router.py
-  - packages/backend/tests/meetings/test_repository.py
-  - packages/backend/tests/sessions/test_messages.py
-  - packages/web/src/components/playbook-pane.test.tsx
-  - packages/web/src/lib/session-ws.test.ts
-  - packages/web/src/components/capture-indicator.test.tsx
-  - packages/web/src/hooks/use-meeting-session.test.tsx
-  - packages/backend/tests/asr/test_base.py
-  - packages/backend/tests/test_alembic_meeting_scheduled.py
-  - packages/backend/tests/test_preflight.py
-  - packages/backend/tests/audio/test_capture_integration.py
-  - packages/web/src/hooks/use-detail-layout.test.tsx
-  - packages/web/src/lib/markdown-preview.test.tsx
-  - packages/backend/tests/test_alembic_meeting.py
-  - packages/web/src/routes/meetings/detail.test.tsx
   - packages/backend/tests/conftest.py
-  - packages/web/src/lib/meetings-calendar-utils.test.ts
-  - packages/web/src/components/protected-shell.test.tsx
-  - packages/web/src/components/transcript-pane.test.tsx
+  - packages/backend/tests/offline_ingest/test_runtime.py
+  - packages/asr-runtime/tests/test_transcribe_ws.py
+  - packages/asr-runtime/tests/__init__.py
+  - packages/backend/tests/asr/test_whisper_provider.py
+  - packages/asr-runtime/tests/test_health.py
+  - packages/backend/tests/asr/test_remote_runtime_client.py
+  - packages/asr-runtime/tests/test_schemas.py
+  - packages/asr-runtime/tests/test_qwen3_runner.py
 -->
 
 ---

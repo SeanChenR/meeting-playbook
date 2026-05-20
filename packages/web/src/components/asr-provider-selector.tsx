@@ -14,7 +14,11 @@ import { useTranslation } from "react-i18next";
 import { localizedErrorMessage } from "../lib/i18n-errors";
 import { type Meeting, usePatchMeetingMutation } from "../lib/meetings-api";
 
-const PROVIDER_VALUES = ["whisper", "qwen3"] as const;
+// Post asr-runtime-extraction (ADR-0027): only Qwen3 is a valid provider.
+// The selector now renders a single-option dropdown so the affordance
+// keeps its shape for future engines without leaking the retired Whisper
+// option back into the UI.
+const PROVIDER_VALUES = ["qwen3"] as const;
 type ProviderValue = (typeof PROVIDER_VALUES)[number];
 
 interface AsrProviderSelectorProps {
@@ -50,7 +54,7 @@ export function AsrProviderSelector({ meeting }: AsrProviderSelectorProps) {
         >
           {PROVIDER_VALUES.map((value) => (
             <option key={value} value={value}>
-              {value === "whisper" ? "Whisper" : "Qwen3"}
+              Qwen3
             </option>
           ))}
         </select>

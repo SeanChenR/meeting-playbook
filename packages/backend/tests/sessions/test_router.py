@@ -982,3 +982,77 @@ def test_single_mode_warmup_failure_emits_stream_failed_at_start(
     # Per existing router behaviour for warmup failure: meeting flips to completed.
     final_status = asyncio.run(_read_meeting_status(_async_url(_migrated_db_url), "m_sm2"))
     assert final_status == "completed"
+
+
+# ─── asr-runtime-extraction tests (task 8.1) ────────────────────────────
+
+
+def test_runtime_unavailable_during_warmup_emits_structured_error(
+    _migrated_db_url, tmp_path, monkeypatch
+):
+    """When asr-runtime is unreachable, the WS warmup path SHALL emit
+    `error_code: asr.runtime_unavailable` and close cleanly — NOT drop the
+    connection mid-handshake (per design Decision 7)."""
+    from meeting_playbook.asr.remote_runtime_client import AsrRuntimeUnavailableError
+
+    asyncio.run(_truncate(_async_url(_migrated_db_url)))
+    asyncio.run(
+        _setup_meeting(
+            _async_url(_migrated_db_url),
+            user_id="u_runtime_down",
+            meeting_id="m_runtime_down",
+            asr_provider="qwen3",
+        )
+    )
+
+    db_url_async = _async_url(_migrated_db_url)
+    engine = create_async_engine(db_url_async, future=True)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _override_session():
+        async with Session() as s:
+            yield s
+
+    class _FailingProvider:
+        name = "qwen3"
+
+        async def warmup(self):
+            raise AsrRuntimeUnavailableError("stub: runtime down", retriable=True)
+
+        async def transcribe_chunk(self, *_args, **_kwargs):
+            raise AsrRuntimeUnavailableError("stub: runtime down")
+
+    def _factory(_provider_name):
+        return (_FailingProvider(), _FailingProvider())
+
+    monkeypatch.setattr(
+        "meeting_playbook.sessions.router.get_asr_providers_for_meeting",
+        _factory,
+    )
+
+    app = create_app()
+    app.dependency_overrides[get_session_dependency] = _override_session
+    app.dependency_overrides[get_capture_factory_dependency] = lambda: _make_capture_factory(
+        tmp_path, n_chunks=1
+    )
+    client = TestClient(app)
+
+    error_codes: list[str] = []
+    with client.websocket_connect(
+        "/api/meetings/m_runtime_down/session",
+        headers={"X-User-Id": "u_runtime_down"},
+    ) as ws:
+        ws.send_text(json.dumps({"type": "start_meeting", "meeting_id": "m_runtime_down"}))
+        try:
+            while True:
+                msg = json.loads(ws.receive_text())
+                if msg.get("type") == "error":
+                    error_codes.append(msg.get("error_code", ""))
+        except WebSocketDisconnect:
+            pass
+
+    assert "asr.runtime_unavailable" in error_codes
+    final_status = asyncio.run(
+        _read_meeting_status(_async_url(_migrated_db_url), "m_runtime_down")
+    )
+    assert final_status == "completed"

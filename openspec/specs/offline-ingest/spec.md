@@ -351,7 +351,9 @@ tests:
 ---
 ### Requirement: Pipeline writes a single offline recording row and spawns ASR task
 
-When transcode succeeds and duration is within budget, the pipeline SHALL insert exactly one `recording` row with `source = "offline"`, `stream = "me"`, `started_at` set from the user-supplied `actual_started_at`, `file_path` equal to `{OFFLINE_UPLOAD_DIR}/{meeting_id}/source.wav`, and `bytes` equal to the WAV file size on disk. The pipeline SHALL set the meeting's `status` to `in_progress`. Then the pipeline SHALL spawn an async ASR background task following the `meeting_playbook.rerun.runtime` pattern (in-flight registry keyed by `meeting_id`, `ChunksProgress(processed, total)` map, idempotent spawn). On task completion the meeting status SHALL transition to `completed` and `transcript_chunk` rows SHALL exist whose `speaker` values match `^speaker_cluster_(\d+|unknown)$` per the `speaker-attribution-strategy` capability.
+When transcode succeeds and duration is within budget, the pipeline SHALL insert exactly one `recording` row with `source = "offline"`, `stream = "me"`, `started_at` set from the user-supplied `actual_started_at`, `file_path` equal to `{OFFLINE_UPLOAD_DIR}/{meeting_id}/source.wav`, and `bytes` equal to the WAV file size on disk. The pipeline SHALL set the meeting's `status` to `in_progress`. Then the pipeline SHALL spawn an async ASR background task following the `meeting_playbook.rerun.runtime` pattern (in-flight registry keyed by `meeting_id`, `ChunksProgress(processed, total)` map, idempotent spawn).
+
+The ASR task SHALL invoke `RemoteAsrRuntimeClient.transcribe_chunk` against the standalone ASR runtime over its HTTP endpoint (`POST /v1/transcribe/chunk`) for each segmented chunk; the backend SHALL NOT load the Qwen3 model in-process. When the runtime returns `error_code: asr.runtime_unavailable` for a chunk, the task SHALL retry that chunk up to 3 times with exponential backoff (2s → 4s → 8s) before marking the task `failed` and writing `error_code = "asr.runtime_unavailable"` into the `offline_ingest_progress` row. On task completion (no retriable failures) the meeting status SHALL transition to `completed` and `transcript_chunk` rows SHALL exist whose `speaker` values match `^speaker_cluster_(\d+|unknown)$` per the `speaker-attribution-strategy` capability.
 
 #### Scenario: Pipeline writes exactly one offline recording row
 
@@ -359,11 +361,13 @@ When transcode succeeds and duration is within budget, the pipeline SHALL insert
 - **WHEN** the pipeline runs the recording-write step
 - **THEN** `SELECT COUNT(*) FROM recording WHERE meeting_id = 'm_b'` SHALL equal 1 AND the row SHALL have `source = 'offline'`, `stream = 'me'`, `started_at IS NOT NULL`, `bytes > 0`, AND the meeting's `status` SHALL be `in_progress`
 
-#### Scenario: ASR task spawns with single-channel strategy
+#### Scenario: ASR task spawns with single-channel strategy via remote runtime
 
 - **GIVEN** a fresh offline recording row written for meeting `m_b`
 - **WHEN** the ASR background task runs to completion
-- **THEN** `transcript_chunk` rows SHALL exist for `m_b` whose `speaker` values match `^speaker_cluster_(\d+|unknown)$` AND the meeting's `status` SHALL be `completed`
+- **THEN** each chunk SHALL be transcribed via an HTTP POST to the standalone ASR runtime
+- **AND** `transcript_chunk` rows SHALL exist for `m_b` whose `speaker` values match `^speaker_cluster_(\d+|unknown)$`
+- **AND** the meeting's `status` SHALL be `completed`
 
 #### Scenario: Concurrent spawn returns busy error
 
@@ -371,52 +375,59 @@ When transcode succeeds and duration is within budget, the pipeline SHALL insert
 - **WHEN** a second offline upload completes for the same meeting before the first ASR task finishes
 - **THEN** the second spawn SHALL be rejected and `GET /api/meetings/{id}/offline_ingest_progress` SHALL return `state = "failed"` with `error_code = "offline_ingest.busy"`
 
+#### Scenario: Runtime unavailable triggers bounded retry then job-level failure
+
+- **GIVEN** the standalone ASR runtime is unreachable for chunk N
+- **WHEN** the offline ingest ASR task hits the failure for chunk N
+- **THEN** the task SHALL retry the chunk 3 times with exponential backoff (2s, 4s, 8s)
+- **AND** if all retries fail, the task SHALL mark the ingest progress row `state = "failed"` with `error_code = "asr.runtime_unavailable"`
+- **AND** the meeting `status` SHALL NOT be set to `completed`
+
 
 <!-- @trace
-source: slice-14-offline-ingest
-updated: 2026-05-15
+source: asr-runtime-extraction
+updated: 2026-05-20
 code:
-  - packages/backend/meeting_playbook/offline_ingest/runtime.py
-  - packages/web/src/components/offline-ingest/UploadDialog.tsx
-  - packages/backend/pyproject.toml
-  - CONTEXT.md
-  - packages/web/package.json
-  - packages/backend/meeting_playbook/offline_ingest/transcode.py
-  - bun.lock
-  - packages/backend/meeting_playbook/offline_ingest/router.py
-  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
-  - packages/backend/meeting_playbook/server.py
-  - packages/web/src/components/transcript-pane.tsx
-  - packages/web/src/lib/offline-ingest-api.ts
-  - packages/web/src/routes/meetings/detail.tsx
-  - packages/backend/meeting_playbook/speaker/finalize.py
-  - .env.example
-  - packages/web/src/components/offline-ingest/UploadBanner.tsx
+  - packages/web/public/icons/whisper.png
   - packages/backend/meeting_playbook/config.py
-  - packages/web/src/lib/tus-uploader.ts
-  - packages/backend/alembic/versions/0011_recording_source_started.py
-  - packages/backend/meeting_playbook/offline_ingest/__init__.py
-  - packages/backend/meeting_playbook/offline_ingest/tus_protocol.py
-  - packages/web/src/locales/en.json
-  - packages/web/src/locales/zh-TW.json
-  - packages/backend/meeting_playbook/sessions/models.py
+  - packages/web/src/components/asr-provider-selector.tsx
+  - packages/asr-runtime/meeting_playbook_asr_runtime/server.py
+  - packages/asr-runtime/uv.lock
+  - packages/asr-runtime/meeting_playbook_asr_runtime/__init__.py
+  - packages/backend/meeting_playbook/asr/factory.py
+  - docs/adr/0030-asr-runtime-extraction.md
+  - packages/backend/meeting_playbook/asr/remote_runtime_client.py
+  - packages/web/src/components/meeting-detail-action-bar.tsx
+  - packages/asr-runtime/meeting_playbook_asr_runtime/schemas.py
+  - packages/web/src/routes/settings/preferences.tsx
+  - packages/asr-runtime/pyproject.toml
+  - packages/asr-runtime/meeting_playbook_asr_runtime/errors.py
+  - packages/asr-runtime/meeting_playbook_asr_runtime/routes/transcribe.py
+  - packages/backend/meeting_playbook/asr/qwen3_provider.py
+  - package.json
+  - packages/backend/meeting_playbook/asr/whisper_provider.py
+  - packages/backend/meeting_playbook/sessions/router.py
+  - README.md
+  - packages/asr-runtime/meeting_playbook_asr_runtime/qwen3_runner.py
+  - packages/web/src/components/asr-engine-hint.tsx
+  - packages/asr-runtime/meeting_playbook_asr_runtime/routes/__init__.py
+  - packages/backend/meeting_playbook/offline_ingest/pipeline.py
+  - .env.example
 tests:
-  - packages/backend/tests/offline_ingest/test_progress_endpoint.py
-  - packages/backend/tests/offline_ingest/test_transcode.py
+  - packages/backend/tests/asr/test_factory.py
+  - packages/web/src/components/asr-provider-selector.test.tsx
+  - packages/asr-runtime/tests/test_transcribe_http.py
+  - packages/backend/tests/asr/test_qwen3_provider.py
+  - packages/backend/tests/sessions/test_router.py
+  - packages/backend/tests/conftest.py
   - packages/backend/tests/offline_ingest/test_runtime.py
-  - packages/backend/tests/retention/test_job.py
-  - packages/backend/tests/integration/test_offline_ingest_e2e.py
-  - packages/web/src/components/offline-ingest/UploadDialog.test.tsx
-  - packages/web/src/lib/tus-uploader.test.ts
-  - packages/backend/tests/speaker/fixtures/compare_diarization.md
-  - packages/backend/tests/test_alembic_recording_source_and_started_at.py
-  - packages/backend/tests/meetings/test_get_runtime_flags.py
-  - packages/backend/tests/offline_ingest/__init__.py
-  - packages/backend/tests/offline_ingest/test_pipeline.py
-  - packages/web/src/lib/offline-ingest-api.test.ts
-  - packages/backend/tests/offline_ingest/test_duration.py
-  - packages/backend/tests/offline_ingest/test_tus_protocol.py
-  - packages/web/src/components/offline-ingest/UploadBanner.test.tsx
+  - packages/asr-runtime/tests/test_transcribe_ws.py
+  - packages/asr-runtime/tests/__init__.py
+  - packages/backend/tests/asr/test_whisper_provider.py
+  - packages/asr-runtime/tests/test_health.py
+  - packages/backend/tests/asr/test_remote_runtime_client.py
+  - packages/asr-runtime/tests/test_schemas.py
+  - packages/asr-runtime/tests/test_qwen3_runner.py
 -->
 
 ---

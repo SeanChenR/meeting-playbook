@@ -1,10 +1,11 @@
-"""ASR factory tests — slice-11 task 2.1.
+"""ASR factory tests — post asr-runtime-extraction (ADR-0027).
 
-Per spec asr-provider-selection ADDED requirement scenarios:
-  * Returns Qwen3 instances when meeting.asr_provider is "qwen3"
-  * Returns Whisper instances when meeting.asr_provider is "whisper"
+Per spec asr-provider-selection MODIFIED requirements:
+  * Returns RemoteAsrRuntimeClient instances when meeting.asr_provider is "qwen3"
   * Same (provider_name, stream) returns the same instance (lru_cache)
-  * Unknown provider name falls back to Whisper with a warning log
+  * Legacy provider names (whisper, vibevoice, ...) coerce to "qwen3"
+    with a structured warning log
+  * `ASR_RUNTIME_URL` unset raises AsrRuntimeUnavailableError
 """
 
 from __future__ import annotations
@@ -16,61 +17,75 @@ import pytest
 from meeting_playbook.asr import factory
 from meeting_playbook.asr.base import ASRProvider
 from meeting_playbook.asr.factory import _TraditionalChineseProvider
-from meeting_playbook.asr.qwen3_provider import Qwen3ASRProvider
-from meeting_playbook.asr.whisper_provider import WhisperProvider
+from meeting_playbook.asr.remote_runtime_client import (
+    AsrRuntimeUnavailableError,
+    RemoteAsrRuntimeClient,
+)
 
 
 @pytest.fixture(autouse=True)
-def _clear_provider_cache():
-    """Reset the singleton cache between tests so per-test assertions on
-    instance identity are deterministic."""
+def _clear_provider_cache(monkeypatch: pytest.MonkeyPatch):
+    """Reset the singleton cache between tests + ensure the factory has a
+    runtime URL to talk to (tests don't actually hit the network)."""
+    monkeypatch.setenv("ASR_RUNTIME_URL", "http://127.0.0.1:8100")
     factory.clear_provider_cache()
     yield
     factory.clear_provider_cache()
 
 
-def test_qwen3_returns_two_independent_qwen3_instances() -> None:
+def test_qwen3_returns_two_independent_remote_clients() -> None:
+    """Canonical provider name → wrapper around RemoteAsrRuntimeClient."""
     me, cp = factory.get_asr_providers_for_meeting("qwen3")
-    # Slice-11 fix: every provider is wrapped in _TraditionalChineseProvider
-    # so the persisted text is Traditional Chinese (Taiwan). The wrapper
-    # forwards the Protocol so callers see ASRProvider semantics.
     assert isinstance(me, _TraditionalChineseProvider)
     assert isinstance(cp, _TraditionalChineseProvider)
-    assert isinstance(me._inner, Qwen3ASRProvider)
-    assert isinstance(cp._inner, Qwen3ASRProvider)
+    assert isinstance(me._inner, RemoteAsrRuntimeClient)
+    assert isinstance(cp._inner, RemoteAsrRuntimeClient)
     assert me is not cp, "per-stream providers MUST be independent instances"
     # Wrapper itself satisfies the Protocol.
     assert isinstance(me, ASRProvider)
     assert isinstance(cp, ASRProvider)
 
 
-def test_whisper_returns_two_independent_whisper_instances() -> None:
-    me, cp = factory.get_asr_providers_for_meeting("whisper")
-    assert isinstance(me, _TraditionalChineseProvider)
-    assert isinstance(cp, _TraditionalChineseProvider)
-    assert isinstance(me._inner, WhisperProvider)
-    assert isinstance(cp._inner, WhisperProvider)
-    assert me is not cp
+def test_factory_caches_per_stream_pair() -> None:
+    """Same `(provider_name, stream)` → same instance on the second call."""
+    me_a, cp_a = factory.get_asr_providers_for_meeting("qwen3")
+    me_b, cp_b = factory.get_asr_providers_for_meeting("qwen3")
+    assert me_a is me_b
+    assert cp_a is cp_b
 
 
-def test_repeated_call_returns_same_instances_per_stream() -> None:
-    me1, cp1 = factory.get_asr_providers_for_meeting("qwen3")
-    me2, cp2 = factory.get_asr_providers_for_meeting("qwen3")
-    # Same provider+stream key reuses the cached instance — no double model
-    # load on a second meeting that wants the same engine.
-    assert me1 is me2
-    assert cp1 is cp2
-
-
-def test_unknown_provider_falls_back_to_whisper_with_warning(caplog) -> None:
+def test_legacy_whisper_coerces_to_qwen3(caplog: pytest.LogCaptureFixture) -> None:
+    """Legacy `whisper` value is silently routed to the qwen3 remote client
+    + a structured warning is emitted so operators see the stale row."""
     with caplog.at_level(logging.WARNING, logger="meeting_playbook.asr.factory"):
-        me, cp = factory.get_asr_providers_for_meeting("experimental_xyz")
+        me, cp = factory.get_asr_providers_for_meeting("whisper")
+    assert isinstance(me._inner, RemoteAsrRuntimeClient)
+    assert isinstance(cp._inner, RemoteAsrRuntimeClient)
+    # Structured warning record carries from_value / to_value.
+    coerced_records = [r for r in caplog.records if r.message == "asr_provider_coerced"]
+    assert coerced_records, "expected a coercion warning"
+    assert getattr(coerced_records[0], "from_value") == "whisper"
+    assert getattr(coerced_records[0], "to_value") == "qwen3"
 
-    assert isinstance(me, _TraditionalChineseProvider)
-    assert isinstance(me._inner, WhisperProvider)
-    assert isinstance(cp._inner, WhisperProvider)
-    assert me is not cp
-    assert any(
-        "unknown asr_provider" in record.message and "experimental_xyz" in record.message
-        for record in caplog.records
-    ), f"expected fallback warning; got: {[r.message for r in caplog.records]}"
+
+def test_unknown_provider_name_coerces_to_qwen3(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Any non-canonical name → coerced to qwen3 with the same warning."""
+    with caplog.at_level(logging.WARNING, logger="meeting_playbook.asr.factory"):
+        me, _ = factory.get_asr_providers_for_meeting("vibevoice")
+    assert isinstance(me._inner, RemoteAsrRuntimeClient)
+    coerced_records = [r for r in caplog.records if r.message == "asr_provider_coerced"]
+    assert coerced_records
+    assert getattr(coerced_records[0], "from_value") == "vibevoice"
+
+
+def test_runtime_url_unset_raises_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Factory must surface a clear error if the runtime is not configured —
+    backend has no in-process fallback after ADR-0027."""
+    monkeypatch.delenv("ASR_RUNTIME_URL", raising=False)
+    factory.clear_provider_cache()
+    with pytest.raises(AsrRuntimeUnavailableError):
+        factory.get_asr_providers_for_meeting("qwen3")

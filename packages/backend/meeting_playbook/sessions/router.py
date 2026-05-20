@@ -27,6 +27,7 @@ from meeting_playbook.advisor.base import TacticalAdvisor
 from meeting_playbook.advisor.dependencies import get_tactical_advisor_dependency
 from meeting_playbook.asr.base import ASRProvider
 from meeting_playbook.asr.factory import get_asr_providers_for_meeting
+from meeting_playbook.asr.remote_runtime_client import AsrRuntimeUnavailableError
 from meeting_playbook.audio.devices import MicDeviceNotFound, NoBlackholeDevice
 from meeting_playbook.chat.repository import ChatMessageRepository
 from meeting_playbook.meetings.dependencies import (
@@ -244,6 +245,21 @@ async def meeting_session_endpoint(
     # (the dict was already trimmed above), saving ~10–25s + RAM/GPU. ───
     try:
         await asyncio.gather(*(p.warmup() for p in providers.values()))
+    except AsrRuntimeUnavailableError as exc:
+        # Standalone asr-runtime is down (or env var missing). Surface the
+        # structured error code so the frontend can show a clear toast and
+        # let the user retry once they start the runtime.
+        logger.warning("asr.runtime_unavailable during warmup: %s", exc.message)
+        await _send_error("asr.runtime_unavailable", exc.message)
+        with contextlib.suppress(MeetingStatusConflict):
+            await meeting_repo.transition_status(
+                meeting_id=meeting_id,
+                expected_from="in_progress",
+                target="completed",
+            )
+            await session.commit()
+        await websocket.close()
+        return
     except Exception as exc:
         logger.exception("ASR warmup failed: %s", exc)
         await _send_error("session.stream_failed_at_start", f"ASR warmup failed: {exc}")

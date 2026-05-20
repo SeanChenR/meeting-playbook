@@ -46,6 +46,21 @@ _TEST_DATABASE_URL = os.environ.get(
 )
 
 
+@pytest.fixture(autouse=True)
+def _set_asr_runtime_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default the ASR runtime URL so tests that touch the factory (rerun,
+    sessions, offline ingest) don't trip over a missing env var. Individual
+    tests can `monkeypatch.delenv("ASR_RUNTIME_URL")` to assert the
+    error-path behaviour."""
+    monkeypatch.setenv("ASR_RUNTIME_URL", "http://127.0.0.1:8100")
+    # Drop the per-process singleton cache between tests so each test sees a
+    # fresh provider — otherwise the AsrRuntimeUnavailableError test could
+    # be poisoned by a previous test's cached client.
+    from meeting_playbook.asr.factory import clear_provider_cache
+
+    clear_provider_cache()
+
+
 def _async_url(url: str) -> str:
     if url.startswith("postgresql://"):
         return url.replace("postgresql://", "postgresql+asyncpg://", 1)

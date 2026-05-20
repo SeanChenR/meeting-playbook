@@ -77,49 +77,18 @@ describe("AsrProviderSelector", () => {
     expect(screen.getByText(/切換下一場會議生效/)).toBeDefined();
   });
 
-  test("changing selection fires PATCH /api/meetings/{id}", async () => {
-    const calls: Array<{ url: string; method?: string; body?: unknown }> = [];
-    fetchHandler = async (url, init) => {
-      calls.push({
-        url: String(url),
-        method: init?.method,
-        body: init?.body ? JSON.parse(init.body as string) : undefined,
-      });
-      return new Response(
-        JSON.stringify({
-          id: "m_x",
-          user_id: "u",
-          title: "t",
-          counterparty_display_name: "C",
-          me_display_name: "M",
-          status: "scheduled",
-          asr_provider: "whisper",
-          calendar_event_id: null,
-          created_at: "2026-05-11T00:00:00Z",
-          started_at: null,
-          ended_at: null,
-          scheduled_start_at: "2026-06-15T14:00:00Z",
-          scheduled_end_at: null,
-          recordings_available: false,
-          rerun_asr_pending: false,
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    };
-
+  test("post asr-runtime-extraction: selector only exposes the qwen3 option", async () => {
+    // After ADR-0030 the dropdown is a single-option control. There is no
+    // alternative engine to switch to, so changing selection cannot fire
+    // a PATCH — instead we verify the only rendered option is qwen3.
     render(
       <Wrapper>
         <AsrProviderSelector meeting={{ id: "m_x", asr_provider: "qwen3" }} />
       </Wrapper>,
     );
     const select = screen.getByTestId("asr-provider-selector") as HTMLSelectElement;
-    await userEvent.selectOptions(select, "whisper");
-
-    await waitFor(() => {
-      expect(calls.length).toBeGreaterThan(0);
-    });
-    const patch = calls.find((c) => c.method === "PATCH");
-    expect(patch?.url).toContain("/api/meetings/m_x");
-    expect(patch?.body).toEqual({ asr_provider: "whisper" });
+    const options = Array.from(select.options).map((opt) => opt.value);
+    expect(options).toEqual(["qwen3"]);
+    expect(options).not.toContain("whisper");
   });
 });

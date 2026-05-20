@@ -18,7 +18,7 @@
 import type { MeetingDetail } from "./meetings-api";
 import { resolveMeetingBucket } from "./meetings-bucket";
 
-export type RecordingStatus = "available" | "pending" | "expired" | "hidden";
+export type RecordingStatus = "available" | "pending" | "expired" | "scheduled" | "hidden";
 
 export interface RecordingStatusVisual {
   status: RecordingStatus;
@@ -33,6 +33,10 @@ export function resolveRecordingStatus(meeting: MeetingDetail): RecordingStatus 
   const bucket = resolveMeetingBucket(meeting);
   if (bucket === "needs_recording") return "pending";
   if (bucket === "completed") return "expired";
+  // Upcoming meetings used to render no indicator (the header right side
+  // ended up empty). Show a scheduled-state pill so the row stays anchored
+  // and the user gets a "this meeting hasn't been recorded yet" cue.
+  if (bucket === "upcoming") return "scheduled";
   return "hidden";
 }
 
@@ -55,6 +59,12 @@ export function recordingStatusVisual(status: RecordingStatus): RecordingStatusV
         status,
         colorVar: "--color-accent",
         i18nKey: "meetings.detail.recordingExpired",
+      };
+    case "scheduled":
+      return {
+        status,
+        colorVar: "--color-info",
+        i18nKey: "meetings.detail.recordingScheduled",
       };
     case "hidden":
       return { status, colorVar: "", i18nKey: "" };

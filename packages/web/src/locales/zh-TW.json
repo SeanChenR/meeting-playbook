@@ -308,10 +308,21 @@
         "rerun": "重跑轉錄",
         "delete": "刪除會議"
       },
+      "editAction": "編輯",
+      "tagsAdd": "新增標籤",
+      "recordingMode": {
+        "label": "錄音模式",
+        "dual": "雙路 ASR",
+        "single": "單聲道"
+      },
+      "asrEngine": {
+        "label": "ASR 引擎"
+      },
       "summaryChatSlotTitle": "摘要對話",
       "summaryChatSlotPlaceholder": "即將推出",
       "backToList": "會議列表",
       "recordingPending": "待上傳",
+      "recordingScheduled": "尚未錄音",
       "uploadSuccessTitle": "音檔處理完成",
       "uploadSuccessSubtitle": "逐字稿已自動生成",
       "exportSuccessTitle": "匯出完成",
@@ -465,6 +476,8 @@
       "heading": "摘要",
       "aiHeading": "AI 摘要",
       "disabledHint": "會議結束後可看摘要",
+      "lockedTitle": "會議完成後啟用",
+      "lockedSubtitle": "錄音 + 轉錄完成後，AI 摘要會出現在這裡。",
       "generating": "生成中…",
       "generatingHint": "（約 30-60 秒）",
       "generatedAt": "生成於 {{at}}",

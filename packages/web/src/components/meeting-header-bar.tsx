@@ -1,16 +1,20 @@
 /**
- * MeetingHeaderBar — replaces MetadataCard on meeting detail page.
+ * MeetingHeaderBar — single-row title strip.
  *
- * Compact two-row horizontal block (NOT a card). Row 1: title + status pill
- * + scheduled-time window + 對方 (single Avatar or AvatarGroup) + 我方 (Avatar)
- * + recording-status indicator (4 states via resolveRecordingStatus) + optional
- * capture indicator. Row 2: status-driven primary actions + overflow menu
- * trigger slot.
+ * v4 layout (claude-design follow-up round 4): everything informational about
+ * the meeting collapses onto one wrapping row:
  *
- * All visual affordances use Lucide icons (no emoji glyphs).
+ *   [title] [status pill] [time] [recording-dot]
+ *   [對方 avatar(s) name] [我方 avatar name]
+ *   [tag chips...] [+ add tag]
+ *   [capture indicator — only when in_progress / ending]
+ *
+ * The action buttons + counts + mode/asr cards live in <MeetingDetailActionBar>
+ * below this strip; the ⋯ overflow menu has been retired (per Sean: every
+ * affordance is now visible in either the action bar or the header strip).
  */
 
-import { Download, Play, Square, Upload } from "lucide-react";
+import { Plus, Tags } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { MeetingDetail } from "../lib/meetings-api";
@@ -19,39 +23,29 @@ import {
   type MeetingDateBucket as MeetingBucket,
 } from "../lib/meetings-bucket";
 import { recordingStatusVisual, resolveRecordingStatus } from "../lib/meetings-recording-status";
+import { TAG_PALETTE } from "../lib/tag-palette";
 import { AvatarGroup, parseCounterpartyNames } from "./animate-ui/avatar-group";
+import { ShineBorder } from "./magicui/shine-border";
+import { TagChip } from "./tags/tag-chip";
 import { Avatar } from "./ui/avatar";
-import { Button } from "./ui/button";
 
 export type MeetingPhase = "idle" | "connecting" | "in_progress" | "ending" | "ended" | "error";
 
 export interface MeetingHeaderBarProps {
   meeting: MeetingDetail;
   phase: MeetingPhase;
-  onStart: () => void;
-  onEnd: () => void;
-  startDisabled?: boolean;
   /** Capture indicator (live stream status). Hidden outside in_progress/ending. */
   captureIndicator?: ReactNode;
-  /** ⋯ overflow menu trigger element (built by detail.tsx). */
-  menuTrigger?: ReactNode;
-  /** Upload-audio button slot (only rendered when bucket === "needs_recording"). */
-  uploadSlot?: ReactNode;
-  /** Export button slot (always rendered). */
-  exportSlot?: ReactNode;
+  /** Optional callback when the user clicks the tag "+" affordance. */
+  onTagsOpen?: () => void;
 }
 
 function _bucketDotColor(bucket: MeetingBucket): string {
   if (bucket === "needs_recording") return "var(--color-warning)";
   if (bucket === "upcoming") return "var(--color-info)";
-  return "var(--color-muted-foreground)"; // completed — soft past-tense feel
+  return "var(--color-muted-foreground)";
 }
 
-/**
- * Status pill — surface-2 background with a small coloured dot. Matches the
- * Claude Design `.status-pill` spec: subtle bg, 11.5px text, dot indicates
- * bucket. NOT a coloured badge.
- */
 function _StatusPill({ bucket, label }: { bucket: MeetingBucket; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-(--color-surface-2) py-[3px] pl-[7px] pr-[9px] text-[11.5px] font-medium tracking-wide text-(--color-foreground)">
@@ -87,74 +81,22 @@ function _fmtScheduledWindow(
   return `${start} – ${end}`;
 }
 
-function _primaryActions(props: {
-  bucket: MeetingBucket;
-  phase: MeetingPhase;
-  startDisabled: boolean;
-  onStart: () => void;
-  onEnd: () => void;
-  uploadSlot?: ReactNode;
-  exportSlot?: ReactNode;
-  t: (k: string) => string;
-}): ReactNode {
-  const { bucket, phase, startDisabled, onStart, onEnd, uploadSlot, exportSlot, t } = props;
-
-  if (phase === "in_progress" || phase === "ending") {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="destructive"
-        onClick={onEnd}
-        data-testid="header-end-meeting"
-      >
-        <Square className="size-3.5" strokeWidth={1.5} />
-        {t("meetings.session.end")}
-      </Button>
-    );
-  }
-
-  if (bucket === "upcoming" && phase === "idle") {
-    return (
-      <>
-        <Button
-          type="button"
-          size="sm"
-          onClick={onStart}
-          disabled={startDisabled}
-          data-testid="header-start-meeting"
-        >
-          <Play className="size-3.5" strokeWidth={1.5} />
-          {t("meetings.session.start")}
-        </Button>
-        {exportSlot}
-      </>
-    );
-  }
-
-  if (bucket === "needs_recording") {
-    return (
-      <>
-        {uploadSlot}
-        {exportSlot}
-      </>
-    );
-  }
-
-  // bucket === "completed" or fallback
-  return <>{exportSlot}</>;
+interface TagLike {
+  id: string;
+  name: string;
+  color?: string | null;
 }
+
+// Fallback for tags missing a `color` field — picks the first entry of the
+// canonical TAG_PALETTE so the chip stays inside the design-token allowlist
+// (raw-hex scan rejects per-file literals).
+const _FALLBACK_TAG_COLOR: string = TAG_PALETTE[0] as string;
 
 export function MeetingHeaderBar({
   meeting,
   phase,
-  onStart,
-  onEnd,
-  startDisabled = false,
   captureIndicator,
-  menuTrigger,
-  uploadSlot,
-  exportSlot,
+  onTagsOpen,
 }: MeetingHeaderBarProps) {
   const { t, i18n } = useTranslation();
   const bucket = resolveMeetingBucket(meeting);
@@ -166,14 +108,15 @@ export function MeetingHeaderBar({
     meeting.scheduled_end_at,
     i18n.language,
   );
+  const tags: TagLike[] = (meeting.tags ?? []) as TagLike[];
 
   return (
     <div
       data-testid="meeting-header-bar"
-      className="flex flex-col gap-3 border-b border-(--color-border) pb-3.5"
+      className="relative overflow-hidden rounded-2xl bg-(--color-surface) shadow-(--shadow-sm) ring-1 ring-(--color-border)/60"
     >
-      {/* Row 1 — title + meta with vertical separators between groups */}
-      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
+      <ShineBorder duration={16} />
+      <div className="relative z-[1] flex flex-wrap items-center gap-x-4 gap-y-2.5 px-5 py-4">
         <h1
           data-testid="meeting-title"
           className="text-[22px] font-semibold leading-tight tracking-tight text-(--color-foreground)"
@@ -183,17 +126,18 @@ export function MeetingHeaderBar({
 
         <_StatusPill bucket={bucket} label={t(`meetings.detail.bucketLabel.${bucket}`)} />
 
-        <span aria-hidden className="h-3.5 w-px bg-(--color-border)" />
-
         {scheduledWindow && (
-          <span className="text-[13px] tabular-nums text-(--color-muted-foreground)">
-            {scheduledWindow}
-          </span>
+          <>
+            <span aria-hidden className="h-3.5 w-px bg-(--color-border)" />
+            <span className="text-[13px] tabular-nums text-(--color-muted-foreground)">
+              {scheduledWindow}
+            </span>
+          </>
         )}
 
         <span aria-hidden className="h-3.5 w-px bg-(--color-border)" />
 
-        {/* 對方 — single avatar or avatar-group */}
+        {/* 對方 */}
         <div className="flex items-center gap-1.5" data-testid="header-counterparty">
           <span className="text-[11px] uppercase tracking-wider text-(--color-muted-foreground)">
             {t("meetings.detail.counterpartyLabel")}
@@ -205,12 +149,12 @@ export function MeetingHeaderBar({
                 fallback={meeting.counterparty_display_name[0] ?? "?"}
                 className="size-[22px] text-[10px]"
               />
-              <span className="text-sm font-medium">{meeting.counterparty_display_name}</span>
+              <span className="text-[13px] font-medium">{meeting.counterparty_display_name}</span>
             </>
           ) : (
             <>
               <AvatarGroup names={counterpartyNames} max={3} />
-              <span className="text-sm font-medium">
+              <span className="text-[13px] font-medium">
                 {t("meetings.detail.counterpartyGroupLabel", {
                   name: counterpartyNames[0],
                   count: counterpartyNames.length,
@@ -233,55 +177,64 @@ export function MeetingHeaderBar({
           <span className="text-[13px] font-medium">{meeting.me_display_name}</span>
         </div>
 
-        {/* Recording status (hidden when bucket === "upcoming") */}
-        {recordingStatus !== "hidden" && (
+        {/* Tags block — Sean asked for a divider + Tags icon to mark this as
+          its own conceptual section. */}
+        {(tags.length > 0 || onTagsOpen) && (
           <>
             <span aria-hidden className="h-3.5 w-px bg-(--color-border)" />
-            <div
-              className="flex items-center gap-1.5 text-[12px] text-(--color-muted-foreground)"
-              data-testid="header-recording-status"
-            >
-              <span
+            <div className="flex flex-wrap items-center gap-1.5" data-testid="header-tags-inline">
+              <Tags
+                className="size-3.5 text-(--color-muted-foreground)"
+                strokeWidth={1.5}
                 aria-hidden
-                data-testid="header-recording-dot"
-                className="size-[7px] rounded-full ring-4 ring-(--color-success)/15"
-                style={{
-                  background: `var(${recordingVisual.colorVar})`,
-                  // Mirror the ring tint colour to match the dot so non-success states don't get a green ring.
-                  ["--tw-ring-color" as never]: `var(${recordingVisual.colorVar})`,
-                }}
               />
-              <span>{t(recordingVisual.i18nKey)}</span>
+              {tags.map((tag) => (
+                <TagChip key={tag.id} name={tag.name} color={tag.color ?? _FALLBACK_TAG_COLOR} />
+              ))}
+              {onTagsOpen && (
+                <button
+                  type="button"
+                  onClick={onTagsOpen}
+                  data-testid="header-tags-add"
+                  aria-label={t("meetings.detail.tagsAdd")}
+                  className="inline-flex size-5 items-center justify-center rounded-full border border-dashed border-(--color-border) text-(--color-muted-foreground) transition-colors hover:border-(--color-primary) hover:text-(--color-primary)"
+                >
+                  <Plus className="size-3" strokeWidth={1.8} aria-hidden />
+                </button>
+              )}
             </div>
           </>
         )}
 
-        {captureIndicator && (phase === "in_progress" || phase === "ending") && (
-          <div data-testid="header-capture-indicator">{captureIndicator}</div>
-        )}
-      </div>
-
-      {/* Row 2 — actions + ⋯ menu */}
-      <div className="flex items-center justify-end gap-2">
-        {_primaryActions({
-          bucket,
-          phase,
-          startDisabled,
-          onStart,
-          onEnd,
-          uploadSlot,
-          exportSlot,
-          t,
-        })}
-        {menuTrigger}
+        {/* Right-edge cluster — capture indicator (only when live) + the
+            recording-status pill. ml-auto pushes whichever is shown out
+            to the right so the header doesn't end with empty whitespace. */}
+        {(captureIndicator && (phase === "in_progress" || phase === "ending")) ||
+        recordingStatus !== "hidden" ? (
+          <div className="ml-auto flex items-center gap-3">
+            {captureIndicator && (phase === "in_progress" || phase === "ending") && (
+              <div data-testid="header-capture-indicator">{captureIndicator}</div>
+            )}
+            {recordingStatus !== "hidden" && (
+              <span
+                data-testid="header-recording-status"
+                className="inline-flex items-center gap-1.5 rounded-full bg-(--color-surface-2) py-[3px] pl-[7px] pr-[10px] text-[11.5px] font-medium tracking-wide text-(--color-foreground)"
+              >
+                <span
+                  aria-hidden
+                  data-testid="header-recording-dot"
+                  className="size-[7px] rounded-full"
+                  style={{
+                    background: `var(${recordingVisual.colorVar})`,
+                    boxShadow: `0 0 0 3px color-mix(in oklch, var(${recordingVisual.colorVar}) 25%, transparent)`,
+                  }}
+                />
+                {t(recordingVisual.i18nKey)}
+              </span>
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
-
-/**
- * Helper Lucide icons exported for use by detail.tsx when building the upload
- * / export slots passed into <MeetingHeaderBar>. Centralised here to keep the
- * icon vocabulary consistent.
- */
-export const HeaderIcons = { Play, Square, Upload, Download };

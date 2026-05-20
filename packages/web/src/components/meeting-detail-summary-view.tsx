@@ -9,7 +9,7 @@
  * The right column issues no network requests; it is a layout slot only.
  */
 
-import { MessageSquare } from "lucide-react";
+import { Hourglass, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SummaryPane } from "./summary-pane";
 
@@ -26,6 +26,31 @@ const _EXAMPLE_CHIPS = [
 
 export function MeetingDetailSummaryView({ meetingId, meeting }: MeetingDetailSummaryViewProps) {
   const { t } = useTranslation();
+
+  // Pre-completion placeholder — Sean's UX feedback: the tab itself is
+  // clickable in every phase, but until the meeting completes there is no
+  // summary to render, so we surface the locked-state hint inside the
+  // panel instead of greying the tab out.
+  if (meeting.status !== "completed") {
+    return (
+      <div
+        data-testid="meeting-summary-locked"
+        className="flex w-full items-center justify-center rounded-(--radius-md) border border-(--color-border) bg-(--color-surface)/60 px-6 py-16"
+      >
+        <div className="flex max-w-md flex-col items-center gap-3 text-center">
+          <div className="inline-flex size-12 items-center justify-center rounded-full bg-(--color-primary)/10 text-(--color-primary)">
+            <Hourglass className="size-5" strokeWidth={1.5} aria-hidden />
+          </div>
+          <p className="text-base font-medium text-(--color-foreground)">
+            {t("meetings.summary.lockedTitle")}
+          </p>
+          <p className="text-sm text-(--color-muted-foreground)">
+            {t("meetings.summary.lockedSubtitle")}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

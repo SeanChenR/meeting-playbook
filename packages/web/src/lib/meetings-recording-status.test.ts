@@ -59,14 +59,14 @@ describe("resolveRecordingStatus", () => {
     expect(resolveRecordingStatus(m)).toBe("expired");
   });
 
-  test("(d) bucket=upcoming → hidden", () => {
+  test("(d) bucket=upcoming → scheduled (claude-design follow-up: header pill always renders)", () => {
     const m = _makeMeeting({
       status: "scheduled",
       scheduled_start_at: FAR_FUTURE,
       scheduled_end_at: FAR_FUTURE,
       recordings_available: false,
     });
-    expect(resolveRecordingStatus(m)).toBe("hidden");
+    expect(resolveRecordingStatus(m)).toBe("scheduled");
   });
 });
 

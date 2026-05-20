@@ -30,28 +30,23 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AdvisorPane } from "../../components/advisor-pane";
-import { AsrEngineHint } from "../../components/asr-engine-hint";
+import { ShineBorder } from "../../components/magicui/shine-border";
+import { MeetingDetailActionBar } from "../../components/meeting-detail-action-bar";
 import { AsrLoadingDialog } from "../../components/asr-loading-dialog";
 import { AsrProviderSelector } from "../../components/asr-provider-selector";
 import { AttachmentDropzone } from "../../components/attachment-dropzone";
 import { CaptureIndicator } from "../../components/capture-indicator";
-import { HeadphonesHint } from "../../components/headphones-hint";
 import { MeetingAudioMiniPlayer } from "../../components/meeting-audio-mini-player";
 import { miniPlayerStore } from "../../hooks/use-mini-player";
 import { MeetingDetailSummaryView } from "../../components/meeting-detail-summary-view";
 import { MeetingEditForm } from "../../components/meeting-edit-form";
-import { ExportMeetingButton } from "../../components/export-meeting-button";
 import { MeetingHeaderBar } from "../../components/meeting-header-bar";
 import { MeetingLinksSection } from "../../components/meeting-links-section";
-import { MeetingMetaStrip } from "../../components/meeting-meta-strip";
-import { MeetingOverflowMenu } from "../../components/meeting-overflow-menu";
 import { MeetingPrevNextNav } from "../../components/meeting-prev-next-nav";
 import { RecordingModeSelector } from "../../components/recording-mode-selector";
 import { UploadDialog } from "../../components/offline-ingest/UploadDialog";
-import { Button } from "../../components/ui/button";
 import { PlaybookPane } from "../../components/playbook-pane";
 import { ProtectedShell } from "../../components/protected-shell";
-import { RerunButton } from "../../components/rerun-button";
 import { SuccessResultOverlay } from "../../components/success-result-overlay";
 import { TagChip } from "../../components/tags/tag-chip";
 import { TagPicker } from "../../components/tags/tag-picker";
@@ -67,7 +62,6 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
-import { Upload } from "lucide-react";
 import { useDetailTab } from "../../hooks/use-detail-tab";
 import { useMeetingSession } from "../../hooks/use-meeting-session";
 import { chatMessagesQueryOptions } from "../../lib/chat-api";
@@ -77,16 +71,12 @@ import {
   meetingQueryOptions,
   MeetingApiError,
   useDeleteMeetingMutation,
+  usePatchMeetingMutation,
 } from "../../lib/meetings-api";
 import { resolveMeetingBucket } from "../../lib/meetings-bucket";
+import { listAttachments } from "../../lib/attachments-api";
+import { meetingLinksQueryOptions } from "../../lib/meeting-links-api";
 import { rowToMessage, transcriptChunksQueryOptions } from "../../lib/transcripts-api";
-
-function _modeLabel(mode: string | undefined, t: (k: string) => string): string | undefined {
-  if (!mode) return undefined;
-  if (mode === "dual") return t("meetings.session.recordingMode.dual");
-  if (mode === "single") return t("meetings.session.recordingMode.single");
-  return undefined;
-}
 
 export function MeetingDetail() {
   const { t } = useTranslation();
@@ -186,6 +176,23 @@ export function MeetingDetail() {
   const sessionError =
     session.state.phase === "error" ? localizedErrorMessage(session.state.errorCode, t) : null;
   const bucket = meeting ? resolveMeetingBucket(meeting) : null;
+  // Inline ASR provider switch wired by the action-bar dropdown — bypasses
+  // the prior dialog flow per Sean's "直接下拉中顯示選項就好" feedback.
+  const patchAsrMutation = usePatchMeetingMutation(meetingId);
+  // Per Sean: meta-strip count chips were stuck at 0 because the prior code
+  // looked them up on the meeting payload (which doesn't carry them). The
+  // real data lives in dedicated queries — pull the counts inline here.
+  const attachmentsQuery = useQuery({
+    queryKey: ["meeting-attachments", meetingId],
+    queryFn: () => listAttachments(meetingId),
+    enabled: !!meetingId,
+  });
+  const linksQuery = useQuery({
+    ...meetingLinksQueryOptions(meetingId),
+    enabled: !!meetingId,
+  });
+  const attachmentsCount = attachmentsQuery.data?.length ?? 0;
+  const linksCount = linksQuery.data?.length ?? 0;
   const startDisabled =
     !meeting ||
     bucket !== "upcoming" ||
@@ -263,31 +270,10 @@ export function MeetingDetail() {
   // clicking the summary tab in the bar didn't update the content panel.
   const [detailTab, setDetailTab] = useDetailTab(meetingId, meeting);
 
-  // Headphones-hint visibility (dual + idle + scheduled).
-  const showHeadphonesHint =
-    !!meeting &&
-    meeting.status === "scheduled" &&
-    session.state.phase === "idle" &&
-    session.state.mode === "dual";
-
-  // Mode menu item visibility (only on scheduled+idle).
+  // Mode card editability gate (matches the prior ⋯-menu visibility — the
+  // action bar only lets users open the mode dialog when it's actionable).
   const showModeMenuItem =
     !!meeting && meeting.status === "scheduled" && session.state.phase === "idle";
-
-  const modeCurrentLabel = showModeMenuItem ? _modeLabel(session.state.mode, t) : undefined;
-
-  // ASR provider current display label (e.g. "Whisper Large v3").
-  function _asrLabel(provider: string | null | undefined): string | undefined {
-    if (!provider) return undefined;
-    const map: Record<string, string> = {
-      whisper: "Whisper",
-      "whisper-large-v3": "Whisper Large v3",
-      qwen3: "Qwen3-ASR",
-      "qwen3-asr": "Qwen3-ASR",
-    };
-    return map[provider] ?? provider;
-  }
-  const asrCurrentLabel = meeting ? _asrLabel(meeting.asr_provider) : undefined;
 
   return (
     <ProtectedShell fullBleed>
@@ -298,7 +284,7 @@ export function MeetingDetail() {
         className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-6 pt-5"
       >
         {/* Top stack — measured for --detail-column-h injection */}
-        <div ref={topStackRef} className="flex flex-col gap-3">
+        <div ref={topStackRef} className="flex flex-col gap-4">
           <MeetingPrevNextNav currentId={meetingId} />
 
           {error && <Alert variant="destructive">{error}</Alert>}
@@ -311,9 +297,6 @@ export function MeetingDetail() {
             <MeetingHeaderBar
               meeting={meeting}
               phase={session.state.phase as never}
-              onStart={session.start}
-              onEnd={session.end}
-              startDisabled={startDisabled}
               captureIndicator={
                 <CaptureIndicator
                   streamStatus={indicatorStreamStatus}
@@ -323,118 +306,79 @@ export function MeetingDetail() {
                   chunks={liveChunks}
                 />
               }
-              uploadSlot={
-                bucket === "needs_recording" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setOfflineIngestOpen(true)}
-                    data-testid="header-upload-audio"
-                  >
-                    <Upload className="size-3.5" strokeWidth={1.5} />
-                    {t("meetings.session.uploadAudio")}
-                  </Button>
-                ) : undefined
-              }
-              exportSlot={
-                <ExportMeetingButton
-                  meetingId={meeting.id}
-                  meetingTitle={meeting.title}
-                  scheduledStartAt={meeting.scheduled_start_at}
-                  onExportSuccess={() => setExportSuccessOpen(true)}
-                />
-              }
-              menuTrigger={
-                <MeetingOverflowMenu
-                  attachmentsCount={
-                    (meeting as { attachments?: unknown[] }).attachments?.length ?? 0
-                  }
-                  linksCount={
-                    (meeting as { linked_meetings?: unknown[] }).linked_meetings?.length ?? 0
-                  }
-                  asrCurrentLabel={asrCurrentLabel}
-                  modeCurrentLabel={modeCurrentLabel}
-                  showModeItem={showModeMenuItem}
-                  onEdit={() => setEditFormOpen(true)}
-                  onTagsOpen={() => setTagsDialogOpen(true)}
-                  onAttachmentsOpen={() => setAttachmentsDialogOpen(true)}
-                  onLinkedOpen={() => setLinkedDialogOpen(true)}
-                  onAsrOpen={() => setAsrDialogOpen(true)}
-                  onModeOpen={() => setModeDialogOpen(true)}
-                  onRerun={() => {
-                    // RerunButton owns its own confirm + mutation; we render
-                    // it invisibly so onRerun can defer to its onClick — but
-                    // simpler: trigger the mutation directly via its public
-                    // API. For now, keep a visible Rerun trigger by reusing
-                    // the existing component.
-                    document
-                      .querySelector<HTMLButtonElement>('[data-testid="rerun-button-trigger"]')
-                      ?.click();
-                  }}
-                  onDelete={() => setConfirmOpen(true)}
-                />
-              }
+              onTagsOpen={() => setTagsDialogOpen(true)}
             />
           )}
 
-          {meeting && (
-            <MeetingMetaStrip
-              tags={meeting.tags ?? []}
-              attachmentsCount={(meeting as { attachments?: unknown[] }).attachments?.length ?? 0}
-              linksCount={(meeting as { linked_meetings?: unknown[] }).linked_meetings?.length ?? 0}
-              onTagsOpen={() => setTagsDialogOpen(true)}
+          {meeting && bucket && (
+            <MeetingDetailActionBar
+              bucket={bucket}
+              phase={session.state.phase as never}
+              startDisabled={startDisabled}
+              onStart={session.start}
+              onEnd={session.end}
+              onEdit={() => setEditFormOpen(true)}
+              onUpload={() => setOfflineIngestOpen(true)}
+              onDelete={() => setConfirmOpen(true)}
+              meeting={meeting}
+              meetingTitle={meeting.title}
+              scheduledStartAt={meeting.scheduled_start_at}
+              onExportSuccess={() => setExportSuccessOpen(true)}
+              attachmentsCount={attachmentsCount}
+              linksCount={linksCount}
               onAttachmentsOpen={() => setAttachmentsDialogOpen(true)}
               onLinkedOpen={() => setLinkedDialogOpen(true)}
+              recordingMode={session.state.mode ?? "dual"}
+              asrProvider={meeting.asr_provider}
+              onRecordingModeChange={showModeMenuItem ? session.setMode : undefined}
+              onAsrProviderChange={(provider) =>
+                patchAsrMutation.mutate({ asr_provider: provider })
+              }
             />
           )}
 
-          {showHeadphonesHint && <HeadphonesHint visible />}
-          {meeting && session.state.phase === "idle" && meeting.status === "scheduled" && (
-            <AsrEngineHint provider={meeting.asr_provider} />
-          )}
           {sessionError && <Alert variant="destructive">{sessionError}</Alert>}
-
-          {meeting && (
-            <div className="flex justify-center">
-              <DetailTabsBar
-                meetingId={meetingId}
-                meeting={meeting}
-                tab={detailTab}
-                onTabChange={setDetailTab}
-              />
-            </div>
-          )}
         </div>
 
-        {/* Hidden RerunButton — rendered solely so the menu can trigger it via
-            its existing confirm-dialog flow. Visibility is implicit (the button
-            renders only when meeting is rerun-eligible per its own props). */}
+        {/* Workspace / Summary section — wraps the Tabs + content under one
+            chrome so the tabs don't feel like a floating widget per Sean's
+            "下面也用大的 Section 把工作區和摘要包起來" feedback. */}
         {meeting && (
-          <div className="sr-only" aria-hidden>
-            <RerunButton meeting={meeting} />
-          </div>
-        )}
-
-        {/* Tab content area */}
-        {meeting && (
-          <DetailTabsContent
-            tab={detailTab}
-            meeting={meeting}
-            meetingId={meetingId}
-            playbookPane={<PlaybookPane meetingId={meetingId} />}
-            transcriptPane={
-              <TranscriptPane
-                chunks={sessionChunks}
-                meDisplayName={meeting.me_display_name}
-                counterpartyDisplayName={meeting.counterparty_display_name}
+          <section
+            data-testid="meeting-detail-content-section"
+            className="relative overflow-hidden rounded-2xl bg-(--color-surface) shadow-(--shadow-sm) ring-1 ring-(--color-border)/60"
+          >
+            <ShineBorder duration={18} />
+            <div className="relative z-[1] flex flex-col gap-4 p-4">
+              <div className="flex justify-center">
+                <DetailTabsBar
+                  meetingId={meetingId}
+                  meeting={meeting}
+                  tab={detailTab}
+                  onTabChange={setDetailTab}
+                />
+              </div>
+              <DetailTabsContent
+                tab={detailTab}
+                meeting={meeting}
                 meetingId={meetingId}
-                rerunPending={Boolean(meeting.rerun_asr_pending)}
+                playbookPane={<PlaybookPane meetingId={meetingId} />}
+                transcriptPane={
+                  <TranscriptPane
+                    chunks={sessionChunks}
+                    meDisplayName={meeting.me_display_name}
+                    counterpartyDisplayName={meeting.counterparty_display_name}
+                    meetingId={meetingId}
+                    rerunPending={Boolean(meeting.rerun_asr_pending)}
+                  />
+                }
+                advisorPane={
+                  <AdvisorPane session={session} meDisplayName={meeting.me_display_name} />
+                }
+                reducedMotion={!!reducedMotion}
               />
-            }
-            advisorPane={<AdvisorPane session={session} meDisplayName={meeting.me_display_name} />}
-            reducedMotion={!!reducedMotion}
-          />
+            </div>
+          </section>
         )}
       </div>
 
@@ -568,11 +512,13 @@ interface DetailTabsBarProps {
   onTabChange: (next: "workspace" | "summary") => void;
 }
 
-function DetailTabsBar({ meeting, tab, onTabChange }: DetailTabsBarProps) {
+function DetailTabsBar({ tab, onTabChange }: DetailTabsBarProps) {
   const { t } = useTranslation();
-  const summaryDisabled = meeting.status !== "completed";
   const setTab = onTabChange;
 
+  // Summary tab stays clickable in every phase now — when the meeting isn't
+  // completed, the panel renders a "會議完成後啟用" placeholder instead of
+  // erroring out. Disabling the tab itself was hiding a useful affordance.
   return (
     <Tabs
       value={tab}
@@ -583,12 +529,7 @@ function DetailTabsBar({ meeting, tab, onTabChange }: DetailTabsBarProps) {
         <TabsTrigger value="workspace" data-testid="detail-tab-workspace">
           {t("meetings.detail.tabs.workspace")}
         </TabsTrigger>
-        <TabsTrigger
-          value="summary"
-          disabled={summaryDisabled}
-          title={summaryDisabled ? t("meetings.summary.disabledHint") : undefined}
-          data-testid="detail-tab-summary"
-        >
+        <TabsTrigger value="summary" data-testid="detail-tab-summary">
           {t("meetings.detail.tabs.summary")}
         </TabsTrigger>
       </TabsList>

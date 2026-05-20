@@ -30,6 +30,10 @@ interface ExportMeetingButtonProps {
   scheduledStartAt: string | null;
   /** Optional callback fired after a successful export (refactor task 16.4). */
   onExportSuccess?: () => void;
+  /** External disabled flag — used by the action-bar layout so buckets with
+   *  nothing to export (upcoming meetings) render the button greyed instead
+   *  of hiding it. The button still has its own in-flight disabling. */
+  disabled?: boolean;
 }
 
 function _asciiSlug(input: string): string {
@@ -57,6 +61,7 @@ export function ExportMeetingButton({
   meetingTitle,
   scheduledStartAt,
   onExportSuccess,
+  disabled = false,
 }: ExportMeetingButtonProps) {
   const { t } = useTranslation();
   const [exporting, setExporting] = useState(false);
@@ -91,7 +96,7 @@ export function ExportMeetingButton({
       size="sm"
       variant="outline"
       onClick={handleClick}
-      disabled={exporting}
+      disabled={exporting || disabled}
       data-testid="export-meeting-button"
     >
       {exporting ? (

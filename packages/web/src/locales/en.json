@@ -283,7 +283,7 @@
       "recordingLabel": "Recording",
       "recordingAvailable": "Recording available",
       "recordingExpired": "Recording expired",
-      "rerunButton": "Re-run transcription",
+      "rerunButton": "Re-run",
       "rerunPending": "Re-running transcription…",
       "export": "Export",
       "exporting": "Exporting…",
@@ -303,15 +303,26 @@
         "edit": "Edit meeting",
         "tags": "Manage tags",
         "attachments": "Attachments",
-        "linked": "Linked meetings",
+        "linked": "Linked",
         "mode": "Recording mode",
-        "rerun": "Re-run transcription",
-        "delete": "Delete meeting"
+        "rerun": "Re-run",
+        "delete": "Delete"
+      },
+      "editAction": "Edit",
+      "tagsAdd": "Add tag",
+      "recordingMode": {
+        "label": "Mode",
+        "dual": "Dual ASR",
+        "single": "Mono"
+      },
+      "asrEngine": {
+        "label": "Engine"
       },
       "summaryChatSlotTitle": "Summary Q&A",
       "summaryChatSlotPlaceholder": "Coming soon",
       "backToList": "All meetings",
       "recordingPending": "Pending upload",
+      "recordingScheduled": "Not recorded yet",
       "uploadSuccessTitle": "Audio processed",
       "uploadSuccessSubtitle": "Transcript generated",
       "exportSuccessTitle": "Export complete",
@@ -331,9 +342,9 @@
       "completed": "Completed"
     },
     "session": {
-      "start": "Start Meeting",
-      "uploadAudio": "Upload audio",
-      "end": "End Meeting",
+      "start": "Start",
+      "uploadAudio": "Upload",
+      "end": "End",
       "ending": "Ending…",
       "endingHint": "Processing final audio…",
       "capturing": "Capturing",
@@ -465,6 +476,8 @@
       "heading": "Summary",
       "aiHeading": "AI summary",
       "disabledHint": "Summary becomes available after the meeting ends",
+      "lockedTitle": "Available after the meeting wraps",
+      "lockedSubtitle": "The AI summary will appear here once recording + transcription complete.",
       "generating": "Generating…",
       "generatingHint": "(about 30-60 seconds)",
       "generatedAt": "Generated {{at}}",

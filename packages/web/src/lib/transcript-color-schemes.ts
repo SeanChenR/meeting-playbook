@@ -177,7 +177,7 @@ export function _resolveClusterColor(speaker: string, pref: TranscriptColorPref)
   }
   if (match[1] === "unknown") {
     return {
-      background: `color-mix(in oklch, var(--color-muted) calc(var(--them-tint-alpha) * 1000%), transparent)`,
+      background: `color-mix(in oklch, var(--color-muted) 35%, var(--color-card))`,
       accent: "var(--color-muted-foreground)",
     };
   }
@@ -191,7 +191,7 @@ export function _resolveClusterColor(speaker: string, pref: TranscriptColorPref)
     const l = lightness[(n - 1) % lightness.length] ?? 0.5;
     return {
       accent: `oklch(${(l * 0.7).toFixed(3)} 0 0)`,
-      background: `color-mix(in oklch, oklch(${l.toFixed(3)} 0 0) calc(var(--them-tint-alpha) * 1000%), transparent)`,
+      background: `color-mix(in oklch, oklch(${l.toFixed(3)} 0 0) 25%, var(--color-card))`,
     };
   }
 
@@ -202,8 +202,14 @@ export function _resolveClusterColor(speaker: string, pref: TranscriptColorPref)
     typeof override === "number" && override >= 0 && override < 360
       ? override
       : (scheme.hues[(n - 1) % scheme.hues.length] ?? 0);
+  // Cluster chunks blend a strongly-tinted hue swatch into the theme's
+  // surface so the background tracks light / dark mode automatically.
+  // Previously we composited a hard-coded light `oklch(0.93 ... )` against
+  // transparent — in dark mode the result was still a pale pastel sitting
+  // under a white foreground, so the chunk body text became invisible
+  // (see the s14 / offline-ingest meetings that use cluster speakers).
   return {
     accent: `oklch(${scheme.accentL} ${scheme.accentC} ${hue})`,
-    background: `color-mix(in oklch, oklch(${scheme.bgL} ${scheme.bgC} ${hue}) calc(var(--them-tint-alpha) * 1000%), transparent)`,
+    background: `color-mix(in oklch, oklch(${scheme.accentL} ${scheme.accentC} ${hue}) calc(var(--them-tint-alpha) * 250%), var(--color-card))`,
   };
 }

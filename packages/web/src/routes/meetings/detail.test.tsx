@@ -86,7 +86,7 @@ describe("MeetingDetail route", () => {
     cleanup();
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("renders title, display names, status, and the embedded PlaybookPane", async () => {
@@ -140,7 +140,7 @@ describe("MeetingDetail route", () => {
     expect(screen.getByTestId("freeform-preview-tab")).toBeDefined();
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("delete confirmation flow: open dialog → confirm → DELETE → redirect to list", async () => {
@@ -181,7 +181,7 @@ describe("MeetingDetail route", () => {
     expect(deleted).toBe(true);
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("delete dialog cancel keeps the meeting visible", async () => {
@@ -238,7 +238,7 @@ describe("MeetingDetail route", () => {
     expect(back.getAttribute("href")).toBe("/meetings");
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("(5.1) LayoutSwitcher only renders on the workspace tab", async () => {
@@ -260,7 +260,7 @@ describe("MeetingDetail route", () => {
     expect(screen.queryByTestId("layout-switcher")).not.toBeNull();
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("(5.2) MetadataCard renders with title + 3 metadata rows + selector + indicator slots", async () => {
@@ -286,7 +286,7 @@ describe("MeetingDetail route", () => {
     expect(screen.getByTestId("asr-provider-selector")).toBeDefined();
   });
 
-  test("(5.6) summary tab carries data-disabled when status !== completed", async () => {
+  test("(5.6) summary tab is clickable in every phase; locked panel renders for non-completed meetings", async () => {
     fetchHandler = async (url) => {
       if (url.includes("/chat_messages")) {
         return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
@@ -300,15 +300,15 @@ describe("MeetingDetail route", () => {
     await waitFor(() => {
       expect(screen.getByText("Q3 review")).toBeDefined();
     });
-    const summary = screen.getByTestId("detail-tab-summary");
-    // Radix Tabs sets `data-disabled` on disabled triggers (and the native
-    // `disabled` attribute on the button); accept either signal.
-    const isDisabled =
-      summary.hasAttribute("data-disabled") || (summary as HTMLButtonElement).disabled === true;
-    expect(isDisabled).toBe(true);
+    const summary = screen.getByTestId("detail-tab-summary") as HTMLButtonElement;
+    // claude-design follow-up: the tab no longer hides itself when the
+    // meeting isn't completed. It stays clickable; the panel renders a
+    // "會議完成後啟用" placeholder instead.
+    expect(summary.hasAttribute("data-disabled")).toBe(false);
+    expect(summary.disabled).toBe(false);
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("(slice-17) detail header renders the tags row with chips + TagPicker trigger", async () => {
@@ -509,7 +509,7 @@ describe("MeetingDetail slice-06 session UI", () => {
 
   // ─── Slice-27: recording mode selector + HeadphonesHint conditional ──
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("(slice-27) RecordingModeSelector renders when meeting status is scheduled", async () => {
@@ -523,16 +523,16 @@ describe("MeetingDetail slice-06 session UI", () => {
     expect(dual.checked).toBe(true);
   });
 
-  test("(slice-27) HeadphonesHint is visible when mode is dual (default)", async () => {
+  test.skip("(slice-27) HeadphonesHint removed per claude-design round 5", async () => {
+    // Sean asked for the hint to go away entirely — see the action-bar
+    // refactor where the CompactHeadphonesHint slot was deleted. Kept
+    // skipped (not deleted) as a historical pointer in case the hint
+    // resurfaces later in a different shape.
     await renderInRouter();
-    await waitFor(() => {
-      expect(screen.getByText("Q3 review")).toBeDefined();
-    });
-    // Default dual → hint shows.
-    expect(screen.queryByTestId("headphones-hint")).not.toBeNull();
+    expect(true).toBe(true);
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("(slice-27) HeadphonesHint disappears when user picks single mode", async () => {
@@ -552,7 +552,7 @@ describe("MeetingDetail slice-06 session UI", () => {
     });
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("(slice-27) selector is hidden once the session enters in_progress", async () => {
@@ -572,7 +572,7 @@ describe("MeetingDetail slice-06 session UI", () => {
     });
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("(slice-27) start_meeting frame includes mode:'single' after the user picks single", async () => {
@@ -750,7 +750,7 @@ describe("MeetingDetail slice-06 session UI", () => {
 
   // ─── Slice-10: Workspace / Summary tabs ─────────────────────────────
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("workspace tab is active by default; summary tab is disabled when meeting not completed", async () => {
@@ -790,7 +790,7 @@ describe("MeetingDetail slice-06 session UI", () => {
     expect(screen.queryByTestId("summary-pane")).toBeNull();
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("summary tab enabled and clickable when meeting status is completed", async () => {
@@ -851,7 +851,7 @@ describe("MeetingDetail slice-06 session UI", () => {
 
   // ─── Slice meetings-ux-revamp task 5.2 — BackLink + prev/next nav ───
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("(5.2) MetadataCard contains the prev/next nav group", async () => {
@@ -877,7 +877,7 @@ describe("MeetingDetail slice-06 session UI", () => {
     expect(card.querySelector('[data-testid="back-link"]')).not.toBeNull();
   });
 
-    // refactor-meeting-detail-three-column: test skipped — superseded by
+  // refactor-meeting-detail-three-column: test skipped — superseded by
   // new component-level tests (meeting-header-bar / meeting-overflow-menu /
   // workspace) and the structural changes (no MetadataCard / LayoutSwitcher / inline tags row).
   test.skip("(5.2) standalone BackLink row above MetadataCard is removed", async () => {

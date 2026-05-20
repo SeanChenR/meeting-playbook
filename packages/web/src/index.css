@@ -546,3 +546,10 @@
   color: var(--color-primary);
   background-color: var(--color-surface);
 }
+
+/* ShineBorder — restrained in light mode (Aura bone-white is bright enough
+ * that the radial gradient reads as gaudy at full strength), brighter in
+ * dark mode where the colours look at home against the deep surface. */
+[data-theme="dark"] [data-shine-border] {
+  opacity: 0.9;
+}

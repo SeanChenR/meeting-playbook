@@ -3,7 +3,7 @@
  * 9.5.1 (no emoji), and recording status states.
  */
 
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { i18n } from "../lib/i18n";
@@ -39,25 +39,13 @@ function _meeting(overrides: Partial<MeetingDetail> = {}): MeetingDetail {
 }
 
 function _mount(meeting: MeetingDetail, phase: MeetingPhase = "idle") {
-  const onStart = mock(() => {});
-  const onEnd = mock(() => {});
-  return {
-    ...render(
-      <ThemeProvider initialTheme="light">
-        <I18nextProvider i18n={i18n}>
-          <MeetingHeaderBar
-            meeting={meeting}
-            phase={phase}
-            onStart={onStart}
-            onEnd={onEnd}
-            startDisabled={false}
-          />
-        </I18nextProvider>
-      </ThemeProvider>,
-    ),
-    onStart,
-    onEnd,
-  };
+  return render(
+    <ThemeProvider initialTheme="light">
+      <I18nextProvider i18n={i18n}>
+        <MeetingHeaderBar meeting={meeting} phase={phase} />
+      </I18nextProvider>
+    </ThemeProvider>,
+  );
 }
 
 describe("MeetingHeaderBar — basic structure", () => {
@@ -78,14 +66,18 @@ describe("MeetingHeaderBar — basic structure", () => {
     expect(screen.queryByTestId("meeting-metadata-card")).toBeNull();
   });
 
-  test("(2.1c) scheduled+idle bucket=upcoming shows 開始 + 匯出 slot", () => {
+  test("(2.1c) action buttons live outside the header bar now (moved to MeetingDetailActionBar)", () => {
     _mount(_meeting({ status: "scheduled" }), "idle");
-    expect(screen.getByTestId("header-start-meeting")).toBeDefined();
+    // Start / End buttons no longer render inside the header bar — they were
+    // hoisted into <MeetingDetailActionBar> below the title (see action-bar
+    // tests). The header is informational + nav only.
+    expect(screen.queryByTestId("header-start-meeting")).toBeNull();
+    expect(screen.queryByTestId("header-end-meeting")).toBeNull();
   });
 
-  test("(2.1d) in_progress shows 結束 button", () => {
+  test("(2.1d) header bar in_progress phase still renders capture indicator slot", () => {
     _mount(_meeting({ status: "in_progress" }), "in_progress");
-    expect(screen.getByTestId("header-end-meeting")).toBeDefined();
+    expect(screen.queryByTestId("header-end-meeting")).toBeNull();
     expect(screen.queryByTestId("header-start-meeting")).toBeNull();
   });
 });
@@ -154,9 +146,13 @@ describe("MeetingHeaderBar — recording status (12.7 wiring)", () => {
     expect(screen.getByTestId("header-recording-status").textContent ?? "").toContain("錄音已過期");
   });
 
-  test("(rec-d) bucket=upcoming → recording indicator hidden", () => {
+  test("(rec-d) bucket=upcoming → scheduled pill rendered with info dot (no longer hidden)", () => {
     _mount(_meeting({ status: "scheduled", recordings_available: false }));
-    expect(screen.queryByTestId("header-recording-status")).toBeNull();
+    const pill = screen.queryByTestId("header-recording-status");
+    expect(pill).not.toBeNull();
+    const dot = screen.getByTestId("header-recording-dot");
+    expect(dot.getAttribute("style") ?? "").toContain("--color-info");
+    expect(pill?.textContent ?? "").toContain("尚未錄音");
   });
 
   test("(rec-e) recording dot NEVER uses muted/surface-3 grey tokens", () => {

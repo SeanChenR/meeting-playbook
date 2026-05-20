@@ -14,6 +14,7 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { localizedErrorMessage } from "../lib/i18n-errors";
 import type { MeetingDetail } from "../lib/meetings-api";
@@ -23,9 +24,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface RerunButtonProps {
   meeting: Pick<MeetingDetail, "id" | "status" | "recordings_available" | "rerun_asr_pending">;
+  /** When true, render the button even if it isn't currently actionable —
+   *  the unusable cases just disable the button. Used by the action bar so
+   *  the affordance row keeps a stable shape (Sean: "不能用就 disable 掉就好"). */
+  alwaysRender?: boolean;
+  /** Optional override for the button label (e.g. icon-prefixed version). */
+  children?: ReactNode;
 }
 
-export function RerunButton({ meeting }: RerunButtonProps) {
+export function RerunButton({ meeting, alwaysRender = false, children }: RerunButtonProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
@@ -50,10 +57,14 @@ export function RerunButton({ meeting }: RerunButtonProps) {
     },
   });
 
-  if (!visible) return null;
+  if (!visible && !alwaysRender) return null;
 
   const errorCode = mutation.error ? (mutation.error as RerunApiError).errorCode : undefined;
   const errorMessage = errorCode ? localizedErrorMessage(errorCode, t) : null;
+
+  // alwaysRender path: still render the button but disable it when not
+  // actionable so the affordance row doesn't reflow as session state changes.
+  const disabled = !visible || mutation.isPending;
 
   return (
     <div className="flex flex-col gap-1">
@@ -65,9 +76,9 @@ export function RerunButton({ meeting }: RerunButtonProps) {
             variant="outline"
             data-testid="rerun-button"
             onClick={() => mutation.mutate()}
-            disabled={mutation.isPending}
+            disabled={disabled}
           >
-            {t("meetings.detail.rerunButton")}
+            {children ?? t("meetings.detail.rerunButton")}
           </Button>
         </TooltipTrigger>
         <TooltipContent>{t("ui.tooltip.rerun")}</TooltipContent>

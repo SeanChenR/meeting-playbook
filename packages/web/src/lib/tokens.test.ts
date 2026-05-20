@@ -54,6 +54,10 @@ const RAW_COLOR_ALLOWLIST: ReadonlyArray<{ file: string; reason: string }> = [
     reason: "CSS mask alpha context — `#000` means opaque, not a visual colour",
   },
   {
+    file: "components/magicui/shine-border.tsx",
+    reason: "CSS mask alpha context — `#000` means opaque, not a visual colour",
+  },
+  {
     // reason: Google brand SVG fill values. The Google sign-in button
     // SVG uses Google's brand-mandated hex colours (#4285F4 / #34A853 /
     // #FBBC05 / #EA4335). Brand assets are an explicit exception in

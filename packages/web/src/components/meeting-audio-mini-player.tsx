@@ -209,7 +209,7 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
           onClick={() => miniPlayerStore.prev()}
           disabled={idle || state.chunks_sorted.length === 0}
           aria-label={t("meeting.detail.audioPlayer.prev")}
-          className="rounded-md border border-(--color-border) p-1.5 text-(--color-muted-foreground) hover:text-(--color-foreground) disabled:opacity-40"
+          className="inline-flex size-8 items-center justify-center rounded-full bg-(--color-primary)/10 text-(--color-primary) ring-1 ring-(--color-primary)/15 transition-colors hover:bg-(--color-primary)/18 disabled:opacity-40"
         >
           <ChevronLeft className="size-4" aria-hidden />
         </button>
@@ -224,12 +224,12 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
               ? t("meeting.detail.audioPlayer.pause")
               : t("meeting.detail.audioPlayer.play")
           }
-          className="rounded-md border border-(--color-border) bg-(--color-card) p-1.5 text-(--color-foreground) hover:bg-(--color-primary)/10 disabled:opacity-40"
+          className="inline-flex size-9 items-center justify-center rounded-full bg-(--color-primary) text-(--color-primary-foreground) shadow-(--shadow-sm) transition-all hover:bg-(--color-primary-hover) hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
         >
           {state.is_playing ? (
             <Pause className="size-4" aria-hidden />
           ) : (
-            <Play className="size-4" aria-hidden />
+            <Play className="size-4 translate-x-px" aria-hidden />
           )}
         </button>
 
@@ -239,7 +239,7 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
           onClick={() => miniPlayerStore.next()}
           disabled={idle || state.chunks_sorted.length === 0}
           aria-label={t("meeting.detail.audioPlayer.next")}
-          className="rounded-md border border-(--color-border) p-1.5 text-(--color-muted-foreground) hover:text-(--color-foreground) disabled:opacity-40"
+          className="inline-flex size-8 items-center justify-center rounded-full bg-(--color-primary)/10 text-(--color-primary) ring-1 ring-(--color-primary)/15 transition-colors hover:bg-(--color-primary)/18 disabled:opacity-40"
         >
           <ChevronRight className="size-4" aria-hidden />
         </button>
@@ -276,7 +276,7 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
             data-testid="mini-player-source-toggle"
             role="group"
             aria-label={t("meeting.detail.audioPlayer.sourceLabel")}
-            className="flex items-center gap-0.5 rounded-md border border-(--color-border) bg-(--color-card) p-0.5 text-xs"
+            className="flex items-center gap-0.5 rounded-full bg-(--color-primary)/8 p-0.5 text-xs ring-1 ring-(--color-primary)/15"
           >
             {sourceButtons.map(({ key, label, testid }) => {
               const active = effectiveSource === key;
@@ -289,8 +289,8 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
                   aria-pressed={active}
                   className={
                     active
-                      ? "rounded-sm bg-(--color-primary) px-2 py-0.5 text-(--color-primary-foreground)"
-                      : "rounded-sm px-2 py-0.5 text-(--color-muted-foreground) hover:text-(--color-foreground)"
+                      ? "rounded-full bg-(--color-primary) px-2.5 py-1 font-medium text-(--color-primary-foreground) shadow-(--shadow-sm)"
+                      : "rounded-full px-2.5 py-1 text-(--color-primary)/70 hover:text-(--color-primary)"
                   }
                 >
                   {label}
@@ -300,7 +300,7 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
           </div>
         )}
 
-        <label className="flex items-center gap-1 text-xs text-(--color-muted-foreground)">
+        <label className="flex items-center gap-1.5 text-xs text-(--color-primary)">
           {t("meeting.detail.audioPlayer.speed")}
           <select
             data-testid="mini-player-speed"
@@ -308,7 +308,7 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
             onChange={(e) =>
               miniPlayerStore.setRate(Number.parseFloat(e.target.value) as PlaybackRate)
             }
-            className="rounded-md border border-(--color-border) bg-(--color-card) px-1.5 py-0.5 text-xs"
+            className="rounded-full bg-(--color-primary)/8 px-2 py-0.5 text-xs font-medium text-(--color-primary) ring-1 ring-(--color-primary)/15 transition-colors hover:bg-(--color-primary)/15 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/35"
           >
             {PLAYBACK_RATES.map((rate) => (
               <option key={rate} value={rate}>

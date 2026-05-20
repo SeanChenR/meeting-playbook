@@ -172,19 +172,22 @@ export function AdvisorPane({ session, meDisplayName }: AdvisorPaneProps) {
       )}
 
       {isLive && (
-        <>
-          <Button
-            type="button"
-            data-testid="get-advice-button"
-            onClick={() => session.requestAdvice()}
-            disabled={isStreaming}
-            size="sm"
-          >
-            {t("meetings.advisor.getAdviceButton")}
-          </Button>
-          <ChatInput onSend={session.sendChatMessage} disabled={isStreaming} seed={seed} />
-        </>
+        <Button
+          type="button"
+          data-testid="get-advice-button"
+          onClick={() => session.requestAdvice()}
+          disabled={isStreaming}
+          size="sm"
+        >
+          {t("meetings.advisor.getAdviceButton")}
+        </Button>
       )}
+      {/*
+        ChatInput stays mounted in every session state so users always see
+        the affordance. It's disabled when the session isn't live (no real
+        time chat available yet) or while a prior request is mid-flight.
+      */}
+      <ChatInput onSend={session.sendChatMessage} disabled={!isLive || isStreaming} seed={seed} />
     </Pane>
   );
 }

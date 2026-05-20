@@ -91,12 +91,18 @@ describe("AdvisorPane", () => {
     expect(bubbles[1]!.getAttribute("data-role")).toBe("advisor");
   });
 
-  test("phase=idle with no history → empty state visible, no chatbox / button", () => {
+  test("phase=idle with no history → empty state visible, button hidden, chatbox visible but disabled", () => {
     render(<AdvisorPane session={_stubSession(_idleState())} meDisplayName="Sean" />);
     expect(screen.queryByTestId("advisor-pane-empty")).not.toBeNull();
     expect(screen.queryByTestId("get-advice-button")).toBeNull();
-    expect(screen.queryByTestId("chat-input-textarea")).toBeNull();
-    expect(screen.queryByTestId("chat-input-send")).toBeNull();
+    // Claude-design alignment: ChatInput stays mounted across session states
+    // so users always see the affordance — just disabled when offline.
+    const textarea = screen.queryByTestId("chat-input-textarea") as HTMLTextAreaElement | null;
+    expect(textarea).not.toBeNull();
+    expect(textarea!.disabled).toBe(true);
+    const sendBtn = screen.queryByTestId("chat-input-send") as HTMLButtonElement | null;
+    expect(sendBtn).not.toBeNull();
+    expect(sendBtn!.disabled).toBe(true);
   });
 
   test("phase=in_progress with no history → empty state hidden, button + chatbox visible", () => {
@@ -107,15 +113,19 @@ describe("AdvisorPane", () => {
     expect(screen.queryByTestId("chat-input-send")).not.toBeNull();
   });
 
-  test("phase=ended with persisted history → bubbles visible, controls hidden", () => {
+  test("phase=ended with persisted history → bubbles visible, advice button hidden, chatbox disabled", () => {
     const messages = [_MSG("cm_1", "user", "Q1"), _MSG("cm_2", "advisor", "A1")];
     render(
       <AdvisorPane session={_stubSession(_endedState(_advisor(messages)))} meDisplayName="Sean" />,
     );
     expect(screen.getAllByTestId("chat-bubble")).toHaveLength(2);
     expect(screen.queryByTestId("get-advice-button")).toBeNull();
-    expect(screen.queryByTestId("chat-input-textarea")).toBeNull();
-    expect(screen.queryByTestId("chat-input-send")).toBeNull();
+    const textarea = screen.queryByTestId("chat-input-textarea") as HTMLTextAreaElement | null;
+    expect(textarea).not.toBeNull();
+    expect(textarea!.disabled).toBe(true);
+    const sendBtn = screen.queryByTestId("chat-input-send") as HTMLButtonElement | null;
+    expect(sendBtn).not.toBeNull();
+    expect(sendBtn!.disabled).toBe(true);
   });
 
   test("inFlight streaming → 2 virtual bubbles appended; advisor bubble shows accumulated tokens", () => {

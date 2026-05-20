@@ -73,27 +73,37 @@ describe("TranscriptPane", () => {
 
   // ─── Slice 7 ─────────────────────────────────────────────────────
 
-  test("counterparty chunk applies primary accent border", () => {
+  test("counterparty chunk applies primary accent pill", () => {
     const chunks = [_chunk("from-other-side", "counterparty")];
     _render(
       <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
     );
     const item = screen.getByTestId("transcript-chunk");
     expect(item.dataset.speaker).toBe("counterparty");
-    // border-l-4 token sits on the chunk wrapper; counterparty gets primary.
-    expect(item.className).toContain("border-l-(--color-primary)");
-    expect(item.className).not.toContain("border-l-(--color-muted-foreground)");
+    // claude-design v2: left accent moved off `border-left` onto a 3px
+    // pseudo-element pill so the rounded corners stay clean. The cluster
+    // color resolver maps the counterparty speaker to `--color-them`.
+    const styleAttr = item.getAttribute("style") ?? "";
+    expect(styleAttr).toContain("--chunk-accent");
+    expect(styleAttr).toContain("--color-them");
+    // Inset box-shadow draws the accent strip so it follows the rounded
+    // corner curve (a clipped pseudo-element left a visible gap at the
+    // top / bottom of each corner).
+    expect(styleAttr).toContain("inset 3px 0 0");
+    expect(item.className).toContain("rounded-xl");
   });
 
-  test("me chunk applies muted-foreground accent border", () => {
+  test("me chunk applies me-speaker accent pill", () => {
     const chunks = [_chunk("from-me", "me")];
     _render(
       <TranscriptPane chunks={chunks} meDisplayName="Sean" counterpartyDisplayName="林經理" />,
     );
     const item = screen.getByTestId("transcript-chunk");
     expect(item.dataset.speaker).toBe("me");
-    expect(item.className).toContain("border-l-(--color-muted-foreground)");
-    expect(item.className).not.toContain("border-l-(--color-primary)");
+    const styleAttr = item.getAttribute("style") ?? "";
+    expect(styleAttr).toContain("--chunk-accent");
+    expect(styleAttr).toContain("--color-me");
+    expect(item.className).toContain("rounded-xl");
   });
 
   test("uses counterpartyDisplayName for counterparty chunks", () => {
@@ -119,9 +129,10 @@ describe("TranscriptPane", () => {
     // Read raw style attribute — happy-dom's CSSStyleDeclaration drops
     // shorthand and `color-mix()` values it can't parse.
     const styleAttr = item.getAttribute("style") ?? "";
-    // Cue 1: 3px solid border-left (longhand props).
-    expect(styleAttr).toMatch(/border-left-width:\s*3px/);
-    expect(styleAttr).toMatch(/border-left-style:\s*solid/);
+    // Cue 1: 3px accent strip via inset box-shadow so the colored band
+    // follows the rounded corner curve.
+    expect(styleAttr).toContain("inset 3px 0 0");
+    expect(styleAttr).toContain("--chunk-accent");
     // Cue 2: non-transparent background-color via color-mix on --color-them-soft.
     expect(styleAttr).toContain("color-mix");
     expect(styleAttr).toContain("--color-them-soft");

@@ -234,16 +234,26 @@ function TranscriptChunkRow({
   return (
     <AnimatedListItem
       className={cn(
-        "rounded-r-md bg-(--chunk-bg) px-3 py-2.5 text-sm",
-        isMe ? "border-l-(--color-muted-foreground)" : "border-l-(--color-primary)",
-        hasFlag && "is-flag border-l-(--color-destructive)! bg-(--color-destructive)/4",
+        // Claude Design v2 alignment: fully rounded chunks with a thin
+        // accent strip on the left. Implemented as an `inset box-shadow`
+        // so the colored band naturally follows the rounded corner curve
+        // (a pseudo-element clipped by overflow-hidden leaves a visible
+        // gap at the top / bottom of each corner). Shadow width sits on
+        // a CSS var so hover can interpolate it without re-rendering.
+        "group relative rounded-xl bg-(--chunk-bg) px-3.5 py-3 text-sm",
+        "ring-1 ring-(--color-border)/40 transition-all duration-150",
+        // Hover: lift slightly, deepen the speaker-tinted ring, and grow
+        // the accent strip 3px → 4px so the active chunk reads as the
+        // visual focus without changing surrounding text colors.
+        "hover:-translate-y-px hover:shadow-(--shadow-sm)",
+        "hover:ring-(--chunk-accent)/35",
+        hasFlag && "is-flag ring-(--color-destructive)/30 bg-(--color-destructive)/4",
       )}
       style={
         {
-          borderLeftStyle: "solid",
-          borderLeftWidth: "3px",
-          borderLeftColor: hasFlag ? "var(--color-destructive)" : speakerColor,
           "--chunk-bg": background,
+          "--chunk-accent": hasFlag ? "var(--color-destructive)" : speakerColor,
+          boxShadow: `inset 3px 0 0 0 ${hasFlag ? "var(--color-destructive)" : speakerColor}`,
         } as React.CSSProperties
       }
       itemProps={{
@@ -253,18 +263,31 @@ function TranscriptChunkRow({
       }}
     >
       <div className="mb-1 flex items-center gap-2">
-        <span
-          aria-hidden
-          data-testid="speaker-dot"
-          className="inline-block size-2 rounded-full"
-          style={{ background: speakerColor }}
-        />
+        {/*
+          Speaker label as a chip pill (Claude Design v2). The leading dot
+          tucks inside the chip so the existing `speaker-dot` testid stays
+          discoverable while the visual collapses into a single colored
+          token. Background + text both pick up `--chunk-accent` so the
+          chip auto-themes per speaker (cluster, me, them, flagged).
+        */}
         <span
           ref={speakerNameRef}
           data-testid="speaker-name"
-          className="text-sm font-semibold"
-          style={{ color: speakerColor }}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full",
+            "px-2 py-0.5 text-xs font-semibold",
+          )}
+          style={{
+            background: `color-mix(in oklch, ${speakerColor} 14%, transparent)`,
+            color: speakerColor,
+          }}
         >
+          <span
+            aria-hidden
+            data-testid="speaker-dot"
+            className="inline-block size-1.5 rounded-full"
+            style={{ background: speakerColor }}
+          />
           {speakerLabel}
         </span>
         {clusterN !== null && (
@@ -312,10 +335,10 @@ export function LiveChunkPlaceholder({ name }: { name: string }) {
     <div
       data-testid="transcript-live-placeholder"
       style={{
-        borderLeft: "3px solid var(--color-them)",
         background: "color-mix(in oklch, var(--color-them-soft) 50%, transparent)",
+        boxShadow: "inset 3px 0 0 0 var(--color-them)",
       }}
-      className="rounded-r-md px-3 py-2.5"
+      className="relative rounded-xl px-3.5 py-3 ring-1 ring-(--color-border)/40"
     >
       <div className="mb-1.5 flex items-center gap-2">
         <span

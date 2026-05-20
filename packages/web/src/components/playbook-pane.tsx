@@ -1,18 +1,15 @@
 /**
- * PlaybookPane — slice ui-overhaul-claude-design task 6.4.
+ * PlaybookPane — slice ui-overhaul-claude-design + claude-design v2 alignment.
  *
- * Re-skinned to use the shared `Pane` shell with the design-bundle's
- * accent bar + "AI 草稿" badge + actions slot. Freeform Markdown editor
- * (textarea + read-only preview) is preserved verbatim — structured 6-field
- * view stays deferred per project memory `playbook_field_set_open`.
- *
- * The Edit / Preview sub-toggle keeps its prior data-testids
- * (`freeform-edit-tab` / `freeform-preview-tab`) so the existing tests
- * still resolve. Save behavior + i18n keys + PlaybookApiError handling
- * are unchanged from slice-7 round 3.
+ * Header dropped its duplicated column title (now the only title row, via
+ * <Pane>). The "AI 草稿" badge became a violet sparkle chip; Save lives in
+ * the Pane's actions slot next to the Edit/Preview toggle (no detached
+ * primary block). Successful saves surface a <SuccessResultOverlay>
+ * hazeover instead of a toast.
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -26,14 +23,14 @@ import {
   useRestorePreviousPlaybookMutation,
   useUpsertPlaybookMutation,
 } from "../lib/playbook-api";
+import { cn } from "../lib/utils";
 import { Pane } from "./pane";
 import { PlaybookDiffViewer, type HunkDecisions } from "./playbook-diff-viewer";
+import { SuccessResultOverlay } from "./success-result-overlay";
 import { Alert } from "./ui/alert";
 import { AlertDialog } from "./ui/alert-dialog";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { SpicyReveal } from "./ui/spicy-reveal";
-import { cn } from "../lib/utils";
 
 interface PlaybookPaneProps {
   meetingId: string;
@@ -46,52 +43,97 @@ const TEXTAREA_CLASSNAME = cn(
   "disabled:cursor-not-allowed disabled:opacity-50",
 );
 
+function AiDraftChip({ label }: { label: string }) {
+  return (
+    <span
+      data-testid="playbook-ai-draft-badge"
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "bg-(--color-primary)/12 text-(--color-primary)",
+        "ring-1 ring-(--color-primary)/25 ring-inset",
+      )}
+    >
+      <Sparkles className="size-3" strokeWidth={2} aria-hidden />
+      {label}
+    </span>
+  );
+}
+
+function SubModeToggle({
+  value,
+  onChange,
+  showDiff,
+  labels,
+}: {
+  value: "edit" | "preview" | "diff";
+  onChange: (next: "edit" | "preview" | "diff") => void;
+  showDiff: boolean;
+  labels: { edit: string; preview: string; diff: string };
+}) {
+  const options: Array<{ key: "edit" | "preview" | "diff"; testId: string; label: string }> = [
+    { key: "edit", testId: "freeform-edit-tab", label: labels.edit },
+    { key: "preview", testId: "freeform-preview-tab", label: labels.preview },
+  ];
+  if (showDiff) {
+    options.push({ key: "diff", testId: "freeform-diff-tab", label: labels.diff });
+  }
+  return (
+    <div
+      role="group"
+      aria-label="freeform sub-mode"
+      className={cn(
+        "inline-flex items-center rounded-(--radius-md) p-0.5",
+        // Aura-tinted track — replaces the grey surface-2 + border ring.
+        "bg-(--color-primary)/8 ring-1 ring-(--color-primary)/15",
+      )}
+    >
+      {options.map((opt) => {
+        const active = value === opt.key;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            data-testid={opt.testId}
+            aria-pressed={active}
+            onClick={() => onChange(opt.key)}
+            className={cn(
+              "rounded-[calc(var(--radius-md)-2px)] px-2.5 py-1 text-[12px] font-medium transition-colors",
+              active
+                ? "bg-(--color-primary) text-(--color-primary-foreground) shadow-(--shadow-sm)"
+                : "text-(--color-primary)/70 hover:text-(--color-primary)",
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
   const { t } = useTranslation();
   const query = useQuery(playbookQueryOptions(meetingId));
   const mutation = useUpsertPlaybookMutation(meetingId);
   const regenerateMutation = useRegeneratePlaybookMutation(meetingId);
-  // Slice-23: discard / restore mutations wired to PlaybookDiffViewer callbacks.
   const discardPreviousMutation = useDiscardPreviousPlaybookMutation(meetingId);
   const restorePreviousMutation = useRestorePreviousPlaybookMutation(meetingId);
 
-  // Slice-23: extend sub-mode state with a third "diff" entry. The toggle
-  // button for diff is only rendered when `has_previous_version === true`
-  // (per spec `playbook-versioning`: "diff button SHALL only appear
-  // when has_previous_version === true").
-  // Slice-26 (playbook-markdown-rendering) D1: default to rendered preview —
-  // playbook is read-heavy and seeing raw markdown symbols on every meeting
-  // detail load was friction. Edit tab remains an explicit toggle.
   const [freeformMode, setFreeformMode] = useState<"edit" | "preview" | "diff">("preview");
   const [draft, setDraft] = useState<string>("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
-  // Slice-23 / Gemini PR #36 review #4: lift the per-hunk decision map
-  // out of <PlaybookDiffViewer> so switching to "edit" or "preview"
-  // (which unmounts the viewer) doesn't discard cherry-pick progress.
-  // Reset together with the textarea when the playbook row's
-  // updated_at moves (new regenerate → new snapshot → stale decisions).
   const [diffDecisions, setDiffDecisions] = useState<HunkDecisions>({});
+  const [successOpen, setSuccessOpen] = useState(false);
 
   useEffect(() => {
     if (!query.data) return;
     setDraft(query.data.free_form_markdown);
     setSavedAt(null);
     setDiffDecisions({});
-    // Re-sync on `updated_at` so regenerate (which keeps the playbook
-    // row id but writes a new `updated_at`) replaces the textarea with
-    // the freshly generated markdown. Watching only `id` left the
-    // draft stuck on the pre-regenerate content even though the query
-    // cache had already updated, making the regenerate button look
-    // like a no-op.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.data?.id, query.data?.updated_at]);
 
-  // Slice-23 / design D6: after a successful regenerate, if the new
-  // `free_form_markdown` differs from the snapshot just captured, auto-
-  // switch to diff mode so the user immediately sees the comparison.
-  // If the content didn't change (rare: identical regeneration), stay
-  // on the current mode.
   useEffect(() => {
     const data = regenerateMutation.data;
     if (!data) return;
@@ -103,11 +145,8 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
     }
   }, [regenerateMutation.data]);
 
-  // If the row drops its snapshot (e.g. discard_previous succeeded), the
-  // user can't be sitting on a diff that no longer exists.
   useEffect(() => {
     if (freeformMode === "diff" && query.data && !query.data.has_previous_version) {
-      // Slice-26 D2: fallback target aligned with mount default (preview).
       setFreeformMode("preview");
     }
   }, [freeformMode, query.data]);
@@ -124,15 +163,12 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
         red_lines: query.data?.red_lines ?? "",
       });
       setSavedAt(Date.now());
-      toast.success(t("playbook.save.saved_toast"));
+      setSuccessOpen(true);
     } catch {
-      // mutation.error surfaced below; nothing else to do here.
+      // mutation.error surfaced below.
     }
   }
 
-  // Slice-23: diff viewer callbacks. See design D5 — cherry-pick walks
-  // through user-save upsert (`useUpsertPlaybookMutation`) then clears
-  // the snapshot via `discard_previous`.
   function handleAcceptAllNew() {
     discardPreviousMutation.mutate(undefined, {
       onSuccess: () => setFreeformMode("edit"),
@@ -156,13 +192,11 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
         talking_points: query.data?.talking_points ?? "",
         red_lines: query.data?.red_lines ?? "",
       });
-      // Cherry-picked merge is conceptually "accept this version" — clear
-      // the snapshot so the diff mode auto-exits.
       discardPreviousMutation.mutate(undefined, {
         onSuccess: () => setFreeformMode("edit"),
       });
     } catch {
-      // mutation.error is surfaced via `error` below.
+      // mutation.error surfaced below.
     }
   }
 
@@ -183,155 +217,160 @@ export function PlaybookPane({ meetingId }: PlaybookPaneProps) {
     : null;
   const error = fetchError ?? saveError ?? regenerateError;
 
+  // Mirror error to toast for parity with prior behavior (a11y live region).
+  useEffect(() => {
+    if (saveError) toast.error(saveError);
+  }, [saveError]);
+
   const saveLabel = mutation.isPending
     ? t("playbook.save.saving")
     : savedAt
       ? t("playbook.save.saved")
       : t("playbook.save.idle");
 
+  const dirty = !!query.data && draft !== query.data.free_form_markdown;
+  // Save is always rendered now — Sean's feedback: the button disappearing on
+  // mode switch felt abrupt. We just disable when there's nothing to save or
+  // the user is browsing preview/diff.
+  const saveEnabled = freeformMode === "edit" && dirty && !mutation.isPending;
+
   return (
-    <Pane
-      data-testid="playbook-pane"
-      title={t("playbook.heading")}
-      accent="var(--color-primary)"
-      badge={
-        <Badge variant="outline" data-testid="playbook-ai-draft-badge">
-          {t("playbook.aiDraftBadge")}
-        </Badge>
-      }
-      actions={
-        <div role="group" aria-label="freeform sub-mode" className="inline-flex gap-1">
-          <Button
-            type="button"
-            size="sm"
-            variant={freeformMode === "edit" ? "primary" : "ghost"}
-            aria-pressed={freeformMode === "edit"}
-            data-testid="freeform-edit-tab"
-            onClick={() => setFreeformMode("edit")}
-          >
-            {t("playbook.freeform.editTab")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={freeformMode === "preview" ? "primary" : "ghost"}
-            aria-pressed={freeformMode === "preview"}
-            data-testid="freeform-preview-tab"
-            onClick={() => setFreeformMode("preview")}
-          >
-            {t("playbook.freeform.previewTab")}
-          </Button>
-          {/*
-            Slice-23: diff sub-tab — only mounted when the server reports
-            `has_previous_version === true` (spec `playbook-versioning`).
-            Hiding it on empty snapshots prevents users from clicking
-            into a meaningless "no diff" pane.
-          */}
-          {query.data?.has_previous_version === true && (
+    <>
+      <Pane
+        data-testid="playbook-pane"
+        title={t("playbook.heading")}
+        accent="var(--color-primary)"
+        badge={<AiDraftChip label={t("playbook.aiDraftBadge")} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <SubModeToggle
+              value={freeformMode}
+              onChange={setFreeformMode}
+              showDiff={query.data?.has_previous_version === true}
+              labels={{
+                edit: t("playbook.freeform.editTab"),
+                preview: t("playbook.freeform.previewTab"),
+                diff: t("playbook.diff.tab"),
+              }}
+            />
             <Button
               type="button"
               size="sm"
-              variant={freeformMode === "diff" ? "primary" : "ghost"}
-              aria-pressed={freeformMode === "diff"}
-              data-testid="freeform-diff-tab"
-              onClick={() => setFreeformMode("diff")}
+              variant="secondary"
+              onClick={handleSave}
+              disabled={!saveEnabled}
+              data-testid="playbook-save-button"
+              className={cn(
+                "h-7 px-3 text-[12px] font-medium",
+                // Disabled state stays tinted with Aura secondary (no grey) so
+                // the button keeps its visual identity even when idle. Save
+                // sits next to the primary-tinted SubModeToggle, so using
+                // secondary here keeps the two affordances visually distinct.
+                !saveEnabled &&
+                  "bg-(--color-secondary)/20 text-(--color-secondary-foreground) opacity-100",
+              )}
             >
-              {t("playbook.diff.tab")}
-            </Button>
-          )}
-        </div>
-      }
-      bodyClassName="px-3.5 py-3.5"
-    >
-      <SpicyReveal revealKey={meetingId} className="space-y-4">
-        {query.isLoading && (
-          <p className="text-sm text-(--color-muted-foreground)">{t("playbook.loading")}</p>
-        )}
-        {error && <Alert variant="destructive">{error}</Alert>}
-
-        {query.data?.is_stale && (
-          <Alert
-            data-testid="playbook-stale-attachments-banner"
-            variant="warning"
-            role="note"
-            className="flex flex-wrap items-center gap-3"
-          >
-            <span className="flex-1">{t("playbook.stale.attachments_changed")}</span>
-            <Button
-              type="button"
-              size="sm"
-              data-testid="playbook-stale-regenerate-button"
-              disabled={regenerateMutation.isPending}
-              onClick={() => {
-                // Only confirm when there's content to lose; first-ever
-                // generation (empty draft) goes straight through.
-                if (draft.trim().length > 0) {
-                  setShowRegenerateDialog(true);
-                } else {
-                  regenerateMutation.mutate();
-                }
-              }}
-            >
-              {regenerateMutation.isPending
-                ? t("playbook.stale.regenerating")
-                : t("playbook.stale.regenerate_button")}
-            </Button>
-          </Alert>
-        )}
-
-        <div className="space-y-2">
-          {freeformMode === "edit" && (
-            <textarea
-              id="playbook-freeform"
-              aria-label={t("playbook.freeform.label")}
-              className={TEXTAREA_CLASSNAME}
-              placeholder={t("playbook.freeform.placeholder")}
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                setSavedAt(null);
-              }}
-              rows={12}
-            />
-          )}
-          {freeformMode === "preview" && <MarkdownPreview source={draft} />}
-          {freeformMode === "diff" && query.data?.has_previous_version === true && (
-            <PlaybookDiffViewer
-              previous={query.data.previous_free_form_markdown ?? ""}
-              current={query.data.free_form_markdown}
-              decisions={diffDecisions}
-              onDecisionsChange={setDiffDecisions}
-              onAcceptAllNew={handleAcceptAllNew}
-              onRestoreAllPrevious={handleRestoreAllPrevious}
-              onApplyMerged={handleApplyMerged}
-              isPending={
-                discardPreviousMutation.isPending ||
-                restorePreviousMutation.isPending ||
-                mutation.isPending
-              }
-            />
-          )}
-        </div>
-
-        {freeformMode !== "diff" && (
-          <div className="flex items-center gap-3">
-            <Button type="button" onClick={handleSave} disabled={mutation.isPending} size="sm">
+              {dirty && freeformMode === "edit" && (
+                <span
+                  aria-hidden
+                  data-testid="playbook-dirty-dot"
+                  className="mr-1.5 inline-block size-1.5 rounded-full bg-current"
+                />
+              )}
               {saveLabel}
             </Button>
           </div>
-        )}
-      </SpicyReveal>
+        }
+        bodyClassName="px-3.5 py-3.5"
+      >
+        <SpicyReveal revealKey={meetingId} className="space-y-4">
+          {query.isLoading && (
+            <p className="text-sm text-(--color-muted-foreground)">{t("playbook.loading")}</p>
+          )}
+          {error && <Alert variant="destructive">{error}</Alert>}
 
-      <AlertDialog
-        open={showRegenerateDialog}
-        onOpenChange={setShowRegenerateDialog}
-        title={t("playbook.stale.confirm_title")}
-        description={t("playbook.stale.confirm_description")}
-        confirmLabel={t("playbook.stale.confirm_confirm")}
-        cancelLabel={t("playbook.stale.confirm_cancel")}
-        destructive
-        onConfirm={() => regenerateMutation.mutate()}
+          {query.data?.is_stale && (
+            <Alert
+              data-testid="playbook-stale-attachments-banner"
+              variant="warning"
+              role="note"
+              className="flex flex-wrap items-center gap-3"
+            >
+              <span className="flex-1">{t("playbook.stale.attachments_changed")}</span>
+              <Button
+                type="button"
+                size="sm"
+                data-testid="playbook-stale-regenerate-button"
+                disabled={regenerateMutation.isPending}
+                onClick={() => {
+                  if (draft.trim().length > 0) {
+                    setShowRegenerateDialog(true);
+                  } else {
+                    regenerateMutation.mutate();
+                  }
+                }}
+              >
+                {regenerateMutation.isPending
+                  ? t("playbook.stale.regenerating")
+                  : t("playbook.stale.regenerate_button")}
+              </Button>
+            </Alert>
+          )}
+
+          <div className="space-y-2">
+            {freeformMode === "edit" && (
+              <textarea
+                id="playbook-freeform"
+                aria-label={t("playbook.freeform.label")}
+                className={TEXTAREA_CLASSNAME}
+                placeholder={t("playbook.freeform.placeholder")}
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  setSavedAt(null);
+                }}
+                rows={12}
+              />
+            )}
+            {freeformMode === "preview" && <MarkdownPreview source={draft} />}
+            {freeformMode === "diff" && query.data?.has_previous_version === true && (
+              <PlaybookDiffViewer
+                previous={query.data.previous_free_form_markdown ?? ""}
+                current={query.data.free_form_markdown}
+                decisions={diffDecisions}
+                onDecisionsChange={setDiffDecisions}
+                onAcceptAllNew={handleAcceptAllNew}
+                onRestoreAllPrevious={handleRestoreAllPrevious}
+                onApplyMerged={handleApplyMerged}
+                isPending={
+                  discardPreviousMutation.isPending ||
+                  restorePreviousMutation.isPending ||
+                  mutation.isPending
+                }
+              />
+            )}
+          </div>
+        </SpicyReveal>
+
+        <AlertDialog
+          open={showRegenerateDialog}
+          onOpenChange={setShowRegenerateDialog}
+          title={t("playbook.stale.confirm_title")}
+          description={t("playbook.stale.confirm_description")}
+          confirmLabel={t("playbook.stale.confirm_confirm")}
+          cancelLabel={t("playbook.stale.confirm_cancel")}
+          destructive
+          onConfirm={() => regenerateMutation.mutate()}
+        />
+      </Pane>
+
+      <SuccessResultOverlay
+        open={successOpen}
+        onClose={() => setSuccessOpen(false)}
+        title={t("playbook.save.success_title")}
+        subtitle={t("playbook.save.success_subtitle")}
+        autoDismissMs={2200}
       />
-    </Pane>
+    </>
   );
 }

@@ -164,7 +164,8 @@ describe("PlaybookPane", () => {
     await renderPane();
     expect(screen.getByTestId("playbook-pane")).toBeDefined();
     expect(screen.getByTestId("pane-accent")).toBeDefined();
-    expect(screen.getByTestId("pane-title").textContent).toBe("Playbook");
+    // refactor-meeting-detail-three-column 1.2: zh-TW playbook.heading → "劇本"
+    expect(screen.getByTestId("pane-title").textContent).toBe("劇本");
     expect(screen.getByTestId("playbook-ai-draft-badge")).toBeDefined();
   });
 

@@ -295,7 +295,35 @@
       "tabs": {
         "workspace": "Workspace",
         "summary": "Summary"
-      }
+      },
+      "columnPlaybook": "Playbook",
+      "columnTranscript": "Transcript",
+      "columnAdvisor": "Advisor",
+      "menu": {
+        "edit": "Edit meeting",
+        "tags": "Manage tags",
+        "attachments": "Attachments",
+        "linked": "Linked meetings",
+        "mode": "Recording mode",
+        "rerun": "Re-run transcription",
+        "delete": "Delete meeting"
+      },
+      "summaryChatSlotTitle": "Summary Q&A",
+      "summaryChatSlotPlaceholder": "Coming soon",
+      "backToList": "All meetings",
+      "recordingPending": "Pending upload",
+      "uploadSuccessTitle": "Audio processed",
+      "uploadSuccessSubtitle": "Transcript generated",
+      "exportSuccessTitle": "Export complete",
+      "exportSuccessSubtitle": "ZIP saved to Downloads",
+      "viewTranscript": "View transcript",
+      "counterpartyGroupLabel": "{{name}} and {{count}} others",
+      "bucketLabel": {
+        "upcoming": "Upcoming",
+        "needs_recording": "Pending recording",
+        "completed": "Completed"
+      },
+      "asrEngineHint": "Using {{provider}} as the transcription engine"
     },
     "status": {
       "scheduled": "Scheduled",
@@ -316,7 +344,11 @@
       "silenceWarningMe": "{{name}} silent for 30s",
       "silenceWarningCounterparty": "{{name}} silent for 30s (check Multi-Output Device)",
       "streamStopped": "{{name}} stopped",
-      "headphonesHint": "Headphones recommended — otherwise the mic will pick up speaker output, causing both streams to contain overlapping audio",
+      "headphonesHint": "Recommended: wear headphones to avoid echo — in dual ASR mode, speaker output will be re-captured by the microphone.",
+      "asrLoading": {
+        "title": "Starting transcription engine…",
+        "subtitle": "First-time use will download the ASR model and may take up to 30 seconds depending on network. Downloading in background — please don't close this window."
+      },
       "transcriptHeading": "Live transcript",
       "transcriptEmpty": "Waiting for the first transcript chunk… (the first run needs 10–25s to load the model)",
       "rerunOverlay": "Re-running transcription…",
@@ -420,6 +452,9 @@
       "userLabel": "Me",
       "advisorLabel": "Advisor",
       "cmdEnterHint": "⌘+Enter to send",
+      "applyReply": "Use as reply",
+      "rephrase": "Rephrase",
+      "rephraseTooltip": "Coming next release",
       "suggestions": {
         "nextStep": "What should I say next?",
         "realConcern": "What do they actually care about?",
@@ -496,8 +531,10 @@
     "save": {
       "idle": "Save",
       "saving": "Saving…",
-      "saved": "Saved ✓",
-      "saved_toast": "Playbook saved"
+      "saved": "Saved",
+      "saved_toast": "Playbook saved",
+      "success_title": "Save complete",
+      "success_subtitle": "Your playbook edits are synced"
     },
     "errors": {
       "fallback": "Save failed, please try again"

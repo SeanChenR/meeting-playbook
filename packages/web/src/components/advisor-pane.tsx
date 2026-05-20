@@ -124,6 +124,39 @@ export function AdvisorPane({ session, meDisplayName }: AdvisorPaneProps) {
         </div>
       )}
 
+      {/* refactor-meeting-detail-three-column 9e: reply chips on latest AI
+          bubble whose `suggestion_text` field is non-empty. Backend currently
+          does not populate this field; the visual shell + apply-callback
+          wiring are ready for a future backend feature (feature-advisor-regenerate). */}
+      {(() => {
+        const lastAi = [...advisor.messages].reverse().find((m) => m.role === "advisor");
+        const suggestion = (lastAi as { suggestion_text?: string | null } | undefined)
+          ?.suggestion_text;
+        const hasSuggestion = typeof suggestion === "string" && suggestion.length > 0;
+        if (!hasSuggestion) return null;
+        return (
+          <div data-testid="advisor-reply-chips" className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="advisor-reply-apply"
+              onClick={() => setSeed({ key: Date.now(), text: suggestion })}
+              className="rounded-full border border-(--color-border) bg-(--color-primary-soft)/40 px-2.5 py-1 text-xs font-medium text-(--color-foreground) hover:bg-(--color-primary-soft)/70"
+            >
+              {t("meetings.advisor.applyReply")}
+            </button>
+            <button
+              type="button"
+              data-testid="advisor-reply-rephrase"
+              disabled
+              title={t("meetings.advisor.rephraseTooltip")}
+              className="cursor-not-allowed rounded-full border border-(--color-border) bg-(--color-muted)/40 px-2.5 py-1 text-xs font-medium text-(--color-muted-foreground) opacity-50"
+            >
+              {t("meetings.advisor.rephrase")}
+            </button>
+          </div>
+        );
+      })()}
+
       {inFlight?.status === "failed" && isLive && (
         <div className="flex justify-end">
           <Button

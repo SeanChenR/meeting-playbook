@@ -49,6 +49,8 @@ export interface UploadDialogProps {
   meeting: MeetingDetail;
   open: boolean;
   onClose: () => void;
+  /** Optional callback fired after upload + processing reaches `completed` (refactor task 16.3). */
+  onUploadSuccess?: () => void;
   /** Polling interval in ms; override in tests for faster runs. */
   pollIntervalMs?: number;
   /** Inject a custom uploader for tests. */
@@ -61,6 +63,7 @@ export function UploadDialog({
   meeting,
   open,
   onClose,
+  onUploadSuccess,
   pollIntervalMs = 3000,
   uploader = uploadOfflineAudio,
   progressFetcher = getOfflineIngestProgress,
@@ -145,6 +148,9 @@ export function UploadDialog({
             // immediately. Without this the user has to reload the page
             // to see the freshly-ingested transcript.
             queryClient.invalidateQueries({ queryKey: ["transcripts", meeting.id] });
+            // refactor task 16.3: notify the parent so the SuccessResultOverlay
+            // can render after the dialog closes.
+            onUploadSuccess?.();
             onClose();
           },
         });

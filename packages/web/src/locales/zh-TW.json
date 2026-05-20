@@ -295,7 +295,35 @@
       "tabs": {
         "workspace": "工作區",
         "summary": "摘要"
-      }
+      },
+      "columnPlaybook": "劇本",
+      "columnTranscript": "逐字稿",
+      "columnAdvisor": "戰術建議",
+      "menu": {
+        "edit": "編輯會議",
+        "tags": "管理標籤",
+        "attachments": "附件",
+        "linked": "相關會議",
+        "mode": "錄音模式",
+        "rerun": "重跑轉錄",
+        "delete": "刪除會議"
+      },
+      "summaryChatSlotTitle": "摘要對話",
+      "summaryChatSlotPlaceholder": "即將推出",
+      "backToList": "會議列表",
+      "recordingPending": "待上傳",
+      "uploadSuccessTitle": "音檔處理完成",
+      "uploadSuccessSubtitle": "逐字稿已自動生成",
+      "exportSuccessTitle": "匯出完成",
+      "exportSuccessSubtitle": "ZIP 已儲存到下載資料夾",
+      "viewTranscript": "查看逐字稿",
+      "counterpartyGroupLabel": "{{name}} 等 {{count}} 人",
+      "bucketLabel": {
+        "upcoming": "未來",
+        "needs_recording": "待補錄",
+        "completed": "已結束"
+      },
+      "asrEngineHint": "本場使用 {{provider}} 作為轉錄引擎"
     },
     "status": {
       "scheduled": "已排程",
@@ -316,7 +344,11 @@
       "silenceWarningMe": "{{name}} 30s 無聲",
       "silenceWarningCounterparty": "{{name}} 30s 無聲（檢查 Multi-Output Device）",
       "streamStopped": "{{name}} 已停止",
-      "headphonesHint": "建議戴耳機 — 否則麥克風會收到喇叭播放的對方聲音，導致兩條 stream 內容重疊",
+      "headphonesHint": "建議戴耳機避免回音 — 雙路 ASR 模式下，喇叭外放會被麥克風重複擷取。",
+      "asrLoading": {
+        "title": "正在啟動轉錄引擎…",
+        "subtitle": "首次使用會下載 ASR 模型，視網路狀況可能需要 30 秒。背景下載中，請勿關閉視窗。"
+      },
       "transcriptHeading": "即時逐字稿",
       "transcriptEmpty": "等待第一段逐字稿…（首次啟動約需 10–25 秒載入模型）",
       "rerunOverlay": "重新轉錄中…",
@@ -420,6 +452,9 @@
       "userLabel": "我",
       "advisorLabel": "Advisor",
       "cmdEnterHint": "⌘+Enter 送出",
+      "applyReply": "套用為回覆",
+      "rephrase": "換一個說法",
+      "rephraseTooltip": "下版本上線",
       "suggestions": {
         "nextStep": "下一步該說什麼？",
         "realConcern": "對方真正在意什麼？",
@@ -472,7 +507,7 @@
     }
   },
   "playbook": {
-    "heading": "Playbook",
+    "heading": "劇本",
     "aiDraftBadge": "AI 草稿",
     "loading": "載入中…",
     "toggle": {
@@ -496,8 +531,10 @@
     "save": {
       "idle": "儲存",
       "saving": "儲存中…",
-      "saved": "已儲存 ✓",
-      "saved_toast": "Playbook 已儲存"
+      "saved": "已儲存",
+      "saved_toast": "Playbook 已儲存",
+      "success_title": "儲存成功",
+      "success_subtitle": "劇本修改已同步"
     },
     "errors": {
       "fallback": "儲存失敗，請稍後再試"

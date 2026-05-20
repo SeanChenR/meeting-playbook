@@ -1,17 +1,18 @@
 /**
- * Tabs primitive — Radix wrapper with an animate-ui-style sliding pill.
+ * Tabs primitive — Radix wrapper with two visual variants:
  *
- * The active highlight is rendered as a single absolutely-positioned
- * `motion.div` per TabsList that tracks the active trigger's bounding box
- * via DOM measurement. Switching tabs animates the pill's x + width with
- * a spring. This is more reliable than the layoutId approach for controlled
- * <Tabs value=...> usage where the parent's value prop lags behind the
- * click (e.g. when onValueChange triggers router navigation).
+ *   - `pill` (default) — original animate-ui-style sliding pill behind the
+ *     active trigger, sitting on a muted background. Still used by
+ *     meetings/list (Kanban / 行事曆), settings sub-nav, etc.
  *
- * Used by:
- *   - meeting detail (workspace ↔ summary)
- *   - meetings/list + meetings/calendar (Kanban / 行事曆)
- *   - any future shadcn-style Tabs surface
+ *   - `underline` — Claude Design style: no muted backdrop, just a 2px
+ *     primary-tinted bar that slides along the bottom of the active
+ *     trigger. Active text picks up `--color-primary`. The sliding bar
+ *     reuses the same DOM-measurement → spring animation as the pill, so
+ *     animation feels identical and the layout shift on click is the same.
+ *
+ * Variant is set via the new `variant` prop on <TabsList>. Default stays
+ * "pill" so no existing call site changes behaviour.
  */
 
 import * as TabsPrimitive from "@radix-ui/react-tabs";
@@ -28,28 +29,31 @@ import {
 } from "react";
 import { cn } from "../../lib/utils";
 
+type TabsVariant = "pill" | "underline";
+
 interface TabsContextValue {
   activeValue: string;
   registerTrigger: (value: string, el: HTMLButtonElement | null) => void;
+  variant: TabsVariant;
 }
 
 const _TabsContext = createContext<TabsContextValue | null>(null);
+
+interface TabsProps extends ComponentProps<typeof TabsPrimitive.Root> {
+  variant?: TabsVariant;
+}
 
 export function Tabs({
   value,
   defaultValue,
   onValueChange,
+  variant = "pill",
   ...props
-}: ComponentProps<typeof TabsPrimitive.Root>) {
-  // Internal state is authoritative so the pill animates immediately on
-  // click, even before a controlled parent's `value` prop catches up (e.g.
-  // the router-driven MeetingsViewTabs where navigation is async).
+}: TabsProps) {
   const [internalActive, setInternalActive] = useState<string>(
     (value as string | undefined) ?? (defaultValue as string | undefined) ?? "",
   );
 
-  // Sync external `value` → internal when the parent confirms a different
-  // value. Skipping equal-value syncs avoids feedback loops.
   useEffect(() => {
     if (typeof value === "string" && value !== internalActive) {
       setInternalActive(value);
@@ -63,7 +67,7 @@ export function Tabs({
   }, []);
 
   return (
-    <_TabsContext.Provider value={{ activeValue: internalActive, registerTrigger }}>
+    <_TabsContext.Provider value={{ activeValue: internalActive, registerTrigger, variant }}>
       <TabsPrimitive.Root
         value={value}
         defaultValue={defaultValue}
@@ -91,9 +95,6 @@ export function TabsList({
     mounted: false,
   });
 
-  // Measure the active trigger's offset / width from inside the TabsList so
-  // the pill can slide between them. Re-run when activeValue changes OR on
-  // layout shifts (resize) so the pill stays anchored.
   useLayoutEffect(() => {
     if (!ctx || !listRef.current) return;
     function measure() {
@@ -116,27 +117,47 @@ export function TabsList({
     return () => obs.disconnect();
   }, [ctx?.activeValue, ctx]);
 
+  const variant: TabsVariant = ctx?.variant ?? "pill";
+  const isUnderline = variant === "underline";
+
   return (
     <TabsPrimitive.List
       ref={listRef as React.RefObject<HTMLDivElement>}
+      data-variant={variant}
       className={cn(
-        "relative inline-flex h-10 items-center justify-center rounded-md bg-(--color-muted) p-1 text-(--color-muted-foreground)",
+        "relative inline-flex items-center justify-center text-(--color-muted-foreground)",
+        isUnderline
+          ? "h-10 gap-1 border-b border-(--color-border)/60"
+          : "h-10 rounded-md bg-(--color-muted) p-1",
         className,
       )}
       {...props}
     >
-      {/* Sliding pill — single element animated between trigger positions. */}
       {pill.mounted ? (
-        <motion.span
-          aria-hidden
-          className="pointer-events-none absolute top-1 bottom-1 rounded-sm bg-(--color-surface) shadow-(--shadow-sm)"
-          initial={false}
-          animate={{ x: pill.x, width: pill.w }}
-          transition={
-            reduced ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 32, mass: 0.6 }
-          }
-          style={{ left: 0 }}
-        />
+        isUnderline ? (
+          <motion.span
+            aria-hidden
+            data-testid="tabs-indicator"
+            className="pointer-events-none absolute bottom-[-1px] h-[2px] rounded-full bg-(--color-primary)"
+            initial={false}
+            animate={{ x: pill.x, width: pill.w }}
+            transition={
+              reduced ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 32, mass: 0.6 }
+            }
+            style={{ left: 0 }}
+          />
+        ) : (
+          <motion.span
+            aria-hidden
+            className="pointer-events-none absolute top-1 bottom-1 rounded-sm bg-(--color-surface) shadow-(--shadow-sm)"
+            initial={false}
+            animate={{ x: pill.x, width: pill.w }}
+            transition={
+              reduced ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 32, mass: 0.6 }
+            }
+            style={{ left: 0 }}
+          />
+        )
       ) : null}
       {children}
     </TabsPrimitive.List>
@@ -156,17 +177,20 @@ export function TabsTrigger({
     ctx?.registerTrigger(value, ref.current);
     return () => ctx?.registerTrigger(value, null);
   }, [ctx, value]);
+  const isUnderline = ctx?.variant === "underline";
   return (
     <TabsPrimitive.Trigger
       ref={ref}
       value={value}
       data-tabs-trigger-value={value}
       className={cn(
-        "relative z-10 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium",
+        "relative z-10 inline-flex items-center justify-center whitespace-nowrap text-sm font-medium",
         "transition-colors duration-200",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-ring) focus-visible:ring-offset-2",
         "disabled:pointer-events-none disabled:opacity-50",
-        "data-[state=active]:text-(--color-foreground)",
+        isUnderline
+          ? "px-3 pt-1 pb-2 text-(--color-muted-foreground) hover:text-(--color-foreground) data-[state=active]:text-(--color-primary)"
+          : "rounded-sm px-3 py-1.5 data-[state=active]:text-(--color-foreground)",
         className,
       )}
       {...props}

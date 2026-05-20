@@ -28,6 +28,8 @@ interface ExportMeetingButtonProps {
   meetingId: string;
   meetingTitle: string;
   scheduledStartAt: string | null;
+  /** Optional callback fired after a successful export (refactor task 16.4). */
+  onExportSuccess?: () => void;
 }
 
 function _asciiSlug(input: string): string {
@@ -54,6 +56,7 @@ export function ExportMeetingButton({
   meetingId,
   meetingTitle,
   scheduledStartAt,
+  onExportSuccess,
 }: ExportMeetingButtonProps) {
   const { t } = useTranslation();
   const [exporting, setExporting] = useState(false);
@@ -63,6 +66,7 @@ export function ExportMeetingButton({
     setExporting(true);
     try {
       await exportMeeting(meetingId, _expectedFilename(meetingTitle, scheduledStartAt));
+      onExportSuccess?.();
     } catch (err) {
       const fallback = t("meetings.detail.exportFailed");
       let message = fallback;

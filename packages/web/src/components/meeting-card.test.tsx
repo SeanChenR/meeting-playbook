@@ -8,13 +8,28 @@
  *                                    primary card link NOT followed
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { MeetingCard } from "./meeting-card";
 import type { Meeting } from "../lib/meetings-api";
 import { renderWithRouter } from "../test/fixtures/router";
+
+// refactor-meeting-detail-three-column: other test files (hover-glow-card,
+// spicy-reveal, …) stub window.matchMedia to return reduced=true and don't
+// restore it — when this file runs after them in the full suite, framer-motion
+// reads the stale reduced=true and strips hover classes. Reset before each
+// test here so this file is order-independent.
+beforeEach(() => {
+  // @ts-expect-error — stubbing for test isolation
+  window.matchMedia = (q: string) => ({
+    matches: false,
+    media: q,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  });
+});
 
 afterEach(cleanup);
 

@@ -119,4 +119,36 @@ describe("MeetingPrevNextNav", () => {
     const backLink = screen.getByTestId("back-link") as HTMLAnchorElement;
     expect(backLink.getAttribute("href")).toBe("/meetings");
   });
+
+  // ─── refactor-meeting-detail-three-column ─────────────────────────────
+
+  test("(refactor 13.1a) back link, divider, prev/next group all sit in same row", async () => {
+    await _renderNav("b", [A, B, C]);
+    const nav = screen.getByTestId("meeting-prev-next-nav");
+    const backLink = screen.getByTestId("back-link");
+    const divider = screen.getByTestId("meeting-prev-next-divider");
+    const prev = screen.getByTestId("meeting-prev-link");
+    // All three SHALL be direct/indirect descendants of the same nav container
+    expect(nav.contains(backLink)).toBe(true);
+    expect(nav.contains(divider)).toBe(true);
+    expect(nav.contains(prev)).toBe(true);
+  });
+
+  test("(refactor 13.1b) back link label uses meetings.detail.backToList → 會議列表 (zh-TW)", async () => {
+    await _renderNav("b", [A, B, C]);
+    const backLink = screen.getByTestId("back-link");
+    expect(backLink.textContent ?? "").toContain("會議列表");
+  });
+
+  test("(refactor 13.1c) back link href targets /meetings", async () => {
+    await _renderNav("b", [A, B, C]);
+    const backLink = screen.getByTestId("back-link") as HTMLAnchorElement;
+    expect(backLink.getAttribute("href")).toBe("/meetings");
+  });
+
+  test("(refactor 13.1d) back link uses an SVG (Lucide ArrowLeft style)", async () => {
+    await _renderNav("b", [A, B, C]);
+    const backLink = screen.getByTestId("back-link");
+    expect(backLink.querySelector("svg")).not.toBeNull();
+  });
 });

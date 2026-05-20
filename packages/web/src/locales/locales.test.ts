@@ -141,6 +141,50 @@ describe("locale files mirror each other", () => {
     }
   });
 
+  // ─── refactor-meeting-detail-three-column ────────────────────────────
+  test("detail-page keys (refactor: header bar / overflow menu / summary chat / column headers / back link / success overlays / advisor chips / asr loading) present in both files", () => {
+    const zhPaths = new Set(collectPaths(zhTW));
+    const enPaths = new Set(collectPaths(en));
+    const requiredKeys = [
+      "meetings.detail.columnPlaybook",
+      "meetings.detail.columnTranscript",
+      "meetings.detail.columnAdvisor",
+      "meetings.detail.menu.edit",
+      "meetings.detail.menu.tags",
+      "meetings.detail.menu.attachments",
+      "meetings.detail.menu.linked",
+      "meetings.detail.menu.mode",
+      "meetings.detail.menu.rerun",
+      "meetings.detail.menu.delete",
+      "meetings.detail.summaryChatSlotTitle",
+      "meetings.detail.summaryChatSlotPlaceholder",
+      "meetings.detail.backToList",
+      "meetings.detail.recordingPending",
+      "meetings.detail.uploadSuccessTitle",
+      "meetings.detail.uploadSuccessSubtitle",
+      "meetings.detail.exportSuccessTitle",
+      "meetings.detail.exportSuccessSubtitle",
+      "meetings.detail.viewTranscript",
+      "meetings.detail.counterpartyGroupLabel",
+      "meetings.session.asrLoading.title",
+      "meetings.session.asrLoading.subtitle",
+      "meetings.advisor.applyReply",
+      "meetings.advisor.rephrase",
+      "meetings.advisor.rephraseTooltip",
+    ];
+    for (const k of requiredKeys) {
+      expect(zhPaths.has(k)).toBe(true);
+      expect(enPaths.has(k)).toBe(true);
+    }
+  });
+
+  test("refactor: legacy meetings.detail.menu.asr key SHALL NOT exist (ASR provider switching moved to /settings)", () => {
+    const zhPaths = new Set(collectPaths(zhTW));
+    const enPaths = new Set(collectPaths(en));
+    expect(zhPaths.has("meetings.detail.menu.asr")).toBe(false);
+    expect(enPaths.has("meetings.detail.menu.asr")).toBe(false);
+  });
+
   test("both files declare the required top-level groups (common/auth/errors plus domain groups)", () => {
     const required = new Set(["auth", "common", "errors"]);
     const zhKeys = new Set(Object.keys(zhTW as AnyJson));

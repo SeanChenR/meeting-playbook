@@ -222,23 +222,34 @@ function TranscriptChunkRow({
   const chunkId = chunk.id ?? `${chunk.started_at}-${chunk.speaker}`;
   const hasDbId = typeof chunk.id === "string" && chunk.id.length > 0;
 
+  // refactor-meeting-detail-three-column 9d: optional `flag_reason` on chunk
+  // surfaces a destructive-tinted chip in the meta line and a is-flag class on
+  // the row. Backend currently does not populate this field; the type is a
+  // pure frontend augmentation so the visual contract is ready for a future
+  // backend feature (feature-transcript-objection-flag).
+  const flagReason = (chunk as TranscriptChunkMessage & { flag_reason?: string | null })
+    .flag_reason;
+  const hasFlag = typeof flagReason === "string" && flagReason.length > 0;
+
   return (
     <AnimatedListItem
       className={cn(
         "rounded-r-md bg-(--chunk-bg) px-3 py-2.5 text-sm",
         isMe ? "border-l-(--color-muted-foreground)" : "border-l-(--color-primary)",
+        hasFlag && "is-flag border-l-(--color-destructive)! bg-(--color-destructive)/4",
       )}
       style={
         {
           borderLeftStyle: "solid",
           borderLeftWidth: "3px",
-          borderLeftColor: speakerColor,
+          borderLeftColor: hasFlag ? "var(--color-destructive)" : speakerColor,
           "--chunk-bg": background,
         } as React.CSSProperties
       }
       itemProps={{
         "data-testid": "transcript-chunk",
         "data-speaker": chunk.speaker,
+        "data-flag": hasFlag ? "true" : undefined,
       }}
     >
       <div className="mb-1 flex items-center gap-2">
@@ -267,6 +278,14 @@ function TranscriptChunkRow({
         <span className="font-mono text-xs text-(--color-muted-foreground)">
           {_formatTime(chunk.started_at)}
         </span>
+        {hasFlag && (
+          <span
+            data-testid="transcript-chunk-flag-chip"
+            className="rounded-full bg-(--color-destructive)/12 px-2 py-0.5 text-xs font-medium text-(--color-destructive)"
+          >
+            {flagReason}
+          </span>
+        )}
       </div>
       <ChunkBody
         meetingId={meetingId ?? ""}

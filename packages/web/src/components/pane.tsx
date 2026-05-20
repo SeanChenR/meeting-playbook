@@ -48,18 +48,24 @@ export function Pane({
         className,
       )}
     >
-      <header className="flex shrink-0 items-center gap-2 border-b border-(--color-border) px-3.5 py-2.5">
+      <header
+        className={cn(
+          "sticky top-0 z-10 flex shrink-0 items-center gap-2.5",
+          "min-h-[52px] border-b border-(--color-border) bg-(--color-card)",
+          "px-4 py-2.5",
+        )}
+      >
         {accent && (
           <span
             aria-hidden
             data-testid="pane-accent"
-            className="inline-block h-3.5 w-[3px] rounded-sm"
+            className="inline-block h-4 w-[3px] rounded-full"
             style={{ background: accent }}
           />
         )}
         <h2
           data-testid="pane-title"
-          className="text-sm font-semibold tracking-wide text-(--color-foreground)"
+          className="text-[15px] font-semibold tracking-tight text-(--color-foreground)"
         >
           {title}
         </h2>

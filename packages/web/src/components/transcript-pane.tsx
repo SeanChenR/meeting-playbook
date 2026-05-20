@@ -171,6 +171,7 @@ export function TranscriptPane({
               <TranscriptChunkRow
                 key={`${chunk.started_at}-${idx}`}
                 chunk={chunk}
+                idx={idx}
                 meDisplayName={meDisplayName}
                 counterpartyDisplayName={counterpartyDisplayName}
                 meetingId={meetingId}
@@ -185,11 +186,17 @@ export function TranscriptPane({
 
 function TranscriptChunkRow({
   chunk,
+  idx,
   meDisplayName,
   counterpartyDisplayName,
   meetingId,
 }: {
   chunk: TranscriptChunkMessage;
+  /** Position in the rendered chunk list. Combined with started_at + speaker
+   *  to form the fallback chunk id when `chunk.id` is absent — must mirror
+   *  the composite key built in `detail.tsx → miniPlayerStore.setContext`
+   *  so the play menu's `seekToChunk(chunkId)` resolves the right row. */
+  idx: number;
   meDisplayName: string;
   counterpartyDisplayName: string;
   meetingId?: string;
@@ -216,10 +223,13 @@ function TranscriptChunkRow({
     overrideLabel ?? _speakerLabel(chunk, meDisplayName, counterpartyDisplayName, t);
 
   // Chunk-id key: prefer real chunk.id (REST replay carries the DB
-  // `tc_xxx` id; WS live frames may also carry one). Fall back to a
-  // composite key so React can still key-stable on live frames before
-  // they're persisted.
-  const chunkId = chunk.id ?? `${chunk.started_at}-${chunk.speaker}`;
+  // `tc_xxx` id; WS live frames may also carry one). Fall back to the
+  // SAME composite key that `detail.tsx → miniPlayerStore.setContext`
+  // builds — `${started_at}-${speaker}-${idx}` — otherwise live frames
+  // without DB ids end up with a different id here than in the store,
+  // and clicking "play this chunk" silently no-ops because
+  // `seekToChunk(chunkId)` can't find a match in chunks_sorted.
+  const chunkId = chunk.id ?? `${chunk.started_at}-${chunk.speaker}-${idx}`;
   const hasDbId = typeof chunk.id === "string" && chunk.id.length > 0;
 
   // refactor-meeting-detail-three-column 9d: optional `flag_reason` on chunk

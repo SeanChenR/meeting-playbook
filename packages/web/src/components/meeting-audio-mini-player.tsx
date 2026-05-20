@@ -134,11 +134,25 @@ export function MeetingAudioMiniPlayer({ meetingId }: MeetingAudioMiniPlayerProp
   }, [state.playback_rate, audioSrc]);
 
   // Apply seek_target_seconds (chunk navigation) when it changes.
+  // Edge case: the chunk action menu can fire `seekToChunk` BEFORE the
+  // `<audio>` element has loaded its metadata (first interaction on the
+  // page). Setting `currentTime` while readyState < HAVE_METADATA (1) is
+  // silently dropped by every browser, so the seek effectively no-ops and
+  // playback starts from 0. To make first-click seeks land on the right
+  // offset, we stash the target in `pendingSeekRef` and let
+  // `onLoadedMetadata` apply it once the audio is ready.
   useEffect(() => {
     if (state.seek_target_seconds === null) return;
     const el = audioRef.current;
     if (!el) return;
+    // Eager write — when metadata is already loaded the browser applies
+    // it immediately, when it isn't the assignment is silently dropped.
     el.currentTime = state.seek_target_seconds;
+    // Backup write — stash the target so `onLoadedMetadata` can re-apply
+    // it on the not-yet-loaded path. Without this, first-interaction
+    // chunk plays always started from 0 because we set currentTime
+    // before the audio actually had a duration to seek into.
+    pendingSeekRef.current = state.seek_target_seconds;
     miniPlayerStore.ackSeek();
   }, [state.seek_target_seconds, state.seek_token]);
 

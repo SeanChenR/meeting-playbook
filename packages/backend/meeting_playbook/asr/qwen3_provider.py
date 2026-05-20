@@ -64,7 +64,16 @@ class Qwen3UnavailableError(RuntimeError):
 
 
 def _load_qwen3_model(config: Qwen3Config) -> Any:
-    """Sync model loader. Imports qwen_asr lazily so test mocks can patch it."""
+    """Sync model loader. Imports qwen_asr lazily so test mocks can patch it.
+
+    Loads the model to CPU first and then moves it to the target device via
+    `.to(device)`. The earlier path passed `device_map=config.device` directly
+    to `from_pretrained`, which made transformers/accelerate dispatch the
+    model with meta tensors and then call `model.to(device)` — that combo
+    raises `NotImplementedError: Cannot copy out of meta tensor`. Loading
+    to CPU sidesteps the meta-tensor branch entirely; the manual `.to()`
+    afterwards is cheap (the weights are already materialised in RAM).
+    """
     try:
         import torch
         from qwen_asr import Qwen3ASRModel
@@ -76,13 +85,15 @@ def _load_qwen3_model(config: Qwen3Config) -> Any:
     if config.device == "mps" and not torch.backends.mps.is_available():
         raise Qwen3UnavailableError("MPS backend not available on this machine")
 
-    return Qwen3ASRModel.from_pretrained(
+    model = Qwen3ASRModel.from_pretrained(
         config.model_repo,
         dtype=torch.bfloat16,
-        device_map=config.device,
         max_inference_batch_size=config.max_inference_batch_size,
         max_new_tokens=config.max_new_tokens,
     )
+    if config.device and config.device != "cpu":
+        model = model.to(config.device)
+    return model
 
 
 class Qwen3ASRProvider:

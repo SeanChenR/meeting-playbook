@@ -56,6 +56,9 @@ interface TranscriptPaneProps {
   rerunPending?: boolean;
   /** Drives `--{me|them}-tint-alpha` override; defaults to "strong". */
   contrastLevel?: ContrastLevel;
+  /** When true (meeting is completed but has no audio file), swap the empty
+   *  state copy from "waiting for first chunk" to "no audio available". */
+  noAudioAvailable?: boolean;
 }
 
 const _CLUSTER_LABEL_RE = /^speaker_cluster_(\d+|unknown)$/;
@@ -101,6 +104,7 @@ export function TranscriptPane({
   meetingId,
   rerunPending = false,
   contrastLevel = "strong",
+  noAudioAvailable = false,
 }: TranscriptPaneProps) {
   const { t } = useTranslation();
 
@@ -161,9 +165,12 @@ export function TranscriptPane({
         {chunks.length === 0 ? (
           <div
             data-testid="transcript-empty"
+            data-no-audio={noAudioAvailable ? "true" : undefined}
             className="py-8 text-center text-sm text-(--color-muted-foreground)"
           >
-            {t("meetings.session.transcriptEmpty")}
+            {noAudioAvailable
+              ? t("meetings.session.transcriptNoAudio")
+              : t("meetings.session.transcriptEmpty")}
           </div>
         ) : (
           <AnimatedList as="ol" className="flex flex-col gap-2.5">

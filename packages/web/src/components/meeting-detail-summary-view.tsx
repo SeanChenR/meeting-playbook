@@ -36,6 +36,7 @@ export function MeetingDetailSummaryView({ meetingId, meeting }: MeetingDetailSu
       <div
         data-testid="meeting-summary-locked"
         className="flex w-full items-center justify-center rounded-(--radius-md) border border-(--color-border) bg-(--color-surface)/60 px-6 py-16"
+        style={{ minHeight: "var(--detail-column-h, calc(100vh - 320px))" }}
       >
         <div className="flex max-w-md flex-col items-center gap-3 text-center">
           <div className="inline-flex size-12 items-center justify-center rounded-full bg-(--color-primary)/10 text-(--color-primary)">
@@ -56,7 +57,10 @@ export function MeetingDetailSummaryView({ meetingId, meeting }: MeetingDetailSu
     <div
       data-testid="meeting-summary-view"
       className="grid w-full gap-4"
-      style={{ gridTemplateColumns: "1fr 1fr" }}
+      style={{
+        gridTemplateColumns: "1fr 1fr",
+        minHeight: "var(--detail-column-h, calc(100vh - 320px))",
+      }}
     >
       {/* Left: markdown summary */}
       <section>

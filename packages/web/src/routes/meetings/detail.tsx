@@ -27,6 +27,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Lock } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AdvisorPane } from "../../components/advisor-pane";
@@ -370,6 +371,7 @@ export function MeetingDetail() {
                     counterpartyDisplayName={meeting.counterparty_display_name}
                     meetingId={meetingId}
                     rerunPending={Boolean(meeting.rerun_asr_pending)}
+                    noAudioAvailable={bucket === "completed" && !meeting.recordings_available}
                   />
                 }
                 advisorPane={
@@ -512,28 +514,47 @@ interface DetailTabsBarProps {
   onTabChange: (next: "workspace" | "summary") => void;
 }
 
-function DetailTabsBar({ tab, onTabChange }: DetailTabsBarProps) {
+function DetailTabsBar({ meeting, tab, onTabChange }: DetailTabsBarProps) {
   const { t } = useTranslation();
   const setTab = onTabChange;
+  // Sean (round 5): non-completed meetings must REALLY disable the summary
+  // tab — unclickable, not just visually dimmed. The locked panel inside
+  // is still kept as a defensive landing for users who arrive with a
+  // ?tab=summary URL parameter.
+  const summaryDisabled = meeting.status !== "completed";
 
-  // Summary tab stays clickable in every phase now — when the meeting isn't
-  // completed, the panel renders a "會議完成後啟用" placeholder instead of
-  // erroring out. Disabling the tab itself was hiding a useful affordance.
   return (
-    <Tabs
-      value={tab}
-      onValueChange={(v) => setTab(v as "workspace" | "summary")}
-      variant="underline"
-    >
-      <TabsList className="h-10">
-        <TabsTrigger value="workspace" data-testid="detail-tab-workspace">
-          {t("meetings.detail.tabs.workspace")}
-        </TabsTrigger>
-        <TabsTrigger value="summary" data-testid="detail-tab-summary">
-          {t("meetings.detail.tabs.summary")}
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as "workspace" | "summary")}
+        variant="underline"
+      >
+        <TabsList className="h-10">
+          <TabsTrigger value="workspace" data-testid="detail-tab-workspace">
+            {t("meetings.detail.tabs.workspace")}
+          </TabsTrigger>
+          <TabsTrigger
+            value="summary"
+            data-testid="detail-tab-summary"
+            disabled={summaryDisabled}
+            title={summaryDisabled ? t("meetings.summary.lockedTabHint") : undefined}
+            className={summaryDisabled ? "inline-flex items-center gap-1" : undefined}
+          >
+            {summaryDisabled && <Lock className="size-3" strokeWidth={1.8} aria-hidden />}
+            {t("meetings.detail.tabs.summary")}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {summaryDisabled && (
+        <span
+          data-testid="detail-tab-summary-hint"
+          className="text-[12px] text-(--color-muted-foreground)"
+        >
+          {t("meetings.summary.lockedTabHint")}
+        </span>
+      )}
+    </div>
   );
 }
 

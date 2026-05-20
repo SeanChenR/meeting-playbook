@@ -27,8 +27,10 @@ import {
   useEffect,
   useId,
   useMemo,
+  useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 
 interface DialogContextValue {
@@ -116,7 +118,14 @@ export function DialogContent({
         visible: { opacity: 1, scale: 1 },
       };
 
-  return (
+  // Portal to <body> so the backdrop escapes any ancestor stacking context
+  // (e.g. `transform`, `filter`, or `overflow-hidden` containers — the
+  // ShineBorder bars now create one, which clipped the dialog backdrop and
+  // let the sticky mini-player show through behind the haze).
+  const portalTarget = _usePortalTarget();
+  if (!portalTarget) return null;
+
+  return createPortal(
     <motion.div
       role="presentation"
       onClick={handleBackdropClick}
@@ -125,7 +134,7 @@ export function DialogContent({
       exit="hidden"
       variants={backdropVariants}
       transition={{ duration: 0.15 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
     >
       <motion.div
         role="dialog"
@@ -145,8 +154,20 @@ export function DialogContent({
       >
         {children}
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    portalTarget,
   );
+}
+
+/** Defers the portal mount until after first render so SSR-style tests
+ *  (happy-dom) don't trip over `document.body` being undefined at module
+ *  evaluation time. */
+function _usePortalTarget(): HTMLElement | null {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setTarget(document.body);
+  }, []);
+  return target;
 }
 
 export interface DialogHeaderProps {

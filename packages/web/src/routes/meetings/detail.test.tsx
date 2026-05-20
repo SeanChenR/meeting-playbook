@@ -286,7 +286,7 @@ describe("MeetingDetail route", () => {
     expect(screen.getByTestId("asr-provider-selector")).toBeDefined();
   });
 
-  test("(5.6) summary tab is clickable in every phase; locked panel renders for non-completed meetings", async () => {
+  test("(5.6) summary tab is actually disabled when status !== completed (round 5)", async () => {
     fetchHandler = async (url) => {
       if (url.includes("/chat_messages")) {
         return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
@@ -301,11 +301,11 @@ describe("MeetingDetail route", () => {
       expect(screen.getByText("Q3 review")).toBeDefined();
     });
     const summary = screen.getByTestId("detail-tab-summary") as HTMLButtonElement;
-    // claude-design follow-up: the tab no longer hides itself when the
-    // meeting isn't completed. It stays clickable; the panel renders a
-    // "會議完成後啟用" placeholder instead.
-    expect(summary.hasAttribute("data-disabled")).toBe(false);
-    expect(summary.disabled).toBe(false);
+    // claude-design follow-up round 5: Sean reverted the "clickable +
+    // locked panel" pattern — non-completed meetings genuinely disable
+    // the tab so the affordance reads as "not yet available".
+    const isDisabled = summary.hasAttribute("data-disabled") || summary.disabled === true;
+    expect(isDisabled).toBe(true);
   });
 
   // refactor-meeting-detail-three-column: test skipped — superseded by

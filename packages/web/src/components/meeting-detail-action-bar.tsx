@@ -230,7 +230,16 @@ export function MeetingDetailActionBar(props: MeetingDetailActionBarProps) {
 
   const isLive = phase === "in_progress" || phase === "ending";
   const canStart = bucket === "upcoming" && phase === "idle" && !startDisabled;
-  const canUpload = bucket === "needs_recording" && !isLive;
+  // Upload covers two cases:
+  //   1. `needs_recording` bucket — the meeting was scheduled, the time
+  //      passed, and the user wants to upload an offline recording later.
+  //   2. `completed` meetings whose `recordings_available` is false — the
+  //      live capture didn't persist anything (crashed mid-session, the
+  //      user closed early, etc.). They should still be able to attach a
+  //      recording for transcription.
+  const canUpload =
+    !isLive &&
+    (bucket === "needs_recording" || (bucket === "completed" && !meeting.recordings_available));
   const canExport = bucket === "needs_recording" || bucket === "completed";
   const canDelete = !isLive;
 
